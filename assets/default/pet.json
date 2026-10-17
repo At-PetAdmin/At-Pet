@@ -1,0 +1,20 @@
+{
+  "name": "At-Pet",
+  "sprite": "spritesheet.png",
+  "cell": [128, 128],
+  "scale": 1.5,
+  "fps": 8,
+  "defaultAnimation": "idle",
+  "animations": {
+    "idle": { "row": 0, "frames": 4 },
+    "walk": { "row": 1, "frames": 4 },
+    "sleep": { "row": 2, "frames": 4 },
+    "thinking": { "row": 3, "frames": 4 },
+    "work": { "row": 4, "frames": 4 },
+    "review": { "row": 5, "frames": 4 },
+    "error": { "row": 6, "frames": 4 },
+    "done": { "row": 7, "frames": 4 },
+    "cancelled": { "row": 8, "frames": 4 },
+    "tool": { "row": 9, "frames": 4 }
+  }
+}
