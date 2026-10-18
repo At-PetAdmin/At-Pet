@@ -50,12 +50,16 @@ jobs:
       - name: Configure and build
         shell: pwsh
         run: |
+          $widgetsTools = Get-ChildItem (Join-Path $env:QT_HOST_ROOT 'lib\cmake') -Filter 'Qt6WidgetsToolsConfig.cmake' -Recurse | Select-Object -First 1
+          if (-not $widgetsTools) { throw "Qt6WidgetsToolsConfig.cmake was not found under $env:QT_HOST_ROOT" }
+          $widgetsToolsDir = $widgetsTools.DirectoryName
+          Write-Host "Using Qt host tools from $env:QT_HOST_ROOT"
           cmake -S . -B build-arm64 -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:QT_TARGET_ROOT/lib/cmake/Qt6/qt.toolchain.cmake" `
             -DCMAKE_PREFIX_PATH="$env:QT_TARGET_ROOT;$env:QT_HOST_ROOT" `
             -DQT_HOST_PATH="$env:QT_HOST_ROOT" `
-            -DQt6WidgetsTools_DIR="$env:QT_HOST_ROOT/lib/cmake/Qt6WidgetsTools"
+            -DQt6WidgetsTools_DIR="$widgetsToolsDir"
           cmake --build build-arm64 --parallel
 
       - name: Package
