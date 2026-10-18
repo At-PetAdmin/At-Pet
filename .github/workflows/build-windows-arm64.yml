@@ -20,7 +20,7 @@ jobs:
         id: qt-target
         uses: jurplel/install-qt-action@v4
         with:
-          version: 6.11.2
+          version: 6.8.3
           host: windows
           target: desktop
           arch: win64_msvc2022_arm64_cross_compiled
@@ -36,7 +36,7 @@ jobs:
       - name: Install Qt host tools
         uses: jurplel/install-qt-action@v4
         with:
-          version: 6.11.2
+          version: 6.8.3
           host: windows
           target: desktop
           arch: win64_msvc2022_64
