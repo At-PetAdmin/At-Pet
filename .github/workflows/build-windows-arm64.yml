@@ -53,7 +53,7 @@ jobs:
           cmake -S . -B build-arm64 -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:QT_TARGET_ROOT/lib/cmake/Qt6/qt.toolchain.cmake" `
-            -DCMAKE_PREFIX_PATH="$env:QT_TARGET_ROOT" `
+            -DCMAKE_PREFIX_PATH="$env:QT_TARGET_ROOT;$env:QT_HOST_ROOT" `
             -DQT_HOST_PATH="$env:QT_HOST_ROOT"
           cmake --build build-arm64 --parallel
 
