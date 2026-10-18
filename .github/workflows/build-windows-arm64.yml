@@ -44,8 +44,9 @@ jobs:
       - name: Save Qt host path
         shell: pwsh
         run: |
-          if (-not $env:QT_ROOT_DIR) { throw 'The Qt host installation path was not set.' }
-          "QT_HOST_ROOT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
+          $hostRoot = Join-Path $env:RUNNER_TEMP 'Qt\Qt\6.8.3\msvc2022_64'
+          if (-not (Test-Path $hostRoot)) { throw "The Qt host installation was not found at $hostRoot" }
+          "QT_HOST_ROOT=$hostRoot" >> $env:GITHUB_ENV
 
       - name: Configure and build
         shell: pwsh
