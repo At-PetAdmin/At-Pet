@@ -93,6 +93,7 @@ private:
     PetPreviewWidget *previewWidget_ = nullptr;
     QComboBox *animCombo_ = nullptr;
     QLabel *petInfoLabel_ = nullptr;
+    QLabel *importStatusLabel_ = nullptr;
     QPushButton *btnApplyPet_ = nullptr;
     QPushButton *btnImportFiles_ = nullptr;
     QPushButton *btnImportFolder_ = nullptr;

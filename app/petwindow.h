@@ -18,6 +18,7 @@ class PetWindow final : public QWidget {
 public:
     explicit PetWindow(const QString &petDirectory = {}, QWidget *parent = nullptr);
 
+    static QJsonObject withInferredAnimations(const QJsonObject &definition);
     QString petId() const;
     QString petName() const;
     QString animation() const;

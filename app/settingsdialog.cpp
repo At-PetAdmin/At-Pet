@@ -333,7 +333,16 @@ void SettingsDialog::setupUi() {
     leftCol->addWidget(listLabel);
 
     petList_ = new QListWidget(petLibraryTab);
+    petList_->setUniformItemSizes(true);
+    petList_->setSpacing(3);
+    petList_->setToolTip(tr("Each entry shows the pet name and its library folder ID."));
     leftCol->addWidget(petList_);
+
+    importStatusLabel_ = new QLabel(petLibraryTab);
+    importStatusLabel_->setWordWrap(true);
+    importStatusLabel_->setStyleSheet("color: #9dd6a8; font-size: 12px; padding: 2px 4px;");
+    importStatusLabel_->hide();
+    leftCol->addWidget(importStatusLabel_);
 
     auto *btnImportLayout = new QHBoxLayout;
     btnImportFiles_ = new QPushButton(tr("Import Config + Sheet…"), petLibraryTab);
@@ -578,7 +587,7 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
             if (data.startsWith("\xEF\xBB\xBF")) data.remove(0, 3);
             QJsonDocument d = QJsonDocument::fromJson(data);
             if (d.isObject()) {
-                QJsonObject def = d.object();
+                QJsonObject def = PetWindow::withInferredAnimations(d.object());
                 QString sprite = def.value("sprite").toString();
                 if (sprite.isEmpty()) sprite = def.value("spriteSheet").toString();
                 const QString fullSpritePath = QDir(dir).filePath(sprite);
@@ -721,7 +730,11 @@ void SettingsDialog::onImportConfigAndSheet() {
             break;
         }
     }
-    QMessageBox::information(this, tr("Import Successful"), tr("Pet '%1' imported successfully! You can preview its animations now.").arg(baseName));
+    QSettings().setValue("pet/selected", id);
+    emit petSwitched(id);
+    importStatusLabel_->setText(tr("Imported and activated: %1").arg(baseName));
+    importStatusLabel_->show();
+    QMessageBox::information(this, tr("Import Successful"), tr("Pet '%1' was imported and is now the active desktop pet.").arg(baseName));
 }
 
 void SettingsDialog::onImportFolder() {
@@ -753,7 +766,11 @@ void SettingsDialog::onImportFolder() {
             break;
         }
     }
-    QMessageBox::information(this, tr("Import Successful"), tr("Pet folder '%1' imported successfully!").arg(baseName));
+    QSettings().setValue("pet/selected", id);
+    emit petSwitched(id);
+    importStatusLabel_->setText(tr("Imported and activated: %1").arg(baseName));
+    importStatusLabel_->show();
+    QMessageBox::information(this, tr("Import Successful"), tr("Pet folder '%1' was imported and is now the active desktop pet.").arg(baseName));
 }
 
 void SettingsDialog::onDeletePet() {

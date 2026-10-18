@@ -51,6 +51,35 @@ PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
     animationTimer_.start(qMax(30, 1000 / framesPerSecond_));
 }
 
+QJsonObject PetWindow::withInferredAnimations(const QJsonObject &definition) {
+    if (!definition.value("animations").toObject().isEmpty())
+        return definition;
+
+    const QJsonArray rowCounts = definition.value("row_counts").toArray();
+    static const QStringList animationNames = {
+        QStringLiteral("idle"), QStringLiteral("walk"), QStringLiteral("sleep"),
+        QStringLiteral("thinking"), QStringLiteral("work"), QStringLiteral("review"),
+        QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
+        QStringLiteral("tool"), QStringLiteral("interact")
+    };
+    if (rowCounts.isEmpty())
+        return definition;
+
+    QJsonObject animations;
+    const int rowCount = qMin(rowCounts.size(), animationNames.size());
+    for (int row = 0; row < rowCount; ++row) {
+        const int frames = rowCounts.at(row).toInt();
+        if (frames > 0)
+            animations.insert(animationNames.at(row), QJsonObject{{"row", row}, {"frames", frames}});
+    }
+    if (animations.isEmpty())
+        return definition;
+
+    QJsonObject normalized = definition;
+    normalized.insert("animations", animations);
+    return normalized;
+}
+
 QString PetWindow::petId() const {
     return directory_.isEmpty() ? QStringLiteral("default") : QFileInfo(directory_).fileName();
 }
@@ -134,7 +163,7 @@ void PetWindow::reloadDefinition() {
         return;
     }
 
-    definition_ = document.object();
+    definition_ = withInferredAnimations(document.object());
     name_ = definition_.value("name").toString(QFileInfo(directory_).fileName());
     const QJsonValue cell = definition_.value("cell");
     int configuredWidth = definition_.value("frameWidth").toInt();
