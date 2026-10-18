@@ -12,7 +12,7 @@
 ## 功能特性
 
 - 透明、无边框、始终置顶的宠物窗口。拖动可移动；单击触发问候；双击输入想让宠物说的话；右键打开控制菜单。
-- 内置矢量备用宠物，并支持自定义精灵表动画，覆盖 idle、walk、sleep、thinking、work、review、工具执行、完成、取消和错误等状态。
+- 内置 Codex Pets 精灵桌宠作为默认宠物，并支持自定义精灵表动画，覆盖 idle、walk、sleep、thinking、work、review、工具执行、完成、取消和错误等状态。
 - 导入、预览、切换、删除和召唤宠物库中的每一只有效宠物。
 - 监视已导入的 `pet.json` 及其所在文件夹，修改后无需重启即可重新加载配置和精灵图。
 - 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和外部 Agent 事件。初始支持的 AgentApp 来源：ZCode、GitHub Copilot、DeepSeek Harness、OpenCode、Antigravity 和 Command Code。
@@ -65,7 +65,7 @@ cmake --build build
 }
 ```
 
-支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、`fps` 和 `defaultAnimation`。`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。如果没有可用的有效精灵图，内置矢量宠物仍然可以正常使用。
+支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、`fps` 和 `defaultAnimation`。`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。
 
 在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
 

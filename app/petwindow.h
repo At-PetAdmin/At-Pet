@@ -19,6 +19,7 @@ public:
     explicit PetWindow(const QString &petDirectory = {}, QWidget *parent = nullptr);
 
     static QJsonObject withInferredAnimations(const QJsonObject &definition);
+    static QString builtinPetDirectory();
     QString petId() const;
     QString petName() const;
     QString animation() const;
@@ -56,6 +57,7 @@ private:
     void showContextMenu(const QPoint &globalPosition);
     void loadSheet();
     void watchConfiguration();
+    void useVectorFallback();
     void drawFallbackPet(QPainter &painter, const QRect &bounds);
 
     QString directory_;

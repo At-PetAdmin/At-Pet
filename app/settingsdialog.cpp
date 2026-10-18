@@ -574,10 +574,47 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
     btnDeletePet_->setEnabled(id != "default");
 
     if (id == "default" || id.isEmpty()) {
+        const QString dir = PetWindow::builtinPetDirectory();
+        QFile f(QDir(dir).filePath("pet.json"));
         QJsonObject def;
-        def["name"] = QStringLiteral("At-Pet");
-        previewWidget_->setPetDefinition(def, QString());
-        petInfoLabel_->setText(tr("Name: Built-in At-Pet\nType: Dynamic vector rendering\nAnimations: idle, walk, sleep, thinking, work, review, tool, error, done, cancelled"));
+        QString sprite;
+        QString spritePath;
+        if (f.open(QIODevice::ReadOnly)) {
+            QByteArray data = f.readAll();
+            if (data.startsWith("\xEF\xBB\xBF")) data.remove(0, 3);
+            const QJsonDocument d = QJsonDocument::fromJson(data);
+            if (d.isObject()) {
+                def = PetWindow::withInferredAnimations(d.object());
+                sprite = def.value("sprite").toString();
+                if (sprite.isEmpty()) sprite = def.value("spriteSheet").toString();
+                if (!sprite.isEmpty() && QFileInfo(sprite).fileName() == sprite)
+                    spritePath = QDir(dir).filePath(sprite);
+            }
+        }
+        previewWidget_->setPetDefinition(def, spritePath);
+        if (def.isEmpty()) {
+            petInfoLabel_->setText(tr("Name: Built-in At-Pet\nType: Dynamic vector rendering\nAnimations: idle, walk, sleep, thinking, work, review, tool, error, done, cancelled"));
+        } else {
+            int frameWidth = def.value("frameWidth").toInt();
+            int frameHeight = def.value("frameHeight").toInt();
+            const QJsonValue cell = def.value("cell");
+            if (cell.isArray() && cell.toArray().size() >= 2) {
+                if (frameWidth <= 0) frameWidth = cell.toArray().at(0).toInt(128);
+                if (frameHeight <= 0) frameHeight = cell.toArray().at(1).toInt(128);
+            } else if (cell.isObject()) {
+                if (frameWidth <= 0) frameWidth = cell.toObject().value("width").toInt(128);
+                if (frameHeight <= 0) frameHeight = cell.toObject().value("height").toInt(128);
+            }
+            if (frameWidth <= 0) frameWidth = 128;
+            if (frameHeight <= 0) frameHeight = 128;
+            petInfoLabel_->setText(tr("Name: %1\nID: %2\nSpritesheet: %3\nCell Size: %4x%5\nFPS: %6")
+                                   .arg(def.value("name").toString(QStringLiteral("At-Pet")))
+                                   .arg(QStringLiteral("default"))
+                                   .arg(sprite)
+                                   .arg(frameWidth)
+                                   .arg(frameHeight)
+                                   .arg(def.value("fps").toInt(8)));
+        }
     } else {
         const QString dir = QDir(petLibraryPath()).filePath(id);
         const QString configPath = QDir(dir).filePath("pet.json");

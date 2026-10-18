@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/pets/default">
+        <file alias="pet.json">pet.json</file>
+        <file alias="spritesheet.png">spritesheet.png</file>
+    </qresource>
+</RCC>
