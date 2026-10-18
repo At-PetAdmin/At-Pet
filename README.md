@@ -56,7 +56,7 @@ Example `pet.json` in the reference project's format:
 }
 ```
 
-`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, `fps`, and `defaultAnimation` are supported. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. The JSON file, sprite sheet, and pet folder are watched for edits. If no valid sprite is available, the built-in vector pet remains usable.
+`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, `fps`, and `defaultAnimation` are supported. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. If no valid sprite is available, the built-in vector pet remains usable.
 
 On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 

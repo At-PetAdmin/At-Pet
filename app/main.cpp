@@ -1,5 +1,6 @@
 #include "httpapi.h"
 #include "petwindow.h"
+#include "settingsdialog.h"
 
 #include <QActionGroup>
 #include <QApplication>
@@ -67,6 +68,17 @@ bool copyDirectory(const QString &sourcePath, const QString &destinationPath) {
         }
     }
     return true;
+}
+
+QString agentAppKey(QString name) {
+    name = name.trimmed();
+    if (name.isEmpty()) return QStringLiteral("external");
+    QString key;
+    for (const QChar character : name.toLower()) {
+        if (character.isLetterOrNumber()) key.append(character);
+    }
+    if (key == "copilot") return QStringLiteral("githubcopilot");
+    return key;
 }
 
 QString normalizeAgentApp(QString name) {
@@ -150,10 +162,12 @@ public:
             else switchPet(request.value("petId").toString());
         });
 
-        QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
+        const QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
         bool portOk = false;
         const uint requestedPort = portText.toUInt(&portOk);
-        const quint16 port = portOk && requestedPort <= 65535 ? quint16(requestedPort) : 8765;
+        const quint16 savedPort = quint16(QSettings().value("api/port", 8765).toUInt());
+        const quint16 port = portOk && requestedPort > 0 && requestedPort <= 65535
+            ? quint16(requestedPort) : (savedPort >= 1024 ? savedPort : 8765);
         if (!api_->start(port))
             qWarning("At-Pet local API could not bind to port %u", unsigned(port));
 
@@ -207,6 +221,7 @@ private:
     PetWindow *createPet(const QString &directory, const QPoint &position) {
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
+        pet->setLookAtCopilot(QSettings().value("pet/lookAtCopilot", false).toBool());
         pet->move(position);
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
@@ -233,7 +248,11 @@ private:
         connect(pet, &PetWindow::importFolderRequested, this, &PetController::importPetFolder);
         connect(pet, &PetWindow::summonAllRequested, this, &PetController::summonAll);
         connect(pet, &PetWindow::deleteRequested, this, &PetController::deletePet);
-        connect(pet, &PetWindow::lookAtToggled, pet, &PetWindow::setLookAtCopilot);
+        connect(pet, &PetWindow::lookAtToggled, pet, [pet](bool enabled) {
+            QSettings().setValue("pet/lookAtCopilot", enabled);
+            pet->setLookAtCopilot(enabled);
+        });
+        connect(pet, &PetWindow::settingsRequested, this, &PetController::showSettingsDialog);
         connect(pet, &PetWindow::previewRequested, this, [this](const QString &id) {
             const QString path = QDir(petLibraryPath()).filePath(id);
             if (!QFileInfo::exists(QDir(path).filePath("pet.json"))) return;
@@ -250,6 +269,46 @@ private:
         pet->show();
         publishState();
         return pet;
+    }
+
+    void showSettingsDialog() {
+        if (!settingsDialog_) {
+            settingsDialog_ = new SettingsDialog;
+            settingsDialog_->setAttribute(Qt::WA_DeleteOnClose);
+            connect(settingsDialog_, &SettingsDialog::petSwitched, this, &PetController::switchPet);
+            connect(settingsDialog_, &SettingsDialog::languageChanged, this, [this](const QString &language) {
+                setLanguage(language);
+            });
+            connect(settingsDialog_, &SettingsDialog::lookAtCopilotToggled, this, [this](bool enabled) {
+                for (PetWindow *pet : visiblePets()) pet->setLookAtCopilot(enabled);
+            });
+            connect(settingsDialog_, &SettingsDialog::apiPortChanged, this, [this](quint16 port) {
+                if (api_->port() == port) return;
+                QMessageBox::information(settingsDialog_, tr("Restart Required"),
+                    tr("The API port change will take effect after restarting At-Pet."));
+            });
+            connect(settingsDialog_, &SettingsDialog::agentFilterChanged, this, [this] {
+                QSettings().sync();
+                refreshAgentSessions();
+            });
+            connect(settingsDialog_, &QObject::destroyed, this, [this] { settingsDialog_ = nullptr; });
+        }
+        settingsDialog_->refreshPetsList();
+        settingsDialog_->show();
+        settingsDialog_->raise();
+        settingsDialog_->activateWindow();
+    }
+
+    void refreshAgentSessions() {
+        QSettings settings;
+        for (auto it = sessions_.begin(); it != sessions_.end();) {
+            const QString key = agentAppKey(it->agentApp);
+            if (key != "external" && !settings.value(QStringLiteral("agents/monitor_") + key, true).toBool())
+                it = sessions_.erase(it);
+            else
+                ++it;
+        }
+        applySessionAnimation();
     }
 
     void clearPets() {
@@ -420,7 +479,15 @@ private:
 
     void onAgentEvent(const QJsonObject &event) {
         const QString sessionId = event.value("sessionId").toString();
+        const QString agentApp = normalizeAgentApp(event.value("agentApp").toString());
+        const QString agentKey = agentAppKey(agentApp);
         const QString eventName = event.value("event").toString().toLower();
+        if (agentKey != "external" &&
+            !QSettings().value(QStringLiteral("agents/monitor_") + agentKey, true).toBool()) {
+            sessions_.remove(sessionId);
+            applySessionAnimation();
+            return;
+        }
         QString animation;
         bool terminal = false;
         if (eventName == "thinking" || eventName == "model_thinking" || eventName == "started") animation = "thinking";
@@ -557,6 +624,7 @@ private:
         trayMenu_->addAction(tr("Summon all pets"), this, &PetController::summonAll);
         trayMenu_->addAction(tr("Import config + spritesheet…"), this, &PetController::importPet);
         trayMenu_->addAction(tr("Import pet folder…"), this, &PetController::importPetFolder);
+        trayMenu_->addAction(tr("Settings & Library…"), this, &PetController::showSettingsDialog);
         trayMenu_->addAction(tr("Hide pets"), this, [this] {
             for (PetWindow *pet : visiblePets()) pet->hide();
         });
@@ -594,6 +662,7 @@ private:
     QVector<QPointer<PetWindow>> pets_;
     QHash<QString, SessionState> sessions_;
     QTimer lookTimer_;
+    QPointer<SettingsDialog> settingsDialog_;
 };
 
 int main(int argc, char *argv[]) {

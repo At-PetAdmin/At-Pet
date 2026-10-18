@@ -18,6 +18,7 @@ class PetWindow final : public QWidget {
 public:
     explicit PetWindow(const QString &petDirectory = {}, QWidget *parent = nullptr);
 
+    static QJsonObject withInferredAnimations(const QJsonObject &definition);
     QString petId() const;
     QString petName() const;
     QString animation() const;
@@ -40,6 +41,7 @@ signals:
     void deleteRequested(const QString &petId);
     void lookAtToggled(bool enabled);
     void previewRequested(const QString &petId);
+    void settingsRequested();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
