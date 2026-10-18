@@ -1,0 +1,124 @@
+name: Build Windows ARM64 package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm64
+
+      - name: Install Qt ARM64
+        id: qt-target
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.11.2
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_arm64_cross_compiled
+          modules: qtsvg
+          dir: ${{ runner.temp }}/Qt
+
+      - name: Save Qt ARM64 path
+        shell: pwsh
+        run: |
+          if (-not $env:QT_ROOT_DIR) { throw 'The Qt ARM64 installation path was not set.' }
+          "QT_TARGET_ROOT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
+
+      - name: Install Qt host tools
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.11.2
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          dir: ${{ runner.temp }}/Qt
+
+      - name: Save Qt host path
+        shell: pwsh
+        run: |
+          if (-not $env:QT_ROOT_DIR) { throw 'The Qt host installation path was not set.' }
+          "QT_HOST_ROOT=$env:QT_ROOT_DIR" >> $env:GITHUB_ENV
+
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          cmake -S . -B build-arm64 -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:QT_TARGET_ROOT/lib/cmake/Qt6/qt.toolchain.cmake" `
+            -DCMAKE_PREFIX_PATH="$env:QT_TARGET_ROOT" `
+            -DQT_HOST_PATH="$env:QT_HOST_ROOT"
+          cmake --build build-arm64 --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = $env:QT_TARGET_ROOT
+          $package = Join-Path $env:GITHUB_WORKSPACE 'dist\At-Pet-windows-arm64'
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          Copy-Item 'build-arm64\at-pet.exe' $package
+          Copy-Item 'LICENSE' $package
+
+          foreach ($dll in @('Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Network.dll', 'Qt6Svg.dll', 'Qt6Widgets.dll')) {
+            Copy-Item (Join-Path $target "bin\$dll") $package
+          }
+
+          $plugins = @{
+            generic = @('qtuiotouchplugin.dll')
+            iconengines = @('qsvgicon.dll')
+            imageformats = @('qgif.dll', 'qico.dll', 'qjpeg.dll', 'qsvg.dll')
+            networkinformation = @('qnetworklistmanager.dll')
+            platforms = @('qwindows.dll')
+            styles = @('qmodernwindowsstyle.dll')
+            tls = @('qcertonlybackend.dll', 'qschannelbackend.dll')
+          }
+          foreach ($category in $plugins.Keys) {
+            $destination = Join-Path $package $category
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            foreach ($plugin in $plugins[$category]) {
+              Copy-Item (Join-Path $target "plugins\$category\$plugin") $destination
+            }
+          }
+
+          foreach ($dll in @('D3Dcompiler_47.dll', 'dxcompiler.dll', 'dxil.dll', 'opengl32sw.dll')) {
+            $source = Join-Path $target "bin\$dll"
+            if (Test-Path $source) { Copy-Item $source $package }
+          }
+
+          Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.arm64.exe' -OutFile (Join-Path $package 'vc_redist.arm64.exe')
+          @'
+          At-Pet for Windows ARM64
+
+          Built for Windows 10/11 on ARM64.
+          If the Microsoft Visual C++ ARM64 Redistributable is not installed, run vc_redist.arm64.exe first.
+          Then start at-pet.exe.
+          '@ | Set-Content -Path (Join-Path $package 'README.txt') -Encoding utf8
+
+          function Get-PeMachine($path) {
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            $offset = [BitConverter]::ToInt32($bytes, 0x3c)
+            return [BitConverter]::ToUInt16($bytes, $offset + 4)
+          }
+          $binaries = @((Join-Path $package 'at-pet.exe')) + @(Get-ChildItem $package -Recurse -Filter '*.dll' | ForEach-Object { $_.FullName })
+          foreach ($file in $binaries) {
+            $machine = Get-PeMachine $file
+            if ($machine -ne 0xaa64) { throw "$file is not an ARM64 binary (PE machine 0x$('{0:x}' -f $machine))." }
+          }
+
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'dist\At-Pet-windows-arm64.zip'
+          Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -Force
+
+      - name: Upload to v0.1.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release upload v0.1.0 dist/At-Pet-windows-arm64.zip --clobber
