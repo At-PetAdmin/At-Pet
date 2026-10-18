@@ -393,6 +393,7 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
         menu.addAction(tr("Delete this pet…"), this, [this] { emit deleteRequested(petId()); });
     }
     menu.addSeparator();
+    menu.addAction(tr("Settings & Library…"), this, &PetWindow::settingsRequested);
     QAction *lookAction = menu.addAction(tr("Look at Copilot"));
     lookAction->setCheckable(true);
     lookAction->setChecked(lookAtCopilot_);

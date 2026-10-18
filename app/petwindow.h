@@ -40,6 +40,7 @@ signals:
     void deleteRequested(const QString &petId);
     void lookAtToggled(bool enabled);
     void previewRequested(const QString &petId);
+    void settingsRequested();
 
 protected:
     void paintEvent(QPaintEvent *event) override;

@@ -15,6 +15,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/petwindow.h
     app/httpapi.cpp
     app/httpapi.h
+    app/settingsdialog.cpp
+    app/settingsdialog.h
 )
 
 target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network)
