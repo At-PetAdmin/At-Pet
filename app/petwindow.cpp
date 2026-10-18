@@ -128,6 +128,8 @@ void PetWindow::watchConfiguration() {
         watcher_.removePath(path);
     for (const QString &path : watcher_.directories())
         watcher_.removePath(path);
+    if (directory_.isEmpty())
+        return;
     if (!configPath.isEmpty() && QFileInfo::exists(configPath))
         watcher_.addPath(configPath);
     if (!spriteSheetPath_.isEmpty() && QFileInfo::exists(spriteSheetPath_))
@@ -136,19 +138,30 @@ void PetWindow::watchConfiguration() {
         watcher_.addPath(directory_);
 }
 
-void PetWindow::reloadDefinition() {
-    if (directory_.isEmpty()) {
-        definition_ = {};
-        name_ = QStringLiteral("At-Pet");
-        spriteSheetPath_.clear();
-        spriteSheet_ = {};
-        watchConfiguration();
-        update();
-        return;
-    }
+QString PetWindow::builtinPetDirectory() {
+    return QStringLiteral(":/pets/default");
+}
 
-    QFile config(QDir(directory_).filePath("pet.json"));
+void PetWindow::useVectorFallback() {
+    definition_ = {};
+    name_ = QStringLiteral("At-Pet");
+    spriteSheetPath_.clear();
+    spriteSheet_ = {};
+    animation_ = QStringLiteral("idle");
+    frame_ = 0;
+    watchConfiguration();
+    update();
+}
+
+void PetWindow::reloadDefinition() {
+    const QString sourceDirectory = directory_.isEmpty() ? builtinPetDirectory() : directory_;
+
+    QFile config(QDir(sourceDirectory).filePath("pet.json"));
     if (!config.open(QIODevice::ReadOnly)) {
+        if (directory_.isEmpty()) {
+            useVectorFallback();
+            return;
+        }
         setSpeech(tr("pet.json not found"));
         return;
     }
@@ -158,6 +171,10 @@ void PetWindow::reloadDefinition() {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(configBytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        if (directory_.isEmpty()) {
+            useVectorFallback();
+            return;
+        }
         setSpeech(tr("Invalid pet.json"));
         watchConfiguration();
         return;
@@ -187,7 +204,7 @@ void PetWindow::reloadDefinition() {
         setSpeech(tr("Sprite path must be a file name"));
         sheetName.clear();
     }
-    const QString nextPath = sheetName.isEmpty() ? QString() : QDir(directory_).filePath(sheetName);
+    const QString nextPath = sheetName.isEmpty() ? QString() : QDir(sourceDirectory).filePath(sheetName);
     if (spriteSheetPath_ != nextPath) {
         spriteSheetPath_ = nextPath;
         loadSheet();
@@ -217,7 +234,7 @@ void PetWindow::tick() {
 void PetWindow::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QRect bounds = directory_.isEmpty()
+    const QRect bounds = spriteSheet_.isNull()
         ? QRect(8, 20, width() - 16, height() - 24)
         : QRect(8, height() - qMin(height() - 56, qRound(frameHeight_ * scale_)) - 8,
                 qMin(width() - 16, qRound(frameWidth_ * scale_)),

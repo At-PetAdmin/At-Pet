@@ -222,7 +222,13 @@ private:
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
         pet->setLookAtCopilot(QSettings().value("pet/lookAtCopilot", false).toBool());
-        pet->move(position);
+        QPoint topLeft = position;
+        if (QScreen *screen = QGuiApplication::primaryScreen()) {
+            const QRect area = screen->availableGeometry();
+            topLeft.setX(qBound(area.left(), topLeft.x(), qMax(area.left(), area.right() - pet->width() + 1)));
+            topLeft.setY(qBound(area.top(), topLeft.y(), qMax(area.top(), area.bottom() - pet->height() + 1)));
+        }
+        pet->move(topLeft);
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
             pet->setAnimation("interact");

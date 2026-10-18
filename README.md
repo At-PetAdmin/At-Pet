@@ -12,7 +12,7 @@ A C++17 desktop companion for Windows, built on Qt 6 so the UI and core can be e
 ## Features
 
 - Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls.
-- Built-in animated fallback pet and custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, completion, cancellation, and errors.
+- Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, completion, cancellation, and errors.
 - Import, preview, switch, delete, and summon every valid pet in the library.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
 - Local HTTP API and Server-Sent Events (SSE) for state updates and external agent events. Initial AgentApp sources: ZCode, GitHub Copilot, DeepSeek Harness, OpenCode, Antigravity, and Command Code.
@@ -63,7 +63,7 @@ Example `pet.json` in the reference project's format:
 }
 ```
 
-`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, `fps`, and `defaultAnimation` are supported. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. If no valid sprite is available, the built-in vector pet remains usable.
+`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, `fps`, and `defaultAnimation` are supported. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
 
 On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
