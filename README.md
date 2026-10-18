@@ -1,5 +1,7 @@
 # At-Pet
 
+English | [简体中文](README_CN.md)
+
 A C++17 desktop companion for Windows, built on Qt 6 so the UI and core can be extended to macOS and Linux. The first implementation targets Windows; Copilot-window tracking currently uses the Windows API.
 
 ## Features
@@ -83,3 +85,11 @@ Invoke-RestMethod http://127.0.0.1:8765/event -Method Post `
 ```
 
 The first release provides the event bridge rather than reading Copilot session internals directly. A Copilot extension or other local integration can POST lifecycle events to it.
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, coding conventions, and the pull-request process. The Chinese guide is available at [CONTRIBUTING_CN.md](CONTRIBUTING_CN.md).
+
+## License
+
+At-Pet is released under the [MIT License](LICENSE).
