@@ -1,5 +1,10 @@
 # At-Pet
 
+[![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white&style=flat-square)](https://isocpp.org/)
+[![Qt 6.4+](https://img.shields.io/badge/Qt-6.4%2B-41CD52?logo=qt&logoColor=white&style=flat-square)](https://www.qt.io/)
+[![Platform: Windows 10/11](https://img.shields.io/badge/Platform-Windows_10%2F11-0078D6?logo=windows&logoColor=white&style=flat-square)](https://www.microsoft.com/windows)
+[![CMake 3.21+](https://img.shields.io/badge/CMake-3.21%2B-064F8C?logo=cmake&logoColor=white&style=flat-square)](https://cmake.org/)
+
 [English](README.md) | 简体中文 | [贡献指南](CONTRIBUTING_CN.md)
 
 一个基于 C++17 和 Qt 6 的 Windows 桌面宠物应用。界面与核心逻辑基于 Qt 构建，便于扩展到 macOS 和 Linux；首个实现面向 Windows，Copilot 窗口跟踪目前使用 Windows API。

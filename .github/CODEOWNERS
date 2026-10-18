@@ -1,0 +1,3 @@
+# Default owner for all files in this repository.
+# CODEOWNERS controls review ownership; ruleset bypass is configured separately.
+* @Ni-ShuWu
