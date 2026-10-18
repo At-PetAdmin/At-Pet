@@ -24,7 +24,6 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_arm64_cross_compiled
-          modules: qtsvg
           dir: ${{ runner.temp }}/Qt
 
       - name: Save Qt ARM64 path
