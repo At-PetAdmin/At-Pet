@@ -54,7 +54,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:QT_TARGET_ROOT/lib/cmake/Qt6/qt.toolchain.cmake" `
             -DCMAKE_PREFIX_PATH="$env:QT_TARGET_ROOT;$env:QT_HOST_ROOT" `
-            -DQT_HOST_PATH="$env:QT_HOST_ROOT"
+            -DQT_HOST_PATH="$env:QT_HOST_ROOT" `
+            -DQt6WidgetsTools_DIR="$env:QT_HOST_ROOT/lib/cmake/Qt6WidgetsTools"
           cmake --build build-arm64 --parallel
 
       - name: Package
