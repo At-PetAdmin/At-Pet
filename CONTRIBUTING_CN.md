@@ -47,6 +47,16 @@ cmake --build build
 
 运行 `build\at-pet.exe` 时，需要把 Qt 套件的 `bin` 目录加入 `PATH`，或使用 `windeployqt` 部署运行时。macOS 和 Linux 使用对应平台的构建产物即可。
 
+### 没有本地 Qt 环境时构建
+
+`Build Windows amd64 package` workflow 会产出免安装 Qt 的 Windows x86-64 压缩包，因此不安装 Qt 也可以参与开发：
+
+1. 推送分支并向 `main` 提交 Pull Request。该 workflow 会在每个 Pull Request 以及推送到 `main` 时运行。
+2. 在 Pull Request 的 **Checks** 标签页中打开对应的运行记录。
+3. 下载 `At-Pet-windows-amd64` 产物，解压后直接运行 `at-pet.exe`；Qt 与 MinGW 运行时已一并打包。
+
+上传产物前，该任务会启动打包后的应用，并在临时端口上验证 `GET /health` 可正常响应。推送 `v*` 标签时，同一个压缩包及其 `.sha256` 校验文件会自动附加到对应的 GitHub Release。
+
 项目目前没有自动化测试套件。提交 Pull Request 前，请手动验证您的改动。
 
 ## 手动验证清单

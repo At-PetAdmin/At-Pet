@@ -34,6 +34,10 @@ cmake --build build
 
 Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt runtime files with `windeployqt`.
 
+### Build artifacts from CI
+
+The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag also attaches the package and its `.sha256` checksum to the GitHub release. The Windows ARM64 package remains a separate manual workflow.
+
 ## Pet library and format
 
 Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once.

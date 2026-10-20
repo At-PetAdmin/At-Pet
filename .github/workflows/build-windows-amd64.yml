@@ -1,0 +1,168 @@
+name: Build Windows amd64 package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: windows-amd64-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: 6.8.3
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Qt MinGW 64-bit
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          tools: 'tools_mingw1310,qt.tools.win64_mingw1310'
+          add-tools-to-path: true
+          cache: true
+          dir: ${{ runner.temp }}/Qt
+
+      - name: Locate MinGW toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:QT_ROOT_DIR) { throw 'The Qt installation path was not set.' }
+
+          $gxx = (Get-Command g++.exe -ErrorAction SilentlyContinue).Source
+          if (-not $gxx) {
+            $gxx = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'Qt') -Filter 'g++.exe' -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $gxx) { throw 'No MinGW g++ was found in the Qt installation.' }
+
+          $mingwBin = Split-Path -Parent $gxx
+          Write-Host "Qt: $env:QT_ROOT_DIR"
+          Write-Host "MinGW: $mingwBin"
+          "MINGW_BIN=$mingwBin" >> $env:GITHUB_ENV
+
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = "$env:MINGW_BIN;$env:QT_ROOT_DIR\bin;$env:PATH"
+
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+            -DCMAKE_CXX_COMPILER="$env:MINGW_BIN\g++.exe"
+          if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed with exit code $LASTEXITCODE." }
+
+          cmake --build build --parallel
+          if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE." }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = "$env:MINGW_BIN;$env:QT_ROOT_DIR\bin;$env:PATH"
+
+          $package = Join-Path $env:GITHUB_WORKSPACE 'dist\At-Pet-windows-amd64'
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          Copy-Item 'build\at-pet.exe' $package
+          Copy-Item 'LICENSE' $package
+
+          & (Join-Path $env:QT_ROOT_DIR 'bin\windeployqt.exe') --release --compiler-runtime (Join-Path $package 'at-pet.exe')
+          if ($LASTEXITCODE -ne 0) { throw "windeployqt failed with exit code $LASTEXITCODE." }
+
+          @'
+          At-Pet for Windows amd64
+
+          Built for Windows 10/11 on x86-64. Qt and the MinGW runtime are bundled, so no Qt installation is required.
+          Start at-pet.exe. The local API listens on 127.0.0.1:8765 unless AT_PET_PORT is set.
+          '@ | Set-Content -Path (Join-Path $package 'README.txt') -Encoding utf8
+
+          Compress-Archive -Path (Join-Path $package '*') -DestinationPath 'dist\At-Pet-windows-amd64.zip' -Force
+
+          $hash = (Get-FileHash 'dist\At-Pet-windows-amd64.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  At-Pet-windows-amd64.zip" | Set-Content -Path 'dist\At-Pet-windows-amd64.zip.sha256' -Encoding ascii
+          Write-Host "SHA256: $hash"
+
+      - name: Smoke test packaged app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:AT_PET_PORT = '18765'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'dist\At-Pet-windows-amd64\at-pet.exe'
+          $process = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
+          try {
+            $healthy = $false
+            for ($attempt = 1; $attempt -le 20; $attempt++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod -Uri 'http://127.0.0.1:18765/health' -TimeoutSec 2
+                if ($health.ok) { $healthy = $true; break }
+              } catch {
+              }
+            }
+            if (-not $healthy) { throw 'The packaged app did not answer GET /health on the configured port.' }
+            Write-Host 'GET /health returned {"ok":true}.'
+          } finally {
+            if ($process -and -not $process.HasExited) { $process.Kill() }
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: At-Pet-windows-amd64
+          path: |
+            dist/At-Pet-windows-amd64.zip
+            dist/At-Pet-windows-amd64.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write job summary
+        shell: pwsh
+        run: |
+          $zip = Get-Item 'dist\At-Pet-windows-amd64.zip'
+          $hash = (Get-Content 'dist\At-Pet-windows-amd64.zip.sha256' -Raw).Trim()
+          @"
+          ### At-Pet Windows amd64
+
+          | File | Size |
+          | --- | --- |
+          | $($zip.Name) | $([math]::Round($zip.Length / 1MB, 1)) MiB |
+
+          $hash
+
+          Download the artifact from this run, unzip it, and start `at-pet.exe`. No Qt installation is needed.
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: At-Pet-windows-amd64
+          path: dist
+
+      - name: Attach package to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "At-Pet $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dist/At-Pet-windows-amd64.zip dist/At-Pet-windows-amd64.zip.sha256 --repo "$GITHUB_REPOSITORY" --clobber
