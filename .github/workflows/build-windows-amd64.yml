@@ -64,7 +64,6 @@ jobs:
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
-            -DCMAKE_C_COMPILER="$env:MINGW_BIN\gcc.exe" `
             -DCMAKE_CXX_COMPILER="$env:MINGW_BIN\g++.exe"
           if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed with exit code $LASTEXITCODE." }
 
