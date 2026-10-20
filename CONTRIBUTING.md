@@ -47,6 +47,16 @@ cmake --build build
 
 Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy the runtime with `windeployqt`.
 
+### Building without a local Qt installation
+
+The `Build Windows amd64 package` workflow produces a self-contained Windows x86-64 package, so you can work on the code without installing Qt:
+
+1. Push your branch and open a pull request against `main`. The workflow runs on every pull request and on pushes to `main`.
+2. Open the run from the **Checks** tab of your pull request.
+3. Download the `At-Pet-windows-amd64` artifact, unzip it, and start `at-pet.exe`. Qt and the MinGW runtime are bundled.
+
+Before uploading, the job starts the packaged app and verifies that `GET /health` answers on a temporary port. When a `v*` tag is pushed, the same package and its `.sha256` file are attached to that GitHub release.
+
 The project currently has no automated test suite. Please verify your change manually before opening a pull request.
 
 ## Manual verification checklist

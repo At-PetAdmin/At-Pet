@@ -36,6 +36,10 @@ cmake --build build
 
 在 macOS 和 Linux 上，使用对应平台的 Qt 6 套件和编译器即可；目前只有 Windows 平台的目标窗口跟踪依赖平台 API。
 
+### 从 CI 获取构建产物
+
+**Build Windows amd64 package** workflow 会在每个 Pull Request 和每次推送到 `main` 时构建免安装 Qt 的 Windows x86-64 压缩包，因此没有本地 Qt 环境的贡献者也能测试自己的改动。在运行记录的 **Artifacts** 区域下载 `At-Pet-windows-amd64`，解压后直接运行 `at-pet.exe`。推送 `v*` 标签时，压缩包和 `.sha256` 校验文件会一并附加到 GitHub Release。Windows ARM64 包仍由单独的 workflow 手动构建。
+
 ## 宠物库与格式
 
 通过宠物右键菜单或托盘菜单中的 **导入配置与精灵表…**，可以分别选择 `pet.json` 和图片。应用会把两者复制为新的宠物库条目，重写精灵图文件名，并在名称重复时追加数字后缀。对于包含 `pet.json` 及其引用资源的完整文件夹，仍可使用 **导入宠物文件夹…**。导入的宠物可以预览 12 秒，或切换为主位置。“召唤全部宠物”会同时打开库中所有有效条目。
