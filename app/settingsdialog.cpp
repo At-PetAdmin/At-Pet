@@ -1,3 +1,4 @@
+#include "agentregistry.h"
 #include "settingsdialog.h"
 #include "petwindow.h"
 
@@ -35,6 +36,7 @@
 #include <QStandardPaths>
 #include <QTabWidget>
 #include <QVBoxLayout>
+#include <QUrl>
 #include <QtMath>
 
 namespace {
@@ -42,25 +44,30 @@ QString petLibraryPath() {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
 }
 
+QString animationFpsKey(const QString &petId, const QString &animation) {
+    return QStringLiteral("animationFps/%1/%2")
+        .arg(QString::fromLatin1(QUrl::toPercentEncoding(petId)),
+             QString::fromLatin1(QUrl::toPercentEncoding(animation)));
+}
+
 const QStringList builtinAnimations = {
     QStringLiteral("idle"), QStringLiteral("walk"), QStringLiteral("sleep"),
     QStringLiteral("thinking"), QStringLiteral("work"), QStringLiteral("review"),
     QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
-    QStringLiteral("tool"), QStringLiteral("interact")
+    QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
 };
 
-const struct AgentDef {
-    const char *key;
-    const char *displayName;
-    const char *description;
-} kAgents[] = {
-    {"githubcopilot", "GitHub Copilot", "VS Code / Visual Studio / JetBrains Copilot Chat"},
-    {"zcode", "ZCode", "ZCode Agent and development assistant"},
-    {"deepseekharness", "DeepSeek Harness", "DeepSeek CLI and local agent workflow harness"},
-    {"opencode", "OpenCode", "Open-source terminal AI coding assistant"},
-    {"antigravity", "Antigravity", "Antigravity Agent tools and IDE extensions"},
-    {"commandcode", "Command Code", "CLI command automation agent"}
-};
+QString monitorTypeDisplayName(AgentMonitorType type) {
+    switch (type) {
+    case AgentMonitorType::ExternalHttpApi:
+        return QCoreApplication::translate("SettingsDialog", "Generic HTTP API");
+    case AgentMonitorType::ClaudeCodeHttpHooks:
+        return QCoreApplication::translate("SettingsDialog", "Claude Code HTTP hooks");
+    case AgentMonitorType::OpenCodeV2Plugin:
+        return QCoreApplication::translate("SettingsDialog", "OpenCode V2 plugin");
+    }
+    return QCoreApplication::translate("SettingsDialog", "Generic HTTP API");
+}
 
 bool copyDirRecursive(const QString &sourcePath, const QString &destinationPath) {
     QDir source(sourcePath);
@@ -127,7 +134,9 @@ void PetPreviewWidget::setPetDefinition(const QJsonObject &definition, const QSt
         currentAnimation_ = QStringLiteral("idle");
     }
 
-    timer_.setInterval(qMax(30, 1000 / fps_));
+    const QJsonObject animation = definition_.value("animations").toObject().value(currentAnimation_).toObject();
+    const int animationFps = qBound(1, animation.value("fps").toInt(fps_), 30);
+    timer_.setInterval(qMax(30, 1000 / animationFps));
     frame_ = 0;
     updateFrames();
     update();
@@ -145,8 +154,20 @@ void PetPreviewWidget::setAnimation(const QString &animName) {
     if (currentAnimation_ == animName) return;
     currentAnimation_ = animName;
     frame_ = 0;
+    const QJsonObject animation = definition_.value("animations").toObject().value(animName).toObject();
+    const int fps = qBound(1, animation.value("fps").toInt(definition_.value("fps").toInt(8)), 30);
+    timer_.setInterval(qMax(30, 1000 / fps));
     updateFrames();
     update();
+}
+
+void PetPreviewWidget::setAnimationFps(int fps) {
+    timer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
+}
+
+int PetPreviewWidget::animationFps() const {
+    const QJsonObject animation = definition_.value("animations").toObject().value(currentAnimation_).toObject();
+    return qBound(1, animation.value("fps").toInt(definition_.value("fps").toInt(8)), 30);
 }
 
 void PetPreviewWidget::updateFrames() {
@@ -372,6 +393,12 @@ void SettingsDialog::setupUi() {
     animLayout->addWidget(new QLabel(tr("Action Preview:"), petLibraryTab));
     animCombo_ = new QComboBox(petLibraryTab);
     animLayout->addWidget(animCombo_, 1);
+    animLayout->addWidget(new QLabel(tr("FPS:"), petLibraryTab));
+    animFpsSpin_ = new QSpinBox(petLibraryTab);
+    animFpsSpin_->setRange(1, 30);
+    animFpsSpin_->setSuffix(tr(" fps"));
+    animFpsSpin_->setToolTip(tr("Playback speed for this animation"));
+    animLayout->addWidget(animFpsSpin_);
     rightCol->addLayout(animLayout);
 
     petInfoLabel_ = new QLabel(petLibraryTab);
@@ -391,34 +418,42 @@ void SettingsDialog::setupUi() {
     auto *agentsLayout = new QVBoxLayout(agentsTab);
     agentsLayout->setContentsMargins(18, 18, 18, 18);
 
-    auto *agentHeaderLabel = new QLabel(tr("Configure which Agent applications will trigger desktop pet animations:"), agentsTab);
+    auto *agentHeaderLabel = new QLabel(tr("Choose which Agent event sources can control desktop pet animations:"), agentsTab);
     agentHeaderLabel->setStyleSheet("font-size: 13px; color: #ffffff; margin-bottom: 8px;");
     agentsLayout->addWidget(agentHeaderLabel);
 
-    auto *agentGroup = new QGroupBox(tr("Monitored Agent Apps"), agentsTab);
+    auto *agentScrollArea = new QScrollArea(agentsTab);
+    agentScrollArea->setWidgetResizable(true);
+    auto *agentGroup = new QGroupBox(tr("Agent Event Sources"), agentScrollArea);
     auto *groupLayout = new QVBoxLayout(agentGroup);
     groupLayout->setSpacing(12);
 
-    for (const auto &agent : kAgents) {
+    for (const AgentDefinition &agent : agentDefinitions()) {
         auto *itemWidget = new QWidget(agentGroup);
         auto *itemLayout = new QHBoxLayout(itemWidget);
         itemLayout->setContentsMargins(0, 0, 0, 0);
 
         auto *chk = new QCheckBox(agent.displayName, itemWidget);
         chk->setChecked(true);
-        agentCheckboxes_.insert(QString::fromLatin1(agent.key), chk);
+        agentCheckboxes_.insert(agent.key, chk);
 
-        auto *descLabel = new QLabel(QString::fromUtf8(agent.description), itemWidget);
+        auto *descLabel = new QLabel(itemWidget);
         descLabel->setStyleSheet("color: #7b8094; font-size: 11px;");
+        descLabel->setWordWrap(true);
+        agentDescriptionLabels_.insert(agent.key, descLabel);
 
         itemLayout->addWidget(chk);
         itemLayout->addSpacing(16);
         itemLayout->addWidget(descLabel, 1);
-
         groupLayout->addWidget(itemWidget);
     }
-    agentsLayout->addWidget(agentGroup);
-    agentsLayout->addStretch(1);
+    updateAgentDescriptions();
+    groupLayout->addStretch(1);
+    agentScrollArea->setWidget(agentGroup);
+    agentsLayout->addWidget(agentScrollArea, 1);
+
+    subagentPetCheck_ = new QCheckBox(tr("Show a separate pet for each detected subagent session"), agentsTab);
+    agentsLayout->addWidget(subagentPetCheck_);
 
     auto *btnSaveAgents = new QPushButton(tr("Save Agent Preferences"), agentsTab);
     btnSaveAgents->setObjectName("primaryBtn");
@@ -476,6 +511,7 @@ void SettingsDialog::setupUi() {
     connect(btnDeletePet_, &QPushButton::clicked, this, &SettingsDialog::onDeletePet);
     connect(btnApplyPet_, &QPushButton::clicked, this, &SettingsDialog::onApplyAsActivePet);
     connect(animCombo_, &QComboBox::currentTextChanged, this, &SettingsDialog::onAnimationSelectionChanged);
+    connect(animFpsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsDialog::onAnimationFpsChanged);
     connect(languageCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsDialog::onLanguageComboChanged);
 }
 
@@ -486,6 +522,7 @@ void SettingsDialog::loadSettings() {
         const QString settingKey = QStringLiteral("agents/monitor_") + it.key();
         it.value()->setChecked(settings.value(settingKey, true).toBool());
     }
+    subagentPetCheck_->setChecked(settings.value("agents/showSubagentPets", false).toBool());
 
     // General settings
     const QString lang = settings.value("ui/language", "zh_CN").toString();
@@ -506,7 +543,9 @@ void SettingsDialog::saveSettings() {
         const QString settingKey = QStringLiteral("agents/monitor_") + it.key();
         settings.setValue(settingKey, it.value()->isChecked());
     }
+    settings.setValue("agents/showSubagentPets", subagentPetCheck_->isChecked());
     emit agentFilterChanged();
+    emit subagentPetSettingChanged(subagentPetCheck_->isChecked());
     QMessageBox::information(this, tr("Settings Saved"), tr("Agent monitoring preferences have been updated."));
 }
 
@@ -664,12 +703,33 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
     }
     animCombo_->setCurrentText(previewWidget_->currentAnimation());
     animCombo_->blockSignals(false);
+    const QString selectedAnimation = animCombo_->currentText();
+    const int defaultFps = previewWidget_->animationFps();
+    const int fps = QSettings().value(animationFpsKey(id, selectedAnimation), defaultFps).toInt();
+    animFpsSpin_->blockSignals(true);
+    animFpsSpin_->setValue(qBound(1, fps, 30));
+    animFpsSpin_->blockSignals(false);
+    previewWidget_->setAnimationFps(fps);
 }
 
 void SettingsDialog::onAnimationSelectionChanged(const QString &animName) {
-    if (!animName.isEmpty()) {
-        previewWidget_->setAnimation(animName);
-    }
+    if (animName.isEmpty()) return;
+    previewWidget_->setAnimation(animName);
+    const int defaultFps = previewWidget_->animationFps();
+    const int fps = QSettings().value(animationFpsKey(currentSelectedPetId(), animName), defaultFps).toInt();
+    animFpsSpin_->blockSignals(true);
+    animFpsSpin_->setValue(qBound(1, fps, 30));
+    animFpsSpin_->blockSignals(false);
+    previewWidget_->setAnimationFps(fps);
+}
+
+void SettingsDialog::onAnimationFpsChanged(int fps) {
+    const QString petId = currentSelectedPetId();
+    const QString animName = animCombo_->currentText();
+    if (petId.isEmpty() || animName.isEmpty()) return;
+    QSettings().setValue(animationFpsKey(petId, animName), fps);
+    previewWidget_->setAnimationFps(fps);
+    emit animationFpsChanged(petId, animName, fps);
 }
 
 void SettingsDialog::onApplyAsActivePet() {
@@ -827,12 +887,23 @@ void SettingsDialog::onDeletePet() {
     refreshPetsList();
 }
 
+void SettingsDialog::updateAgentDescriptions() {
+    for (const AgentDefinition &agent : agentDefinitions()) {
+        QLabel *label = agentDescriptionLabels_.value(agent.key, nullptr);
+        if (label) {
+            label->setText(QStringLiteral("%1\n%2")
+                .arg(agent.description, tr("Monitoring strategy: %1").arg(monitorTypeDisplayName(agent.monitorType))));
+        }
+    }
+}
+
 void SettingsDialog::changeEvent(QEvent *event) {
     if (event->type() == QEvent::LanguageChange) {
         setWindowTitle(tr("At-Pet Settings & Library"));
         tabWidget_->setTabText(0, tr("Pet Library & Preview"));
         tabWidget_->setTabText(1, tr("Agent Monitoring"));
         tabWidget_->setTabText(2, tr("General Settings"));
+        updateAgentDescriptions();
         refreshPetsList();
     }
     QDialog::changeEvent(event);

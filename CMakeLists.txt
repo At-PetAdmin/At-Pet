@@ -15,6 +15,11 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/petwindow.h
     app/httpapi.cpp
     app/httpapi.h
+    app/agentmonitor.cpp
+    app/agentmonitor.h
+    app/permissiondialog.cpp
+    app/permissiondialog.h
+    app/agentregistry.h
     app/settingsdialog.cpp
     app/settingsdialog.h
     assets/default/pet.qrc

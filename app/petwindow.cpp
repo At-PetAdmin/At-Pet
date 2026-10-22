@@ -14,7 +14,9 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QTimer>
+#include <QUrl>
 #include <QtMath>
 
 namespace {
@@ -22,7 +24,7 @@ const QStringList builtinAnimations = {
     QStringLiteral("idle"), QStringLiteral("walk"), QStringLiteral("sleep"),
     QStringLiteral("thinking"), QStringLiteral("work"), QStringLiteral("review"),
     QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
-    QStringLiteral("tool"), QStringLiteral("interact")
+    QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
 };
 }
 
@@ -60,7 +62,7 @@ QJsonObject PetWindow::withInferredAnimations(const QJsonObject &definition) {
         QStringLiteral("idle"), QStringLiteral("walk"), QStringLiteral("sleep"),
         QStringLiteral("thinking"), QStringLiteral("work"), QStringLiteral("review"),
         QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
-        QStringLiteral("tool"), QStringLiteral("interact")
+        QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
     };
     if (rowCounts.isEmpty())
         return definition;
@@ -89,6 +91,19 @@ QString PetWindow::animation() const { return animation_; }
 QString PetWindow::speech() const { return speech_; }
 QString PetWindow::petDirectory() const { return directory_; }
 
+namespace {
+QString animationFpsKey(const QString &petId, const QString &animation) {
+    return QStringLiteral("animationFps/%1/%2")
+        .arg(QString::fromLatin1(QUrl::toPercentEncoding(petId)),
+             QString::fromLatin1(QUrl::toPercentEncoding(animation)));
+}
+}
+
+void PetWindow::setAnimationFps(const QString &name, int fps) {
+    if (name == animation_)
+        animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
+}
+
 void PetWindow::setAnimation(const QString &name) {
     if (!builtinAnimations.contains(name) && !definition_.value("animations").toObject().contains(name))
         return;
@@ -96,6 +111,10 @@ void PetWindow::setAnimation(const QString &name) {
         return;
     animation_ = name;
     frame_ = 0;
+    const QJsonObject animation = definition_.value("animations").toObject().value(name).toObject();
+    const int defaultFps = qBound(1, animation.value("fps").toInt(framesPerSecond_), 30);
+    const int fps = QSettings().value(animationFpsKey(petId(), name), defaultFps).toInt();
+    animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
     emit animationChanged(animation_);
     update();
 }
@@ -217,7 +236,10 @@ void PetWindow::reloadDefinition() {
     const QString defaultAnimation = definition_.value("defaultAnimation").toString();
     if (!defaultAnimation.isEmpty() && definition_.value("animations").toObject().contains(defaultAnimation))
         animation_ = defaultAnimation;
-    animationTimer_.setInterval(qMax(30, 1000 / framesPerSecond_));
+    const QJsonObject currentAnimation = definition_.value("animations").toObject().value(animation_).toObject();
+    const int defaultFps = qBound(1, currentAnimation.value("fps").toInt(framesPerSecond_), 30);
+    const int fps = QSettings().value(animationFpsKey(petId(), animation_), defaultFps).toInt();
+    animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
     watchConfiguration();
     update();
 }
@@ -413,7 +435,7 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
         {QStringLiteral("work"), tr("Working")}, {QStringLiteral("review"), tr("Review")},
         {QStringLiteral("error"), tr("Error")}, {QStringLiteral("done"), tr("Completed")},
         {QStringLiteral("cancelled"), tr("Cancelled")}, {QStringLiteral("tool"), tr("Using tools")},
-        {QStringLiteral("interact"), tr("Interact")}
+        {QStringLiteral("interact"), tr("Interact")}, {QStringLiteral("permission"), tr("Permission request")}
     };
     for (const QString &name : animationNames) {
         QAction *action = animationMenu->addAction(translatedAnimations.value(name, name));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QHash>
 #include <QImage>
 #include <QJsonObject>
 #include <QTimer>
@@ -26,6 +27,8 @@ public:
 
     void setPetDefinition(const QJsonObject &definition, const QString &spriteSheetPath);
     void setAnimation(const QString &animName);
+    void setAnimationFps(int fps);
+    int animationFps() const;
     QString currentAnimation() const { return currentAnimation_; }
     QStringList availableAnimations() const;
 
@@ -61,6 +64,8 @@ signals:
     void lookAtCopilotToggled(bool enabled);
     void apiPortChanged(quint16 port);
     void agentFilterChanged();
+    void subagentPetSettingChanged(bool enabled);
+    void animationFpsChanged(const QString &petId, const QString &animation, int fps);
 
 public slots:
     void refreshPetsList();
@@ -75,6 +80,7 @@ private slots:
     void onDeletePet();
     void onApplyAsActivePet();
     void onAnimationSelectionChanged(const QString &animName);
+    void onAnimationFpsChanged(int fps);
     void onSaveGeneralSettings();
     void onLanguageComboChanged(int index);
 
@@ -83,6 +89,7 @@ private:
     void loadSettings();
     void saveSettings();
     void applyStyle();
+    void updateAgentDescriptions();
     QString currentSelectedPetId() const;
 
     // Tabs
@@ -92,6 +99,7 @@ private:
     QListWidget *petList_ = nullptr;
     PetPreviewWidget *previewWidget_ = nullptr;
     QComboBox *animCombo_ = nullptr;
+    QSpinBox *animFpsSpin_ = nullptr;
     QLabel *petInfoLabel_ = nullptr;
     QLabel *importStatusLabel_ = nullptr;
     QPushButton *btnApplyPet_ = nullptr;
@@ -101,6 +109,8 @@ private:
 
     // Agent Monitoring Settings tab
     QHash<QString, QCheckBox *> agentCheckboxes_;
+    QHash<QString, QLabel *> agentDescriptionLabels_;
+    QCheckBox *subagentPetCheck_ = nullptr;
 
     // General Settings tab
     QComboBox *languageCombo_ = nullptr;

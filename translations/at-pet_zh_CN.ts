@@ -303,4 +303,23 @@
         <translation>收起桌宠</translation>
     </message>
 </context>
+<context>
+    <name>SettingsDialog</name>
+    <message>
+        <source>Generic HTTP API</source>
+        <translation>通用 HTTP API</translation>
+    </message>
+    <message>
+        <source>Claude Code HTTP hooks</source>
+        <translation>Claude Code HTTP hooks</translation>
+    </message>
+    <message>
+        <source>OpenCode V2 plugin</source>
+        <translation>OpenCode V2 插件</translation>
+    </message>
+    <message>
+        <source>Monitoring strategy: %1</source>
+        <translation>监控策略：%1</translation>
+    </message>
+</context>
 </TS>
