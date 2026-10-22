@@ -113,6 +113,8 @@ Run the checks that apply to your change:
 
 ## Commit messages and pull requests
 
+Please submit contribution text in the language of the guide you are following: English for this guide and Simplified Chinese for the Chinese guide.
+
 1. Fork the repository and create a topic branch from `main`.
 2. Make your change and verify it using the checklist above.
 3. Write an imperative commit summary, for example `Fix row-count animation mapping`.

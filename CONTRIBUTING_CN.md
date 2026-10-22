@@ -113,6 +113,8 @@ cmake --build build
 
 ## 提交信息与 Pull Request
 
+请使用所遵循指南对应的语言提交贡献内容：阅读本指南时使用简体中文，阅读英文版指南时使用英文。
+
 1. Fork 仓库，并从 `main` 创建主题分支。
 2. 完成改动，并按上面的清单进行验证。
 3. 使用祈使句编写提交摘要，例如 `Fix row-count animation mapping`。

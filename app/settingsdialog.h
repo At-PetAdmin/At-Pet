@@ -89,7 +89,9 @@ private:
     void loadSettings();
     void saveSettings();
     void applyStyle();
+    void retranslateUi();
     void updateAgentDescriptions();
+    void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
 
     // Tabs
@@ -97,6 +99,11 @@ private:
 
     // Pet Library & Preview tab
     QListWidget *petList_ = nullptr;
+    QLabel *installedPetsLabel_ = nullptr;
+    QLabel *previewLabel_ = nullptr;
+    QLabel *actionPreviewLabel_ = nullptr;
+    QLabel *fpsLabel_ = nullptr;
+    QLabel *animationFpsNoteLabel_ = nullptr;
     PetPreviewWidget *previewWidget_ = nullptr;
     QComboBox *animCombo_ = nullptr;
     QSpinBox *animFpsSpin_ = nullptr;
@@ -106,14 +113,23 @@ private:
     QPushButton *btnImportFiles_ = nullptr;
     QPushButton *btnImportFolder_ = nullptr;
     QPushButton *btnDeletePet_ = nullptr;
+    QString petInfoBaseText_;
 
     // Agent Monitoring Settings tab
+    QLabel *agentHeaderLabel_ = nullptr;
+    QGroupBox *agentGroupBox_ = nullptr;
     QHash<QString, QCheckBox *> agentCheckboxes_;
     QHash<QString, QLabel *> agentDescriptionLabels_;
     QCheckBox *subagentPetCheck_ = nullptr;
+    QPushButton *btnSaveAgents_ = nullptr;
 
     // General Settings tab
+    QGroupBox *preferencesGroupBox_ = nullptr;
+    QLabel *languageLabel_ = nullptr;
+    QLabel *apiPortLabel_ = nullptr;
     QComboBox *languageCombo_ = nullptr;
     QCheckBox *lookAtCopilotCheck_ = nullptr;
     QSpinBox *apiPortSpin_ = nullptr;
+    QPushButton *btnSaveGeneral_ = nullptr;
+    QPushButton *btnClose_ = nullptr;
 };

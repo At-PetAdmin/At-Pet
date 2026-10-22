@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "powershell": "$ErrorActionPreference='Stop';try{$hookDir=$env:COPILOT_HOOK_DIR;if(-not $hookDir -and $env:COPILOT_PLUGIN_ROOT){$hookDir=Join-Path $env:COPILOT_PLUGIN_ROOT 'com.github.copilot\\hooks'};if($hookDir){$script=Join-Path $hookDir 'at-pet-event.ps1';if(Test-Path -LiteralPath $script){& powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -HookEvent 'userPromptSubmitted'}}}catch{};exit 0",
+        "timeoutSec": 5
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "powershell": "$ErrorActionPreference='Stop';try{$hookDir=$env:COPILOT_HOOK_DIR;if(-not $hookDir -and $env:COPILOT_PLUGIN_ROOT){$hookDir=Join-Path $env:COPILOT_PLUGIN_ROOT 'com.github.copilot\\hooks'};if($hookDir){$script=Join-Path $hookDir 'at-pet-event.ps1';if(Test-Path -LiteralPath $script){& powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -HookEvent 'preToolUse'}}}catch{};exit 0",
+        "timeoutSec": 5
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "powershell": "$ErrorActionPreference='Stop';try{$hookDir=$env:COPILOT_HOOK_DIR;if(-not $hookDir -and $env:COPILOT_PLUGIN_ROOT){$hookDir=Join-Path $env:COPILOT_PLUGIN_ROOT 'com.github.copilot\\hooks'};if($hookDir){$script=Join-Path $hookDir 'at-pet-event.ps1';if(Test-Path -LiteralPath $script){& powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -HookEvent 'postToolUse'}}}catch{};exit 0",
+        "timeoutSec": 5
+      }
+    ],
+    "postToolUseFailure": [
+      {
+        "type": "command",
+        "powershell": "$ErrorActionPreference='Stop';try{$hookDir=$env:COPILOT_HOOK_DIR;if(-not $hookDir -and $env:COPILOT_PLUGIN_ROOT){$hookDir=Join-Path $env:COPILOT_PLUGIN_ROOT 'com.github.copilot\\hooks'};if($hookDir){$script=Join-Path $hookDir 'at-pet-event.ps1';if(Test-Path -LiteralPath $script){& powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -HookEvent 'postToolUseFailure'}}}catch{};exit 0",
+        "timeoutSec": 5
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "powershell": "$ErrorActionPreference='Stop';try{$hookDir=$env:COPILOT_HOOK_DIR;if(-not $hookDir -and $env:COPILOT_PLUGIN_ROOT){$hookDir=Join-Path $env:COPILOT_PLUGIN_ROOT 'com.github.copilot\\hooks'};if($hookDir){$script=Join-Path $hookDir 'at-pet-event.ps1';if(Test-Path -LiteralPath $script){& powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -HookEvent 'agentStop'}}}catch{};exit 0",
+        "timeoutSec": 5
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "powershell": "$ErrorActionPreference='Stop';try{$hookDir=$env:COPILOT_HOOK_DIR;if(-not $hookDir -and $env:COPILOT_PLUGIN_ROOT){$hookDir=Join-Path $env:COPILOT_PLUGIN_ROOT 'com.github.copilot\\hooks'};if($hookDir){$script=Join-Path $hookDir 'at-pet-event.ps1';if(Test-Path -LiteralPath $script){& powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script -HookEvent 'sessionEnd'}}}catch{};exit 0",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
