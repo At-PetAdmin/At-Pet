@@ -1,0 +1,35 @@
+{
+  "name": "at-pet-integrations",
+  "metadata": {
+    "description": "Plugins for integrating At-Pet with coding agents.",
+    "version": "1.0.0"
+  },
+  "owner": {
+    "name": "Ni-ShuWu"
+  },
+  "plugins": [
+    {
+      "name": "at-pet-copilot",
+      "description": "Sync GitHub Copilot CLI and Copilot App activity to the local At-Pet desktop pet.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Ni-ShuWu"
+      },
+      "homepage": "https://github.com/Ni-ShuWu/At-Pet/tree/main/integrations/copilot-cli",
+      "repository": "https://github.com/Ni-ShuWu/At-Pet",
+      "keywords": [
+        "at-pet",
+        "github-copilot",
+        "copilot-cli",
+        "windows",
+        "hooks"
+      ],
+      "license": "MIT",
+      "source": {
+        "source": "github",
+        "repo": "Ni-ShuWu/At-Pet",
+        "path": "integrations/copilot-cli"
+      }
+    }
+  ]
+}

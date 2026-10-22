@@ -15,9 +15,9 @@
 - 内置 Codex Pets 精灵桌宠作为默认宠物，并支持自定义精灵表动画，覆盖 idle、walk、sleep、thinking、work、review、工具执行、权限请求、完成、取消和错误等状态。
 - 导入、预览、切换、删除和召唤宠物库中的每一只有效宠物；也可选择为检测到的每个子代理会话显示独立桌宠。
 - 监视已导入的 `pet.json` 及其所在文件夹，修改后无需重启即可重新加载配置和精灵图。
-- 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和 Agent 事件。Claude Code HTTP hooks 与 OpenCode V2 插件提供原生适配器；其他来源可使用通用 HTTP API。
+- 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和 Agent 事件。Claude Code HTTP hooks 与 OpenCode V2 插件提供原生适配器；兼容 MCP 的客户端可选择使用 stdio 桥接主动上报事件，其他来源也可使用通用 HTTP API。
 - Agent Monitoring 设置会显示每个来源的接入策略，并可过滤用于控制动画的事件。At-Pet 不会扫描 Agent 进程或读取与机器相关的日志路径；原生集成需在对应 Agent 应用中安装。
-- Windows 专属选项：让宠物看向标题中包含 “Copilot” 的可见窗口。
+- Windows 专属选项：让宠物看向标题中包含 “Copilot” 的可见窗口。这只会改变桌宠朝向，不会检测或同步 Copilot 会话状态。公开的 `github/app` 仓库不包含桌面客户端实现，也未公开状态事件 API，因此 GitHub Copilot 需要外部事件发送端才能同步状态。
 - 托盘菜单支持显示/隐藏宠物、导入宠物、召唤宠物库中的全部宠物，以及在简体中文和英语之间切换。默认跟随系统语言，并记住您的选择。
 
 ## 构建（Windows / Qt MinGW）
@@ -68,8 +68,7 @@ cmake --build build
 }
 ```
 
-支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。
-
+支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。
 在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
 
 ## 本地 API
@@ -114,6 +113,8 @@ Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool
 ```
 
 **OpenCode V2：** 将 [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) 复制到项目的 `.opencode/plugins/` 文件夹，或全局目录 `%USERPROFILE%\.config\opencode\plugins\`，然后重启 OpenCode。仅当 At-Pet 使用非默认本地端口时才需设置 `AT_PET_URL`。插件会上报会话/工具事件，并将 `ask` 权限决定交给 At-Pet；若 At-Pet 不可用，则保留 OpenCode 原有的 `ask` 决定。插件卸载时，如果仍有权限弹窗，插件会取消待处理请求并关闭弹窗，不会更改 OpenCode 原有的 `ask` 决定。
+
+**可选 MCP Server：** 兼容 MCP 的客户端可按 [`integrations/at-pet-mcp/README_CN.md`](integrations/at-pet-mcp/README_CN.md) 配置本地 stdio 桥接。工具仅在被明确调用时上报事件；与 hooks 和插件不同，MCP 不会自动监听生命周期。
 
 PowerShell 请求示例：
 

@@ -17,6 +17,10 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/httpapi.h
     app/agentmonitor.cpp
     app/agentmonitor.h
+    app/agentadapters/claude-code/adapter.cpp
+    app/agentadapters/claude-code/adapter.h
+    app/agentadapters/opencode-v2/adapter.cpp
+    app/agentadapters/opencode-v2/adapter.h
     app/permissiondialog.cpp
     app/permissiondialog.h
     app/agentregistry.h

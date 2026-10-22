@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "at-pet-copilot",
+  "version": "1.0.0",
+  "description": "Sync GitHub Copilot CLI and Copilot App activity to the local At-Pet desktop pet."
+}

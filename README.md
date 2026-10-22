@@ -15,9 +15,9 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 - Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
 - Import, preview, switch, delete, and summon every valid pet in the library; optionally show a separate pet for each detected subagent session.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
-- Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; other sources can use the generic HTTP API.
+- Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; MCP-compatible clients can use the optional stdio bridge for explicit event reporting, and other sources can use the generic HTTP API.
 - Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
-- Windows-only option to look toward a visible window whose title contains “Copilot”.
+- Windows-only option to look toward a visible window whose title contains “Copilot”. This only changes the pet's direction; it does not detect or synchronize Copilot session status. The public `github/app` repository does not contain the desktop app implementation or expose a status event API, so GitHub Copilot requires an external event sender.
 - System-tray controls for showing/hiding pets, importing pets, summoning the whole library, and switching between Simplified Chinese and English. The default follows the system locale; your selection is remembered.（托盘菜单支持简体中文/英语切换，默认跟随系统语言并记住选择。）
 
 ## Build (Windows / Qt MinGW)
@@ -68,8 +68,7 @@ Example `pet.json` in the reference project's format:
 }
 ```
 
-`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
-
+`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
 On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
 ## Local API
@@ -114,6 +113,8 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 ```
 
 **OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
+
+**Optional MCP server:** MCP-compatible clients can use the local stdio bridge described in [`integrations/at-pet-mcp/README.md`](integrations/at-pet-mcp/README.md). Its tools report events only when explicitly called; unlike hooks and plugins, MCP does not automatically observe lifecycle events.
 
 Example PowerShell request:
 

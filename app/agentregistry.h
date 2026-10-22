@@ -21,7 +21,7 @@ struct AgentDefinition {
 inline const QVector<AgentDefinition> &agentDefinitions() {
     static const QVector<AgentDefinition> definitions = {
         {QStringLiteral("githubcopilot"), QStringLiteral("GitHub Copilot"),
-         QStringLiteral("VS Code / Visual Studio / JetBrains Copilot Chat"),
+         QStringLiteral("GitHub Copilot app; no native status adapter is available, so events require an external HTTP integration"),
          {QStringLiteral("copilot"), QStringLiteral("githubcopilotchat"),
           QStringLiteral("vscodecopilot"), QStringLiteral("visualstudiocopilot"),
           QStringLiteral("jetbrainscopilot")}, AgentMonitorType::ExternalHttpApi},
