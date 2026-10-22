@@ -16,6 +16,7 @@
     "done": { "row": 4, "frames": 12 },
     "cancelled": { "frames": [80, 81] },
     "tool": { "row": 3, "frames": 12 },
-    "interact": { "frames": [72, 73, 74] }
+    "interact": { "frames": [72, 73, 74] },
+    "permission": { "frames": [78, 79] }
   }
 }

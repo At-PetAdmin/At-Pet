@@ -26,6 +26,7 @@ public:
     QString speech() const;
     QString petDirectory() const;
     void setAnimation(const QString &name);
+    void setAnimationFps(const QString &name, int fps);
     void setSpeech(const QString &text);
     void setLookAtCopilot(bool enabled);
     void setLookDirection(bool faceLeft);

@@ -3,6 +3,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <functional>
@@ -15,9 +16,12 @@ public:
     bool start(quint16 port = 8765);
     quint16 port() const;
     void publishState();
+    void resolvePermission(const QString &requestId, bool allowOnce);
 
 signals:
     void eventReceived(const QJsonObject &event);
+    void permissionRequestReceived(const QString &requestId, const QJsonObject &request);
+    void permissionRequestCancelled(const QString &requestId);
     void animationRequested(const QString &name);
     void speechRequested(const QString &text);
     void summonRequested(const QJsonObject &request);
@@ -32,8 +36,17 @@ private:
     void sendJson(QTcpSocket *socket, int status, const QJsonObject &json);
     void broadcastState();
 
+    struct PermissionRequest {
+        QJsonObject details;
+        QString decision = QStringLiteral("pending");
+        bool isClaudeHttpHook = false;
+        QPointer<QTcpSocket> hookSocket;
+    };
+
     QTcpServer server_;
     std::function<QJsonObject()> stateProvider_;
     QList<QTcpSocket *> eventClients_;
     QHash<QTcpSocket *, QByteArray> requestBuffers_;
+    QHash<QString, PermissionRequest> permissionRequests_;
+    QHash<QTcpSocket *, QString> permissionHookRequests_;
 };

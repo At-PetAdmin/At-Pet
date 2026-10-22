@@ -7,16 +7,17 @@
 
 English | [简体中文](README_CN.md)
 
-A C++17 desktop companion for Windows, built on Qt 6 so the UI and core can be extended to macOS and Linux. The first implementation targets Windows; Copilot-window tracking currently uses the Windows API.
+A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built on Qt 6. Windows is the only supported platform; Linux and macOS are outside this project's scope.
 
 ## Features
 
 - Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls.
-- Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, completion, cancellation, and errors.
-- Import, preview, switch, delete, and summon every valid pet in the library.
+- Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
+- Import, preview, switch, delete, and summon every valid pet in the library; optionally show a separate pet for each detected subagent session.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
-- Local HTTP API and Server-Sent Events (SSE) for state updates and external agent events. Initial AgentApp sources: ZCode, GitHub Copilot, DeepSeek Harness, OpenCode, Antigravity, and Command Code.
-- Windows-only option to look toward a visible window whose title contains “Copilot”. AgentApp lifecycle state is received through the API; these apps are not automatically instrumented.
+- Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; other sources can use the generic HTTP API.
+- Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
+- Windows-only option to look toward a visible window whose title contains “Copilot”.
 - System-tray controls for showing/hiding pets, importing pets, summoning the whole library, and switching between Simplified Chinese and English. The default follows the system locale; your selection is remembered.（托盘菜单支持简体中文/英语切换，默认跟随系统语言并记住选择。）
 
 ## Build (Windows / Qt MinGW)
@@ -36,7 +37,7 @@ Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt
 
 ### Build artifacts from CI
 
-The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag also attaches the package and its `.sha256` checksum to the GitHub release. The Windows ARM64 package remains a separate manual workflow.
+The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag.
 
 ## Pet library and format
 
@@ -67,7 +68,7 @@ Example `pet.json` in the reference project's format:
 }
 ```
 
-`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, `fps`, and `defaultAnimation` are supported. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
+`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
 
 On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
@@ -76,14 +77,43 @@ On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. The API is unauthenticated and intended only for trusted programs on the same machine; do not expose or forward this port to a network.
 
 - `GET /health` — health check.
-- `GET /state` — current pets and known agent sessions.
+- `GET /state` — current pets and known agent sessions; `agentSources` lists each Agent key, monitor type, and native endpoint when available.
 - `GET /events` — SSE stream; sends a JSON state snapshot on connect and whenever state changes.
 - `POST /animation` — `{"name":"sleep"}`.
 - `POST /say` — `{"text":"Hello!"}`.
 - `POST /summon` — `{"all":true}` or `{"petId":"sample-cat"}`.
-- `POST /event` — `{"sessionId":"session-1","agentApp":"github-copilot","event":"thinking","model":"...","message":"..."}`. Supported `agentApp` values: `zcode`, `github-copilot`, `deepseek-harness`, `opencode`, `antigravity`, and `command-code`. The normalized app label is included with each session in `/state` and SSE; the field is optional for generic event sources.
+- `POST /event` — `{"sessionId":"session-1","agentApp":"github-copilot","event":"thinking","model":"...","message":"...","isSubagent":false,"parentSessionId":"parent-1"}`. Recognized `agentApp` labels are `github-copilot`, `zcode`, `deepseek-harness`, `opencode`, `antigravity`, `command-code`, `claude-code`, `openai-codex`, `gemini-cli`, `cursor`, and `windsurf`; unknown labels are also accepted for generic sources. Agent events are not collected automatically: an integration must POST them to this local API.
+- `POST /permission` — `{"sessionId":"session-1","agentApp":"claude-code","toolName":"Bash","description":"Run tests"}` to show a permission prompt. The response includes a `requestId`.
+- `GET /permission/{requestId}` — poll for `pending`, `allowed_once`, or `denied`. The first poll after a decision consumes that result; later polls return 404.
+- `DELETE /permission/{requestId}` — cancel a generic pending permission request and dismiss its prompt; Claude HTTP hook requests cannot be cancelled this way.
+- `POST /agent-event/claudecode` — accepts Claude Code HTTP hook payloads, including `PermissionRequest`; the permission hook stays open until the user chooses Allow once or Deny.
+- `POST /agent-event/opencode` — accepts events normalized by the included OpenCode V2 plugin.
 
-Agent `event` values map as follows: `thinking`/`model_thinking` → thinking, `tool_start`/`tool_running` → tool, `tool_end` → thinking, `work` → work, `review`/`reflection` → review, `completed`/`done` → done, `cancelled`/`aborted` → cancelled, and `error`/`failed` → error. Multiple `sessionId` values are tracked independently; the most recently updated session drives the pets. Terminal animations are shown briefly before the next active session or idle state takes over. Send `idle` or `session_end` to remove a session.
+Agent `event` values map as follows: `thinking`/`model_thinking` → thinking, `tool_start`/`tool_running` → tool, `tool_end` → thinking, permission or approval requests → permission, `work` → work, `review`/`reflection` → review, `completed`/`done` → done, `cancelled`/`aborted` → cancelled, and `error`/`failed` → error. Multiple `sessionId` values are tracked independently; the most recently updated non-subagent session drives the main pets. Set `isSubagent` or `parentSessionId` to mark child sessions; when enabled in Agent Monitoring settings, each gets a separate pet. Terminal animations are shown briefly before the next active session or idle state takes over. Send `idle` or `session_end` to remove a session.
+
+Permission prompts offer only **Allow once** or **Deny**; closing the dialog also denies. Pending requests do not time out or auto-deny. Generic integrations poll the result and enforce it for that tool request. Claude's HTTP hook receives a native allow/deny response after the prompt; the OpenCode plugin waits for the same decision and maps it to OpenCode's permission effect. At-Pet never executes tools, and the Agent Monitoring animation filters do not affect permission prompts.
+
+### Native integrations
+
+**Claude Code:** Use a Claude Code version that supports HTTP hooks. Add the following entries to your Claude Code settings and restart Claude Code. The same endpoint accepts each hook's native payload:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "Stop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }]
+  }
+}
+```
+
+**OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
 
 Example PowerShell request:
 
@@ -93,7 +123,7 @@ Invoke-RestMethod http://127.0.0.1:8765/event -Method Post `
   -Body '{"sessionId":"session-1","event":"tool_start","message":"Running tests"}'
 ```
 
-The first release provides the event bridge rather than reading Copilot session internals directly. A Copilot extension or other local integration can POST lifecycle events to it.
+At-Pet provides a local event bridge rather than reading agent session internals directly. A compatible extension, hook, or other trusted local integration can POST lifecycle events and permission requests to it.
 
 ## Contributing
 

@@ -1,4 +1,6 @@
+#include "agentregistry.h"
 #include "httpapi.h"
+#include "permissiondialog.h"
 #include "petwindow.h"
 #include "settingsdialog.h"
 
@@ -21,8 +23,10 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPointer>
+#include <QQueue>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QLineEdit>
 #include <QLocale>
@@ -70,31 +74,17 @@ bool copyDirectory(const QString &sourcePath, const QString &destinationPath) {
     return true;
 }
 
-QString agentAppKey(QString name) {
-    name = name.trimmed();
-    if (name.isEmpty()) return QStringLiteral("external");
-    QString key;
+QString eventToken(const QString &name) {
+    QString token;
     for (const QChar character : name.toLower()) {
-        if (character.isLetterOrNumber()) key.append(character);
+        if (character.isLetterOrNumber())
+            token.append(character);
     }
-    if (key == "copilot") return QStringLiteral("githubcopilot");
-    return key;
+    return token;
 }
 
-QString normalizeAgentApp(QString name) {
-    name = name.trimmed();
-    if (name.isEmpty()) return QStringLiteral("external");
-    QString key;
-    for (const QChar character : name.toLower()) {
-        if (character.isLetterOrNumber()) key.append(character);
-    }
-    if (key == "zcode") return QStringLiteral("ZCode");
-    if (key == "githubcopilot" || key == "copilot") return QStringLiteral("GitHub Copilot");
-    if (key == "deepseekharness") return QStringLiteral("DeepSeek Harness");
-    if (key == "opencode") return QStringLiteral("OpenCode");
-    if (key == "antigravity") return QStringLiteral("Antigravity");
-    if (key == "commandcode") return QStringLiteral("Command Code");
-    return name.trimmed().left(64);
+QString sessionKey(const QString &agentKey, const QString &sessionId) {
+    return agentKey + QChar(0x1f) + sessionId;
 }
 
 QIcon makeTrayIcon() {
@@ -148,8 +138,11 @@ public:
             ? QStringLiteral("zh_CN") : QStringLiteral("en");
         setLanguage(savedLanguage == "zh_CN" || savedLanguage == "en" ? savedLanguage : systemLanguage, false);
         QDir().mkpath(petLibraryPath());
+        subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         api_ = new HttpApi([this] { return stateJson(); }, this);
         connect(api_, &HttpApi::eventReceived, this, &PetController::onAgentEvent);
+        connect(api_, &HttpApi::permissionRequestReceived, this, &PetController::onPermissionRequest);
+        connect(api_, &HttpApi::permissionRequestCancelled, this, &PetController::onPermissionRequestCancelled);
         connect(api_, &HttpApi::animationRequested, this, [this](const QString &name) {
             setAllAnimations(name);
         });
@@ -186,11 +179,16 @@ public:
 
 private:
     struct SessionState {
-        QString animation;
+        QString sessionId;
         QString agentApp;
+        QString agentKey;
+        QString parentSessionId;
+        QString animation;
         QString model;
         QString message;
         QDateTime updatedAt;
+        quint64 sequence = 0;
+        bool isSubagent = false;
         bool terminal = false;
     };
 
@@ -297,6 +295,13 @@ private:
                 QSettings().sync();
                 refreshAgentSessions();
             });
+            connect(settingsDialog_, &SettingsDialog::subagentPetSettingChanged,
+                    this, &PetController::setSubagentPetsEnabled);
+            connect(settingsDialog_, &SettingsDialog::animationFpsChanged, this,
+                    [this](const QString &petId, const QString &animation, int fps) {
+                for (PetWindow *pet : visiblePets())
+                    if (pet->petId() == petId) pet->setAnimationFps(animation, fps);
+            });
             connect(settingsDialog_, &QObject::destroyed, this, [this] { settingsDialog_ = nullptr; });
         }
         settingsDialog_->refreshPetsList();
@@ -308,8 +313,8 @@ private:
     void refreshAgentSessions() {
         QSettings settings;
         for (auto it = sessions_.begin(); it != sessions_.end();) {
-            const QString key = agentAppKey(it->agentApp);
-            if (key != "external" && !settings.value(QStringLiteral("agents/monitor_") + key, true).toBool())
+            if (it->agentKey != "external" &&
+                !settings.value(QStringLiteral("agents/monitor_") + it->agentKey, true).toBool())
                 it = sessions_.erase(it);
             else
                 ++it;
@@ -317,8 +322,60 @@ private:
         applySessionAnimation();
     }
 
+    void setSubagentPetsEnabled(bool enabled) {
+        if (subagentPetsEnabled_ == enabled)
+            return;
+        subagentPetsEnabled_ = enabled;
+        QSettings().setValue("agents/showSubagentPets", enabled);
+        applySessionAnimation();
+    }
+
+    void updateSubagentPets() {
+        QSet<QString> activeSessions;
+        if (subagentPetsEnabled_) {
+            int index = 0;
+            const QString selectedId = QSettings().value("pet/selected").toString();
+            const QString selectedDirectory = selectedId.isEmpty()
+                ? QString() : QDir(petLibraryPath()).filePath(selectedId);
+            const QString petDirectory = QFileInfo::exists(QDir(selectedDirectory).filePath("pet.json"))
+                ? selectedDirectory : QString();
+
+            for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
+                if (!it->isSubagent)
+                    continue;
+                activeSessions.insert(it.key());
+                QPointer<PetWindow> pet = subagentPetWindows_.value(it.key());
+                if (!pet) {
+                    const QPoint position = defaultPosition() - QPoint(180 * (index % 3 + 1), 180 * (index / 3 + 1));
+                    pet = createPet(petDirectory, position);
+                    subagentPetWindows_.insert(it.key(), pet);
+                }
+                pet->setAnimation(it->animation);
+                if (!it->message.isEmpty())
+                    pet->setSpeech(it->message);
+                ++index;
+            }
+        }
+
+        for (auto it = subagentPetWindows_.begin(); it != subagentPetWindows_.end();) {
+            if (activeSessions.contains(it.key()) && !it.value().isNull()) {
+                ++it;
+                continue;
+            }
+            if (!it.value().isNull()) {
+                PetWindow *pet = it.value();
+                pets_.removeAll(pet);
+                pet->close();
+                pet->deleteLater();
+            }
+            it = subagentPetWindows_.erase(it);
+        }
+        publishState();
+    }
+
     void clearPets() {
         const QVector<PetWindow *> current = visiblePets();
+        subagentPetWindows_.clear();
         pets_.clear();
         for (PetWindow *pet : current) {
             pet->close();
@@ -333,6 +390,7 @@ private:
         QSettings().setValue("pet/selected", directory.isEmpty() ? QString() : QFileInfo(directory).fileName());
         clearPets();
         createPet(directory, defaultPosition());
+        applySessionAnimation();
     }
 
     void importPet() {
@@ -463,7 +521,7 @@ private:
             const QPoint position(area.left() + 12 + column * 180, area.bottom() - 190 - row * 160);
             createPet(validPets.at(i), position);
         }
-        publishState();
+        applySessionAnimation();
     }
 
     void deletePet(const QString &id) {
@@ -484,67 +542,174 @@ private:
     }
 
     void onAgentEvent(const QJsonObject &event) {
-        const QString sessionId = event.value("sessionId").toString();
+        const QString sessionId = event.value("sessionId").toString().trimmed();
+        if (sessionId.isEmpty())
+            return;
         const QString agentApp = normalizeAgentApp(event.value("agentApp").toString());
         const QString agentKey = agentAppKey(agentApp);
-        const QString eventName = event.value("event").toString().toLower();
+        const QString key = sessionKey(agentKey, sessionId);
+        const QString eventName = eventToken(event.value("event").toString());
         if (agentKey != "external" &&
             !QSettings().value(QStringLiteral("agents/monitor_") + agentKey, true).toBool()) {
-            sessions_.remove(sessionId);
+            sessions_.remove(key);
             applySessionAnimation();
             return;
         }
+
         QString animation;
         bool terminal = false;
-        if (eventName == "thinking" || eventName == "model_thinking" || eventName == "started") animation = "thinking";
-        else if (eventName == "tool_start" || eventName == "tool_running" || eventName == "tool") animation = "tool";
-        else if (eventName == "tool_end") animation = "thinking";
-        else if (eventName == "work") animation = "work";
-        else if (eventName == "review" || eventName == "reflection") animation = "review";
-        else if (eventName == "completed" || eventName == "completion" || eventName == "done") { animation = "done"; terminal = true; }
-        else if (eventName == "cancelled" || eventName == "canceled" || eventName == "aborted") { animation = "cancelled"; terminal = true; }
-        else if (eventName == "error" || eventName == "failed") { animation = "error"; terminal = true; }
-        else if (eventName == "idle" || eventName == "session_end") {
-            sessions_.remove(sessionId);
+        if (eventName == "thinking" || eventName == "modelthinking" || eventName == "started" ||
+            eventName == "sessionstart" || eventName == "sessionstarted" || eventName == "turnstart" ||
+            eventName == "turnstarted" || eventName == "userpromptsubmit" || eventName == "assistantmessage") {
+            animation = "thinking";
+        } else if (eventName == "toolstart" || eventName == "toolrunning" || eventName == "tool" ||
+                   eventName == "tooluse" || eventName == "pretooluse" || eventName == "toolcall") {
+            animation = "tool";
+        } else if (eventName == "toolend" || eventName == "toolcomplete" || eventName == "toolcompleted" ||
+                   eventName == "posttooluse") {
+            animation = "thinking";
+        } else if (eventName == "permissionrequest" || eventName == "permissionrequested" ||
+                   eventName == "approvalrequest" || eventName == "approvalrequested") {
+            animation = "permission";
+        } else if (eventName == "permissionapproved" || eventName == "approvalapproved") {
+            animation = "thinking";
+        } else if (eventName == "permissiondenied" || eventName == "approvaldenied") {
+            animation = "cancelled";
+            terminal = true;
+        } else if (eventName == "work") {
+            animation = "work";
+        } else if (eventName == "review" || eventName == "reflection") {
+            animation = "review";
+        } else if (eventName == "completed" || eventName == "completion" || eventName == "done" ||
+                   eventName == "stop" || eventName == "turncomplete" || eventName == "agentturncomplete") {
+            animation = "done";
+            terminal = true;
+        } else if (eventName == "cancelled" || eventName == "canceled" || eventName == "aborted" ||
+                   eventName == "interrupt" || eventName == "interrupted") {
+            animation = "cancelled";
+            terminal = true;
+        } else if (eventName == "error" || eventName == "failed" || eventName == "exception" ||
+                   eventName == "apierror") {
+            animation = "error";
+            terminal = true;
+        } else if (eventName == "idle" || eventName == "sessionend" || eventName == "sessionended") {
+            sessions_.remove(key);
             applySessionAnimation();
             return;
         }
-        if (animation.isEmpty()) return;
+        if (animation.isEmpty())
+            return;
 
         SessionState state;
+        const auto previous = sessions_.constFind(key);
+        state.sessionId = sessionId;
+        state.agentApp = agentApp;
+        state.agentKey = agentKey;
+        state.parentSessionId = event.value("parentSessionId").toString().trimmed();
+        if (state.parentSessionId.isEmpty())
+            state.parentSessionId = event.value("parent_session_id").toString().trimmed();
+        if (state.parentSessionId.isEmpty() && previous != sessions_.cend())
+            state.parentSessionId = previous->parentSessionId;
+        state.isSubagent = event.value("isSubagent").toBool() || event.value("subagent").toBool() ||
+                           !state.parentSessionId.isEmpty() ||
+                           (previous != sessions_.cend() && previous->isSubagent);
         state.animation = animation;
-        state.agentApp = normalizeAgentApp(event.value("agentApp").toString());
-        state.model = event.value("model").toString();
+        state.model = event.value("model").toString().left(120);
         state.message = event.value("message").toString().left(180);
         state.updatedAt = QDateTime::currentDateTimeUtc();
+        state.sequence = ++sessionSequence_;
         state.terminal = terminal;
-        sessions_.insert(sessionId, state);
+        sessions_.insert(key, state);
         applySessionAnimation();
         if (terminal) {
-            QTimer::singleShot(5000, this, [this, sessionId, timestamp = state.updatedAt] {
-                const auto it = sessions_.find(sessionId);
-                if (it != sessions_.end() && it->updatedAt == timestamp) {
-                    sessions_.remove(sessionId);
+            QTimer::singleShot(5000, this, [this, key, sequence = state.sequence] {
+                const auto it = sessions_.find(key);
+                if (it != sessions_.end() && it->sequence == sequence) {
+                    sessions_.remove(key);
                     applySessionAnimation();
                 }
             });
         }
     }
 
-    void applySessionAnimation() {
-        if (sessions_.isEmpty()) {
-            setAllAnimations("idle");
-            return;
+    void onPermissionRequest(const QString &requestId, const QJsonObject &request) {
+        QJsonObject event = request;
+        event.insert("event", "permission_requested");
+        onAgentEvent(event);
+        permissionQueue_.enqueue(qMakePair(requestId, request));
+        showNextPermissionDialog();
+    }
+
+    void onPermissionRequestCancelled(const QString &requestId) {
+        QQueue<QPair<QString, QJsonObject>> remaining;
+        while (!permissionQueue_.isEmpty()) {
+            const auto queued = permissionQueue_.dequeue();
+            if (queued.first != requestId)
+                remaining.enqueue(queued);
         }
-        auto latest = sessions_.cbegin();
+        permissionQueue_ = remaining;
+
+        if (currentPermissionRequestId_ == requestId) {
+            PermissionDialog *dialog = permissionDialog_.data();
+            permissionDialog_ = nullptr;
+            currentPermissionRequestId_.clear();
+            if (dialog)
+                dialog->dismiss();
+            QTimer::singleShot(0, this, &PetController::showNextPermissionDialog);
+        }
+    }
+
+    void showNextPermissionDialog() {
+        if (permissionDialog_ || permissionQueue_.isEmpty())
+            return;
+
+        const auto queued = permissionQueue_.dequeue();
+        const QString requestId = queued.first;
+        const QJsonObject request = queued.second;
+        const QString toolName = request.value("toolName").toString();
+        const QString description = request.value("description").toString();
+        PetWindow *anchor = visiblePets().isEmpty() ? nullptr : visiblePets().first();
+        auto *dialog = new PermissionDialog(requestId,
+            normalizeAgentApp(request.value("agentApp").toString()), toolName, description, anchor);
+        permissionDialog_ = dialog;
+        currentPermissionRequestId_ = requestId;
+        connect(dialog, &PermissionDialog::decided, this,
+                [this, request](const QString &id, bool allowOnce) {
+            if (api_)
+                api_->resolvePermission(id, allowOnce);
+            QJsonObject event = request;
+            event.insert("event", allowOnce ? "permission_approved" : "permission_denied");
+            onAgentEvent(event);
+            permissionDialog_ = nullptr;
+            currentPermissionRequestId_.clear();
+            QTimer::singleShot(0, this, &PetController::showNextPermissionDialog);
+        });
+        dialog->show();
+        dialog->raise();
+        dialog->activateWindow();
+    }
+
+    void applySessionAnimation() {
+        auto latest = sessions_.cend();
         for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
-            if (it->updatedAt > latest->updatedAt)
+            if (it->isSubagent)
+                continue;
+            if (latest == sessions_.cend() || it->updatedAt > latest->updatedAt ||
+                (it->updatedAt == latest->updatedAt && it->sequence > latest->sequence))
                 latest = it;
         }
-        setAllAnimations(latest->animation);
-        if (!latest->message.isEmpty()) {
+        if (latest == sessions_.cend()) {
+            for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
+                if (latest == sessions_.cend() || it->updatedAt > latest->updatedAt ||
+                    (it->updatedAt == latest->updatedAt && it->sequence > latest->sequence))
+                    latest = it;
+            }
+        }
+        setAllAnimations(latest == sessions_.cend() ? QStringLiteral("idle") : latest->animation);
+        if (latest != sessions_.cend() && !latest->message.isEmpty()) {
             for (PetWindow *pet : visiblePets()) pet->setSpeech(latest->message);
         }
+        updateSubagentPets();
     }
 
     QJsonObject stateJson() const {
@@ -555,14 +720,27 @@ private:
         }
         QJsonArray sessions;
         for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
-            sessions.append(QJsonObject{{"sessionId", it.key()}, {"agentApp", it->agentApp},
-                                        {"animation", it->animation}, {"model", it->model},
-                                        {"updatedAt", it->updatedAt.toString(Qt::ISODate)}});
+            QJsonObject session{{"sessionId", it->sessionId}, {"agentApp", it->agentApp},
+                                {"animation", it->animation}, {"model", it->model},
+                                {"isSubagent", it->isSubagent},
+                                {"updatedAt", it->updatedAt.toString(Qt::ISODate)}};
+            if (!it->parentSessionId.isEmpty())
+                session.insert("parentSessionId", it->parentSessionId);
+            sessions.append(session);
         }
-        const QJsonArray supportedAgentApps = {"ZCode", "GitHub Copilot", "DeepSeek Harness",
-                                               "OpenCode", "Antigravity", "Command Code"};
+        QJsonArray supportedAgentApps;
+        QJsonArray agentSources;
+        for (const AgentDefinition &agent : agentDefinitions()) {
+            supportedAgentApps.append(agent.displayName);
+            QJsonObject source{{"key", agent.key}, {"displayName", agent.displayName},
+                               {"monitorType", agentMonitorTypeId(agent.monitorType)}};
+            if (agent.monitorType != AgentMonitorType::ExternalHttpApi)
+                source.insert("nativeEndpoint", QStringLiteral("/agent-event/%1").arg(agent.key));
+            agentSources.append(source);
+        }
         return {{"app", "At-Pet"}, {"version", AT_PET_VERSION}, {"pets", pets},
-                {"sessions", sessions}, {"supportedAgentApps", supportedAgentApps}};
+                {"sessions", sessions}, {"supportedAgentApps", supportedAgentApps},
+                {"agentSources", agentSources}};
     }
 
     void publishState() {
@@ -665,8 +843,14 @@ private:
     QTranslator translator_;
     QString language_;
     bool translatorInstalled_ = false;
+    bool subagentPetsEnabled_ = false;
     QVector<QPointer<PetWindow>> pets_;
+    QHash<QString, QPointer<PetWindow>> subagentPetWindows_;
     QHash<QString, SessionState> sessions_;
+    quint64 sessionSequence_ = 0;
+    QQueue<QPair<QString, QJsonObject>> permissionQueue_;
+    QPointer<PermissionDialog> permissionDialog_;
+    QString currentPermissionRequestId_;
     QTimer lookTimer_;
     QPointer<SettingsDialog> settingsDialog_;
 };
