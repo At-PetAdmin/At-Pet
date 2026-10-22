@@ -680,5 +680,13 @@ ID：%2
         <source>Windsurf editor and agent events</source>
         <translation>Windsurf 编辑器与 Agent 事件</translation>
     </message>
+    <message>
+        <source>Tencent WorkBuddy agent with CodeBuddy-compatible hooks</source>
+        <translation>腾讯 WorkBuddy Agent，兼容 CodeBuddy Hook</translation>
+    </message>
+    <message>
+        <source>PenguinHarness agent platform hooks</source>
+        <translation>PenguinHarness Agent 平台 Hook</translation>
+    </message>
 </context>
 </TS>

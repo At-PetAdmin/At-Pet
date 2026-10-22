@@ -81,7 +81,7 @@ cmake --build build
 - `POST /animation` — `{"name":"sleep"}`。
 - `POST /say` — `{"text":"Hello!"}`。
 - `POST /summon` — `{"all":true}` 或 `{"petId":"sample-cat"}`。
-- `POST /event` — `{"sessionId":"session-1","agentApp":"github-copilot","event":"thinking","model":"...","message":"...","isSubagent":false,"parentSessionId":"parent-1"}`。可识别的 `agentApp` 标签：`github-copilot`、`zcode`、`deepseek-harness`、`opencode`、`antigravity`、`command-code`、`claude-code`、`openai-codex`、`gemini-cli`、`cursor` 和 `windsurf`；通用事件源也可以使用其他标签。Agent 事件不会自动采集，需由集成程序 POST 到本地 API。
+- `POST /event` — `{"sessionId":"session-1","agentApp":"github-copilot","event":"thinking","model":"...","message":"...","isSubagent":false,"parentSessionId":"parent-1"}`。可识别的 `agentApp` 标签：`github-copilot`、`zcode`、`deepseek-harness`、`opencode`、`antigravity`、`command-code`、`claude-code`、`openai-codex`、`gemini-cli`、`cursor`、`windsurf`、`workbuddy` 和 `penguin-harness`；通用事件源也可以使用其他标签。Agent 事件不会自动采集，需由集成程序 POST 到本地 API。
 - `POST /permission` — 例如 `{"sessionId":"session-1","agentApp":"claude-code","toolName":"Bash","description":"Run tests"}`，用于显示权限请求弹窗。响应中包含 `requestId`。
 - `GET /permission/{requestId}` — 轮询 `pending`、`allowed_once` 或 `denied`。决策后的首次轮询会消费该结果，后续请求返回 404。
 - `DELETE /permission/{requestId}` — 取消通用待处理权限请求并关闭对应弹窗；Claude HTTP hook 请求不能通过此端点取消。

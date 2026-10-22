@@ -54,6 +54,12 @@ inline const QVector<AgentDefinition> &agentDefinitions() {
          AgentMonitorType::ExternalHttpApi},
         {QStringLiteral("windsurf"), QStringLiteral("Windsurf"),
          QStringLiteral("Windsurf editor and agent events"), {QStringLiteral("codeium")},
+         AgentMonitorType::ExternalHttpApi},
+        {QStringLiteral("workbuddy"), QStringLiteral("WorkBuddy"),
+         QStringLiteral("Tencent WorkBuddy agent with CodeBuddy-compatible hooks"), {QStringLiteral("codebuddy")},
+         AgentMonitorType::ExternalHttpApi},
+        {QStringLiteral("penguinharness"), QStringLiteral("PenguinHarness"),
+         QStringLiteral("PenguinHarness agent platform hooks"), {QStringLiteral("penguin")},
          AgentMonitorType::ExternalHttpApi}
     };
     return definitions;
