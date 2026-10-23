@@ -1,0 +1,61 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/bridge.mjs\" workbuddy", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

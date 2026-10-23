@@ -1,0 +1,6 @@
+{
+  "name": "atpet-openai-codex-plugin",
+  "version": "0.1.0",
+  "description": "Connect OpenAI Codex to the At-Pet desktop pet through Codex lifecycle hooks, including permission prompts.",
+  "license": "MIT"
+}
