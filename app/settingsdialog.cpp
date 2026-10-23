@@ -316,7 +316,7 @@ void PetPreviewWidget::paintEvent(QPaintEvent *) {
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle(tr("At-Pet Settings & Library"));
-    resize(740, 560);
+    resize(780, 600);
     setupUi();
     applyStyle();
     loadSettings();
@@ -325,39 +325,53 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
 
 void SettingsDialog::applyStyle() {
     setStyleSheet(QStringLiteral(
-        "QDialog, QWidget { background-color: #1e1e24; color: #f0f0f5; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; }"
-        "QTabWidget::pane { border: 1px solid #333644; background: #252834; border-radius: 6px; top: -1px; }"
-        "QTabBar::tab { background: #1a1b22; color: #a4a8b8; padding: 10px 22px; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 4px; font-weight: bold; }"
-        "QTabBar::tab:selected { background: #252834; color: #ffffff; border: 1px solid #333644; border-bottom: none; }"
-        "QTabBar::tab:hover:!selected { background: #2c2f3e; color: #d0d4e4; }"
-        "QGroupBox { font-weight: bold; border: 1px solid #3a3e50; border-radius: 6px; margin-top: 14px; padding-top: 18px; color: #9bb7ff; }"
-        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 14px; padding: 0 5px; }"
-        "QListWidget { background: #1c1e26; border: 1px solid #333644; border-radius: 6px; color: #e4e6ee; padding: 4px; }"
-        "QListWidget::item { padding: 8px 12px; border-radius: 4px; margin-bottom: 2px; }"
-        "QListWidget::item:hover { background: #2a2e3d; }"
-        "QListWidget::item:selected { background: #3b5998; color: #ffffff; }"
-        "QPushButton { background: #383c4d; border: 1px solid #4a5066; border-radius: 5px; color: #f0f2f8; padding: 7px 16px; font-weight: 500; }"
-        "QPushButton:hover { background: #454a5f; border-color: #606885; }"
-        "QPushButton:pressed { background: #2e3240; }"
-        "QPushButton#primaryBtn { background: #3d68ff; border: 1px solid #5a80ff; font-weight: bold; }"
-        "QPushButton#primaryBtn:hover { background: #527bff; }"
-        "QPushButton#dangerBtn { background: #7a2a2a; border: 1px solid #a33838; }"
-        "QPushButton#dangerBtn:hover { background: #923434; }"
-        "QComboBox, QSpinBox { background: #1c1e26; border: 1px solid #3b3f52; border-radius: 4px; color: #f0f0f5; padding: 5px 10px; }"
-        "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 22px; border-left: 1px solid #3b3f52; }"
-        "QCheckBox { color: #d8dbe6; spacing: 8px; }"
-        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #464b5f; background: #1c1e26; }"
-        "QCheckBox::indicator:checked { background: #3d68ff; border-color: #5a80ff; }"
+        "QDialog { background-color: #17181e; }"
+        "QWidget { background: transparent; color: #e8eaf2; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 13px; }"
+        "QToolTip { background-color: #2a2d3a; color: #f0f2f8; border: 1px solid #454a5f; padding: 4px 6px; }"
+        "QTabWidget::pane { border: 1px solid #2c2f3c; background: #20222c; border-radius: 10px; top: -1px; }"
+        "QTabBar { background: transparent; }"
+        "QTabBar::tab { background: transparent; color: #8d93a8; padding: 10px 22px; margin-right: 2px; border: none; border-bottom: 2px solid transparent; font-weight: 600; }"
+        "QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #5b84ff; }"
+        "QTabBar::tab:hover:!selected { color: #c9cee0; border-bottom: 2px solid #3a3f55; }"
+        "QGroupBox { font-weight: 600; border: 1px solid #2f3342; border-radius: 10px; margin-top: 14px; padding: 20px 14px 14px 14px; color: #9bb7ff; background: #1c1e27; }"
+        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 14px; padding: 0 6px; }"
+        "QListWidget { background: #1a1c24; border: 1px solid #2c2f3c; border-radius: 8px; color: #e4e6ee; padding: 4px; outline: none; }"
+        "QListWidget::item { padding: 9px 12px; border-radius: 6px; margin-bottom: 2px; }"
+        "QListWidget::item:hover { background: #262a38; }"
+        "QListWidget::item:selected { background: #34508f; color: #ffffff; }"
+        "QPushButton { background: #2d3142; border: 1px solid #40455c; border-radius: 7px; color: #f0f2f8; padding: 8px 18px; font-weight: 500; }"
+        "QPushButton:hover { background: #3a3f55; border-color: #5a6285; }"
+        "QPushButton:pressed { background: #252837; }"
+        "QPushButton:focus { border-color: #5b84ff; }"
+        "QPushButton:disabled { background: #22242f; color: #666b80; border-color: #2c2f3c; }"
+        "QPushButton#primaryBtn { background: #4170ff; border: 1px solid #6a8dff; font-weight: 600; color: #ffffff; }"
+        "QPushButton#primaryBtn:hover { background: #5a82ff; }"
+        "QPushButton#primaryBtn:pressed { background: #3459d6; }"
+        "QPushButton#dangerBtn { background: #4a2328; border: 1px solid #8a3640; color: #ffb4bc; }"
+        "QPushButton#dangerBtn:hover { background: #6b2c34; color: #ffffff; }"
+        "QComboBox, QSpinBox { background: #1a1c24; border: 1px solid #343850; border-radius: 6px; color: #f0f0f5; padding: 6px 10px; min-height: 20px; selection-background-color: #34508f; }"
+        "QComboBox:hover, QSpinBox:hover { border-color: #4a5070; }"
+        "QComboBox:focus, QSpinBox:focus { border-color: #5b84ff; }"
+        "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 24px; border: none; }"
+        "QComboBox QAbstractItemView { background: #1f212b; border: 1px solid #343850; border-radius: 6px; color: #f0f0f5; selection-background-color: #34508f; padding: 4px; outline: none; }"
+        "QCheckBox { color: #d8dbe6; spacing: 10px; }"
+        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1px solid #4a5068; background: #1a1c24; }"
+        "QCheckBox::indicator:hover { border-color: #6a8dff; }"
+        "QCheckBox::indicator:checked { background: #4170ff; border-color: #6a8dff; }"
         "QLabel { color: #d0d4e0; }"
-        "QScrollBar:vertical { background: #1c1e26; width: 10px; border-radius: 5px; }"
-        "QScrollBar::handle:vertical { background: #3a3e50; border-radius: 5px; min-height: 20px; }"
-        "QScrollBar::handle:vertical:hover { background: #4e536b; }"
+        "QScrollArea { border: none; background: transparent; }"
+        "QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }"
+        "QScrollBar::handle:vertical { background: #3a3e52; border-radius: 4px; min-height: 28px; }"
+        "QScrollBar::handle:vertical:hover { background: #50567a; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
     ));
 }
 
 void SettingsDialog::setupUi() {
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(16, 16, 16, 16);
+    mainLayout->setContentsMargins(18, 18, 18, 18);
+    mainLayout->setSpacing(12);
 
     tabWidget_ = new QTabWidget(this);
     mainLayout->addWidget(tabWidget_);
@@ -365,13 +379,13 @@ void SettingsDialog::setupUi() {
     // ---------------- TAB 1: Pet Library & Preview ----------------
     auto *petLibraryTab = new QWidget;
     auto *petLayout = new QHBoxLayout(petLibraryTab);
-    petLayout->setContentsMargins(12, 12, 12, 12);
-    petLayout->setSpacing(16);
+    petLayout->setContentsMargins(16, 16, 16, 16);
+    petLayout->setSpacing(20);
 
     // Left column: Pet list and import actions
     auto *leftCol = new QVBoxLayout;
     installedPetsLabel_ = new QLabel(tr("Installed Pets:"), petLibraryTab);
-    installedPetsLabel_->setStyleSheet("font-weight: bold; font-size: 13px; color: #ffffff;");
+    installedPetsLabel_->setStyleSheet("font-weight: 600; font-size: 14px; color: #ffffff;");
     leftCol->addWidget(installedPetsLabel_);
 
     petList_ = new QListWidget(petLibraryTab);
@@ -404,7 +418,7 @@ void SettingsDialog::setupUi() {
     // Right column: Live Preview, animation selector, details and apply
     auto *rightCol = new QVBoxLayout;
     previewLabel_ = new QLabel(tr("Pet Animation Preview:"), petLibraryTab);
-    previewLabel_->setStyleSheet("font-weight: bold; font-size: 13px; color: #ffffff;");
+    previewLabel_->setStyleSheet("font-weight: 600; font-size: 14px; color: #ffffff;");
     rightCol->addWidget(previewLabel_);
 
     previewWidget_ = new PetPreviewWidget(petLibraryTab);
@@ -430,7 +444,7 @@ void SettingsDialog::setupUi() {
     rightCol->addWidget(animationFpsNoteLabel_);
 
     petInfoLabel_ = new QLabel(petLibraryTab);
-    petInfoLabel_->setStyleSheet("background: #1c1e26; border: 1px solid #333644; border-radius: 5px; padding: 8px; color: #a4a8b8; font-size: 12px;");
+    petInfoLabel_->setStyleSheet("background: #1a1c24; border: 1px solid #2c2f3c; border-radius: 8px; padding: 10px; color: #a4a8b8; font-size: 12px;");
     petInfoLabel_->setWordWrap(true);
     rightCol->addWidget(petInfoLabel_);
 
@@ -444,27 +458,25 @@ void SettingsDialog::setupUi() {
     // ---------------- TAB 2: Agent Monitoring Switches ----------------
     auto *agentsTab = new QWidget;
     auto *agentsLayout = new QVBoxLayout(agentsTab);
-    agentsLayout->setContentsMargins(18, 18, 18, 18);
+    agentsLayout->setContentsMargins(20, 20, 20, 20);
+    agentsLayout->setSpacing(12);
 
     agentHeaderLabel_ = new QLabel(tr("Only Claude Code and OpenCode have built-in adapters. Other sources need an external integration to send events to At-Pet."), agentsTab);
-    agentHeaderLabel_->setStyleSheet("font-size: 13px; color: #ffffff; margin-bottom: 8px;");
+    agentHeaderLabel_->setStyleSheet("font-size: 13px; color: #c9cee0; margin-bottom: 8px;");
     agentHeaderLabel_->setWordWrap(true);
     agentsLayout->addWidget(agentHeaderLabel_);
 
     auto *agentScrollArea = new QScrollArea(agentsTab);
     agentScrollArea->setWidgetResizable(true);
     agentScrollArea->setFrameShape(QFrame::NoFrame);
-    agentScrollArea->setStyleSheet("QScrollArea { background-color: #252834; border: 1px solid #333644; border-radius: 6px; }");
     agentScrollArea->viewport()->setAutoFillBackground(false);
     agentGroupBox_ = new QGroupBox(tr("Agent Event Source Filters"), agentScrollArea);
     agentGroupBox_->setAutoFillBackground(false);
-    agentGroupBox_->setStyleSheet("QGroupBox { background-color: #252834; }");
     auto *groupLayout = new QVBoxLayout(agentGroupBox_);
     groupLayout->setSpacing(12);
 
     for (const AgentDefinition &agent : agentDefinitions()) {
         auto *itemWidget = new QWidget(agentGroupBox_);
-        itemWidget->setStyleSheet("background-color: #252834;");
         auto *itemLayout = new QHBoxLayout(itemWidget);
         itemLayout->setContentsMargins(0, 0, 0, 0);
 
@@ -500,11 +512,13 @@ void SettingsDialog::setupUi() {
     // ---------------- TAB 3: General Settings ----------------
     auto *generalTab = new QWidget;
     auto *generalLayout = new QVBoxLayout(generalTab);
-    generalLayout->setContentsMargins(18, 18, 18, 18);
+    generalLayout->setContentsMargins(20, 20, 20, 20);
+    generalLayout->setSpacing(12);
 
     auto *uiGroup = new QGroupBox(tr("Preferences"), generalTab);
     auto *uiForm = new QGridLayout(uiGroup);
-    uiForm->setSpacing(12);
+    uiForm->setSpacing(14);
+    uiForm->setColumnStretch(1, 1);
 
     preferencesGroupBox_ = uiGroup;
     languageLabel_ = new QLabel(tr("Interface Language:"), uiGroup);
