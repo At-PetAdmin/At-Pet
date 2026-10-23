@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"ABSOLUTE_PATH/bridge.mjs\" command-code", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"ABSOLUTE_PATH/bridge.mjs\" command-code", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"ABSOLUTE_PATH/bridge.mjs\" command-code", "timeout": 10 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"ABSOLUTE_PATH/bridge.mjs\" command-code", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

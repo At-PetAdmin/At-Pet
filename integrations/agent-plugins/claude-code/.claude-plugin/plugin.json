@@ -1,0 +1,6 @@
+{
+  "name": "atpet-claude-code-plugin",
+  "version": "0.1.0",
+  "description": "Connect Claude Code to the At-Pet desktop pet through its local HTTP hooks.",
+  "license": "MIT"
+}

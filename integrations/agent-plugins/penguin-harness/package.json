@@ -1,0 +1,41 @@
+{
+  "name": "atpet-penguin-harness-plugin",
+  "version": "0.1.0",
+  "description": "Connect PenguinHarness agents to the At-Pet desktop pet through user_prompt and stop hooks.",
+  "keywords": [
+    "penguin-plugin",
+    "penguinharness",
+    "hooks",
+    "atpet"
+  ],
+  "license": "MIT",
+  "files": [
+    "hooks",
+    "bridge.mjs",
+    "README.md"
+  ],
+  "penguin": {
+    "title": "At-Pet Companion",
+    "title_zh": "At-Pet 桌宠联动",
+    "description": "Show PenguinHarness session activity on the At-Pet desktop pet.",
+    "description_zh": "把 PenguinHarness 的会话活动显示在 At-Pet 桌宠上。",
+    "short_description": "Show agent activity on the At-Pet desktop pet.",
+    "short_description_zh": "在 At-Pet 桌宠上显示 Agent 活动。",
+    "category": "office-productivity",
+    "hooks": {
+      "version": "2026.10.22.1",
+      "user_prompt": [
+        {
+          "command": "bridge.mjs",
+          "timeout": 10
+        }
+      ],
+      "stop": [
+        {
+          "command": "bridge.mjs",
+          "timeout": 10
+        }
+      ]
+    }
+  }
+}

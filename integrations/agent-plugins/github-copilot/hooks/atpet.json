@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot sessionStart",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot sessionStart",
+        "timeoutSec": 10
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot userPromptSubmitted",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot userPromptSubmitted",
+        "timeoutSec": 10
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot preToolUse",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot preToolUse",
+        "timeoutSec": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot postToolUse",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot postToolUse",
+        "timeoutSec": 10
+      }
+    ],
+    "errorOccurred": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot errorOccurred",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot errorOccurred",
+        "timeoutSec": 10
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot agentStop",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot agentStop",
+        "timeoutSec": 10
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "node \"ABSOLUTE_PATH/bridge.mjs\" github-copilot sessionEnd",
+        "powershell": "node \"ABSOLUTE_PATH\\bridge.mjs\" github-copilot sessionEnd",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

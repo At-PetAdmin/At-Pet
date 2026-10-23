@@ -1,0 +1,89 @@
+{
+  "description": "At-Pet lifecycle and permission bridge for OpenAI Codex",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/bridge.mjs\" openai-codex",
+            "commandWindows": "node \"$env:PLUGIN_ROOT\\bridge.mjs\" openai-codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
