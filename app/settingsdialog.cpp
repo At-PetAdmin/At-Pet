@@ -1,6 +1,7 @@
 #include "agentregistry.h"
 #include "settingsdialog.h"
 #include "petwindow.h"
+#include "theme.h"
 
 #include <QApplication>
 #include <QBoxLayout>
@@ -186,6 +187,15 @@ void PetPreviewWidget::setAnimationFps(int fps) {
     timer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
 }
 
+void PetPreviewWidget::setChrome(const QColor &cardBackground, const QColor &cardBorder,
+                                 const QColor &checkerA, const QColor &checkerB) {
+    cardColor_ = cardBackground;
+    cardBorderColor_ = cardBorder;
+    checkerA_ = checkerA;
+    checkerB_ = checkerB;
+    update();
+}
+
 int PetPreviewWidget::animationFps() const {
     const QJsonObject animation = definition_.value("animations").toObject().value(currentAnimation_).toObject();
     return qBound(1, animation.value("fps").toInt(definition_.value("fps").toInt(8)), 30);
@@ -228,9 +238,9 @@ void PetPreviewWidget::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // Draw checkered transparency background or dark card background
-    painter.fillRect(rect(), QColor(32, 34, 40));
-    painter.setPen(QPen(QColor(60, 64, 76), 1));
+    // Draw checkered transparency background on the themed preview card
+    painter.fillRect(rect(), cardColor_);
+    painter.setPen(QPen(cardBorderColor_, 1));
     painter.drawRoundedRect(rect().adjusted(1, 1, -1, -1), 8, 8);
 
     // Checker pattern in the center
@@ -243,7 +253,7 @@ void PetPreviewWidget::paintEvent(QPaintEvent *) {
     for (int y = previewBox.top(); y < previewBox.bottom(); y += gridSize) {
         for (int x = previewBox.left(); x < previewBox.right(); x += gridSize) {
             bool odd = ((x / gridSize) + (y / gridSize)) % 2 == 1;
-            painter.fillRect(QRect(x, y, gridSize, gridSize), odd ? QColor(40, 43, 52) : QColor(35, 38, 46));
+            painter.fillRect(QRect(x, y, gridSize, gridSize), odd ? checkerB_ : checkerA_);
         }
     }
 
@@ -324,48 +334,21 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
 }
 
 void SettingsDialog::applyStyle() {
-    setStyleSheet(QStringLiteral(
-        "QDialog { background-color: #17181e; }"
-        "QWidget { background: transparent; color: #e8eaf2; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 13px; }"
-        "QToolTip { background-color: #2a2d3a; color: #f0f2f8; border: 1px solid #454a5f; padding: 4px 6px; }"
-        "QTabWidget::pane { border: 1px solid #2c2f3c; background: #20222c; border-radius: 10px; top: -1px; }"
-        "QTabBar { background: transparent; }"
-        "QTabBar::tab { background: transparent; color: #8d93a8; padding: 10px 22px; margin-right: 2px; border: none; border-bottom: 2px solid transparent; font-weight: 600; }"
-        "QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #5b84ff; }"
-        "QTabBar::tab:hover:!selected { color: #c9cee0; border-bottom: 2px solid #3a3f55; }"
-        "QGroupBox { font-weight: 600; border: 1px solid #2f3342; border-radius: 10px; margin-top: 14px; padding: 20px 14px 14px 14px; color: #9bb7ff; background: #1c1e27; }"
-        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 14px; padding: 0 6px; }"
-        "QListWidget { background: #1a1c24; border: 1px solid #2c2f3c; border-radius: 8px; color: #e4e6ee; padding: 4px; outline: none; }"
-        "QListWidget::item { padding: 9px 12px; border-radius: 6px; margin-bottom: 2px; }"
-        "QListWidget::item:hover { background: #262a38; }"
-        "QListWidget::item:selected { background: #34508f; color: #ffffff; }"
-        "QPushButton { background: #2d3142; border: 1px solid #40455c; border-radius: 7px; color: #f0f2f8; padding: 8px 18px; font-weight: 500; }"
-        "QPushButton:hover { background: #3a3f55; border-color: #5a6285; }"
-        "QPushButton:pressed { background: #252837; }"
-        "QPushButton:focus { border-color: #5b84ff; }"
-        "QPushButton:disabled { background: #22242f; color: #666b80; border-color: #2c2f3c; }"
-        "QPushButton#primaryBtn { background: #4170ff; border: 1px solid #6a8dff; font-weight: 600; color: #ffffff; }"
-        "QPushButton#primaryBtn:hover { background: #5a82ff; }"
-        "QPushButton#primaryBtn:pressed { background: #3459d6; }"
-        "QPushButton#dangerBtn { background: #4a2328; border: 1px solid #8a3640; color: #ffb4bc; }"
-        "QPushButton#dangerBtn:hover { background: #6b2c34; color: #ffffff; }"
-        "QComboBox, QSpinBox { background: #1a1c24; border: 1px solid #343850; border-radius: 6px; color: #f0f0f5; padding: 6px 10px; min-height: 20px; selection-background-color: #34508f; }"
-        "QComboBox:hover, QSpinBox:hover { border-color: #4a5070; }"
-        "QComboBox:focus, QSpinBox:focus { border-color: #5b84ff; }"
-        "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 24px; border: none; }"
-        "QComboBox QAbstractItemView { background: #1f212b; border: 1px solid #343850; border-radius: 6px; color: #f0f0f5; selection-background-color: #34508f; padding: 4px; outline: none; }"
-        "QCheckBox { color: #d8dbe6; spacing: 10px; }"
-        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1px solid #4a5068; background: #1a1c24; }"
-        "QCheckBox::indicator:hover { border-color: #6a8dff; }"
-        "QCheckBox::indicator:checked { background: #4170ff; border-color: #6a8dff; }"
-        "QLabel { color: #d0d4e0; }"
-        "QScrollArea { border: none; background: transparent; }"
-        "QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }"
-        "QScrollBar::handle:vertical { background: #3a3e52; border-radius: 4px; min-height: 28px; }"
-        "QScrollBar::handle:vertical:hover { background: #50567a; }"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
-    ));
+    const uitheme::Palette palette = uitheme::resolvePalette(uitheme::modeFromSettings());
+    const auto color = [](const QColor &c) { return c.name(QColor::HexRgb); };
+
+    previewWidget_->setChrome(palette.previewCard, palette.previewCardBorder, palette.checkerA, palette.checkerB);
+    setStyleSheet(uitheme::settingsDialogStyle(palette));
+
+    installedPetsLabel_->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px; color: %1;").arg(color(palette.text)));
+    previewLabel_->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px; color: %1;").arg(color(palette.text)));
+    importStatusLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 12px; padding: 2px 4px;").arg(color(palette.statusOk)));
+    animationFpsNoteLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color(palette.textFaint)));
+    agentHeaderLabel_->setStyleSheet(QStringLiteral("font-size: 13px; color: %1; margin-bottom: 8px;").arg(color(palette.textSecondary)));
+    petInfoLabel_->setStyleSheet(QStringLiteral("background: %1; border: 1px solid %2; border-radius: 8px; padding: 10px; color: %3; font-size: 12px;")
+                                     .arg(color(palette.surfaceAlt), color(palette.border), color(palette.textSecondary)));
+    for (QLabel *label : agentDescriptionLabels_)
+        label->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color(palette.textFaint)));
 }
 
 void SettingsDialog::setupUi() {
@@ -385,7 +368,6 @@ void SettingsDialog::setupUi() {
     // Left column: Pet list and import actions
     auto *leftCol = new QVBoxLayout;
     installedPetsLabel_ = new QLabel(tr("Installed Pets:"), petLibraryTab);
-    installedPetsLabel_->setStyleSheet("font-weight: 600; font-size: 14px; color: #ffffff;");
     leftCol->addWidget(installedPetsLabel_);
 
     petList_ = new QListWidget(petLibraryTab);
@@ -396,7 +378,6 @@ void SettingsDialog::setupUi() {
 
     importStatusLabel_ = new QLabel(petLibraryTab);
     importStatusLabel_->setWordWrap(true);
-    importStatusLabel_->setStyleSheet("color: #9dd6a8; font-size: 12px; padding: 2px 4px;");
     importStatusLabel_->hide();
     leftCol->addWidget(importStatusLabel_);
 
@@ -418,7 +399,6 @@ void SettingsDialog::setupUi() {
     // Right column: Live Preview, animation selector, details and apply
     auto *rightCol = new QVBoxLayout;
     previewLabel_ = new QLabel(tr("Pet Animation Preview:"), petLibraryTab);
-    previewLabel_->setStyleSheet("font-weight: 600; font-size: 14px; color: #ffffff;");
     rightCol->addWidget(previewLabel_);
 
     previewWidget_ = new PetPreviewWidget(petLibraryTab);
@@ -440,11 +420,9 @@ void SettingsDialog::setupUi() {
 
     animationFpsNoteLabel_ = new QLabel(tr("The matching live animation updates immediately; other animations use this rate when they next play."), petLibraryTab);
     animationFpsNoteLabel_->setWordWrap(true);
-    animationFpsNoteLabel_->setStyleSheet("color: #b6bbca; font-size: 11px;");
     rightCol->addWidget(animationFpsNoteLabel_);
 
     petInfoLabel_ = new QLabel(petLibraryTab);
-    petInfoLabel_->setStyleSheet("background: #1a1c24; border: 1px solid #2c2f3c; border-radius: 8px; padding: 10px; color: #a4a8b8; font-size: 12px;");
     petInfoLabel_->setWordWrap(true);
     rightCol->addWidget(petInfoLabel_);
 
@@ -462,7 +440,6 @@ void SettingsDialog::setupUi() {
     agentsLayout->setSpacing(12);
 
     agentHeaderLabel_ = new QLabel(tr("Only Claude Code and OpenCode have built-in adapters. Other sources need an external integration to send events to At-Pet."), agentsTab);
-    agentHeaderLabel_->setStyleSheet("font-size: 13px; color: #c9cee0; margin-bottom: 8px;");
     agentHeaderLabel_->setWordWrap(true);
     agentsLayout->addWidget(agentHeaderLabel_);
 
@@ -485,7 +462,6 @@ void SettingsDialog::setupUi() {
         agentCheckboxes_.insert(agent.key, chk);
 
         auto *descLabel = new QLabel(itemWidget);
-        descLabel->setStyleSheet("color: #b6bbca; font-size: 11px;");
         descLabel->setWordWrap(true);
         agentDescriptionLabels_.insert(agent.key, descLabel);
 
@@ -528,15 +504,23 @@ void SettingsDialog::setupUi() {
     languageCombo_->addItem(tr("English"), "en");
     uiForm->addWidget(languageCombo_, 0, 1);
 
+    themeLabel_ = new QLabel(tr("Interface Theme:"), uiGroup);
+    uiForm->addWidget(themeLabel_, 1, 0);
+    themeCombo_ = new QComboBox(uiGroup);
+    themeCombo_->addItem(tr("Follow System"), QStringLiteral("system"));
+    themeCombo_->addItem(tr("Light"), QStringLiteral("light"));
+    themeCombo_->addItem(tr("Dark"), QStringLiteral("dark"));
+    uiForm->addWidget(themeCombo_, 1, 1);
+
     lookAtCopilotCheck_ = new QCheckBox(tr("Look toward a visible Copilot window (direction only; Windows)"), uiGroup);
-    uiForm->addWidget(lookAtCopilotCheck_, 1, 0, 1, 2);
+    uiForm->addWidget(lookAtCopilotCheck_, 2, 0, 1, 2);
 
     apiPortLabel_ = new QLabel(tr("Local API Port:"), uiGroup);
-    uiForm->addWidget(apiPortLabel_, 2, 0);
+    uiForm->addWidget(apiPortLabel_, 3, 0);
     apiPortSpin_ = new QSpinBox(uiGroup);
     apiPortSpin_->setRange(1024, 65535);
     apiPortSpin_->setValue(8765);
-    uiForm->addWidget(apiPortSpin_, 2, 1);
+    uiForm->addWidget(apiPortSpin_, 3, 1);
 
     generalLayout->addWidget(uiGroup);
     generalLayout->addStretch(1);
@@ -584,6 +568,10 @@ void SettingsDialog::loadSettings() {
     const int langIdx = languageCombo_->findData(lang);
     if (langIdx >= 0) languageCombo_->setCurrentIndex(langIdx);
 
+    const QString theme = settings.value("ui/theme", QStringLiteral("system")).toString();
+    const int themeIdx = themeCombo_->findData(theme);
+    if (themeIdx >= 0) themeCombo_->setCurrentIndex(themeIdx);
+
     lookAtCopilotCheck_->setChecked(settings.value("pet/lookAtCopilot", false).toBool());
 
     QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
@@ -608,12 +596,15 @@ void SettingsDialog::onSaveGeneralSettings() {
     QSettings settings;
     const QString newLang = languageCombo_->currentData().toString();
     settings.setValue("ui/language", newLang);
+    settings.setValue("ui/theme", themeCombo_->currentData().toString());
     settings.setValue("pet/lookAtCopilot", lookAtCopilotCheck_->isChecked());
     settings.setValue("api/port", apiPortSpin_->value());
 
     emit languageChanged(newLang);
     emit lookAtCopilotToggled(lookAtCopilotCheck_->isChecked());
     emit apiPortChanged(quint16(apiPortSpin_->value()));
+
+    applyStyle();
 
     QMessageBox::information(this, tr("Settings Applied"), tr("General settings have been applied."));
 }
@@ -1011,6 +1002,10 @@ void SettingsDialog::retranslateUi() {
     languageLabel_->setText(tr("Interface Language:"));
     languageCombo_->setItemText(0, tr("Simplified Chinese"));
     languageCombo_->setItemText(1, tr("English"));
+    themeLabel_->setText(tr("Interface Theme:"));
+    themeCombo_->setItemText(0, tr("Follow System"));
+    themeCombo_->setItemText(1, tr("Light"));
+    themeCombo_->setItemText(2, tr("Dark"));
     lookAtCopilotCheck_->setText(tr("Look toward a visible Copilot window (direction only; Windows)"));
     apiPortLabel_->setText(tr("Local API Port:"));
     btnSaveGeneral_->setText(tr("Apply General Settings"));

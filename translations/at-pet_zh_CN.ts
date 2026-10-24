@@ -410,6 +410,22 @@
         <translation>界面语言：</translation>
     </message>
     <message>
+        <source>Interface Theme:</source>
+        <translation>界面主题：</translation>
+    </message>
+    <message>
+        <source>Follow System</source>
+        <translation>跟随系统</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>浅色</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>深色</translation>
+    </message>
+    <message>
         <source>Simplified Chinese</source>
         <translation>简体中文</translation>
     </message>
