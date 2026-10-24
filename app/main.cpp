@@ -139,6 +139,7 @@ public:
         setLanguage(savedLanguage == "zh_CN" || savedLanguage == "en" ? savedLanguage : systemLanguage, false);
         QDir().mkpath(petLibraryPath());
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
+        freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
         api_ = new HttpApi([this] { return stateJson(); }, this);
         connect(api_, &HttpApi::eventReceived, this, &PetController::onAgentEvent);
         connect(api_, &HttpApi::permissionRequestReceived, this, &PetController::onPermissionRequest);
@@ -220,6 +221,7 @@ private:
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
         pet->setLookAtCopilot(QSettings().value("pet/lookAtCopilot", false).toBool());
+        pet->setFreeMovementEnabled(freeMovementEnabled_);
         QPoint topLeft = position;
         if (QScreen *screen = QGuiApplication::primaryScreen()) {
             const QRect area = screen->availableGeometry();
@@ -256,6 +258,7 @@ private:
             QSettings().setValue("pet/lookAtCopilot", enabled);
             pet->setLookAtCopilot(enabled);
         });
+        connect(pet, &PetWindow::freeMovementToggled, this, &PetController::setFreeMovementEnabled);
         connect(pet, &PetWindow::settingsRequested, this, &PetController::showSettingsDialog);
         connect(pet, &PetWindow::previewRequested, this, [this](const QString &id) {
             const QString path = QDir(petLibraryPath()).filePath(id);
@@ -328,6 +331,15 @@ private:
         subagentPetsEnabled_ = enabled;
         QSettings().setValue("agents/showSubagentPets", enabled);
         applySessionAnimation();
+    }
+
+    void setFreeMovementEnabled(bool enabled) {
+        if (freeMovementEnabled_ == enabled)
+            return;
+        freeMovementEnabled_ = enabled;
+        QSettings().setValue("pet/freeMovement", enabled);
+        for (PetWindow *pet : visiblePets())
+            pet->setFreeMovementEnabled(enabled);
     }
 
     void updateSubagentPets() {
@@ -844,6 +856,7 @@ private:
     QString language_;
     bool translatorInstalled_ = false;
     bool subagentPetsEnabled_ = false;
+    bool freeMovementEnabled_ = true;
     QVector<QPointer<PetWindow>> pets_;
     QHash<QString, QPointer<PetWindow>> subagentPetWindows_;
     QHash<QString, SessionState> sessions_;
