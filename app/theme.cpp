@@ -152,16 +152,37 @@ Palette paletteFor(bool dark) {
     return dark ? darkPalette() : lightPalette();
 }
 
+namespace {
+#if defined(Q_OS_WIN)
+// Qt's palette does not reliably follow the app light/dark preference on
+// Windows 10, so read the user's choice straight from the registry.
+bool systemPrefersDark() {
+    const QSettings personalize(
+        QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+        QSettings::NativeFormat);
+    return !personalize.value(QStringLiteral("AppsUseLightTheme"), 1).toBool();
+}
+#else
+bool systemPrefersDark() {
+    return QGuiApplication::palette().window().color().lightness() < 128;
+}
+#endif
+} // namespace
+
 Palette resolvePalette(Mode mode) {
     if (mode == Mode::System)
-        return paletteFor(QGuiApplication::palette().window().color().lightness() < 128);
+        return paletteFor(systemPrefersDark());
     return paletteFor(mode == Mode::Dark);
 }
 
 QString settingsDialogStyle(const Palette &p) {
     return expandTokens(QStringLiteral(R"qss(
-QDialog { background-color: @window@; }
 QWidget { background: transparent; color: @text@; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-size: 13px; }
+/* The QDialog rule must stay after QWidget: both are single type selectors,
+   and the later rule wins the cascade. Placing it first would let the
+   transparent QWidget rule erase the dialog background and leak the native
+   (dark-mode) window color through. */
+QDialog { background-color: @window@; }
 QToolTip { background-color: @tooltipBg@; color: @tooltipText@; border: 1px solid @tooltipBorder@; padding: 4px 6px; }
 QTabWidget::pane { border: 1px solid @border@; background: @surface@; border-radius: 10px; top: -1px; }
 QTabBar { background: transparent; }
