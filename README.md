@@ -11,7 +11,7 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 
 ## Features
 
-- Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls.
+- Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls. Pets can freely wander up, down, left, and right within the screen; toggle this behavior from the context menu (enabled by default and remembered).
 - Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
 - Import, preview, switch, delete, and summon every valid pet in the library; optionally show a separate pet for each detected subagent session.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
@@ -115,6 +115,8 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 **OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
 
 **Optional MCP server:** MCP-compatible clients can use the local stdio bridge described in [`integrations/at-pet-mcp/README.md`](integrations/at-pet-mcp/README.md). Its tools report events only when explicitly called; unlike hooks and plugins, MCP does not automatically observe lifecycle events.
+
+For an additional agent integration tutorial, see the [At-Pet Agent integration plugin](https://github.com/Ni-ShuWu/At-Pet_Agent-plugin).
 
 Example PowerShell request:
 

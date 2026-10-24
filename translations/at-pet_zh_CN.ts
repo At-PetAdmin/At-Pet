@@ -293,7 +293,12 @@
         <translation>删除此桌宠…</translation>
     </message>
     <message>
-        <location filename="../app/petwindow.cpp" line="396"/>
+        <location filename="../app/petwindow.cpp" line="605"/>
+        <source>Walk freely</source>
+        <translation>自由走动</translation>
+    </message>
+    <message>
+        <location filename="../app/petwindow.cpp" line="609"/>
         <source>Look at Copilot</source>
         <translation>看向 Copilot</translation>
     </message>
