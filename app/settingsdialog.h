@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QDialog>
 #include <QHash>
 #include <QImage>
@@ -28,6 +29,8 @@ public:
     void setPetDefinition(const QJsonObject &definition, const QString &spriteSheetPath);
     void setAnimation(const QString &animName);
     void setAnimationFps(int fps);
+    void setChrome(const QColor &cardBackground, const QColor &cardBorder,
+                   const QColor &checkerA, const QColor &checkerB);
     int animationFps() const;
     QString currentAnimation() const { return currentAnimation_; }
     QStringList availableAnimations() const;
@@ -50,6 +53,10 @@ private:
     int fps_ = 8;
     qreal scale_ = 1.0;
     QVector<int> frames_;
+    QColor cardColor_ = QColor(0xff, 0xff, 0xff);
+    QColor cardBorderColor_ = QColor(0xe4, 0xe4, 0xe4);
+    QColor checkerA_ = QColor(0xf0, 0xf0, 0xf0);
+    QColor checkerB_ = QColor(0xe7, 0xe7, 0xe7);
 };
 
 class SettingsDialog final : public QDialog {
@@ -126,8 +133,10 @@ private:
     // General Settings tab
     QGroupBox *preferencesGroupBox_ = nullptr;
     QLabel *languageLabel_ = nullptr;
+    QLabel *themeLabel_ = nullptr;
     QLabel *apiPortLabel_ = nullptr;
     QComboBox *languageCombo_ = nullptr;
+    QComboBox *themeCombo_ = nullptr;
     QCheckBox *lookAtCopilotCheck_ = nullptr;
     QSpinBox *apiPortSpin_ = nullptr;
     QPushButton *btnSaveGeneral_ = nullptr;

@@ -1,5 +1,7 @@
 #include "permissiondialog.h"
 
+#include "theme.h"
+
 #include <QCloseEvent>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -20,12 +22,8 @@ PermissionDialog::PermissionDialog(const QString &requestId, const QString &agen
     setAttribute(Qt::WA_DeleteOnClose);
     setMinimumWidth(360);
     setMaximumWidth(480);
-    setStyleSheet(QStringLiteral(
-        "QDialog { background: #1c1e26; color: #f2f2f2; }"
-        "QLabel { color: #f2f2f2; }"
-        "QPushButton { min-width: 100px; padding: 7px 12px; border-radius: 5px; }"
-        "QPushButton#allowOnceBtn { background: #27885b; color: white; border: none; }"
-        "QPushButton#denyBtn { background: #333644; color: #f2f2f2; border: 1px solid #55596a; }"));
+    const uitheme::Palette palette = uitheme::resolvePalette(uitheme::modeFromSettings());
+    setStyleSheet(uitheme::permissionDialogStyle(palette));
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(18, 16, 18, 16);
@@ -43,13 +41,13 @@ PermissionDialog::PermissionDialog(const QString &requestId, const QString &agen
         details->setTextFormat(Qt::PlainText);
         details->setWordWrap(true);
         details->setMaximumHeight(140);
-        details->setStyleSheet(QStringLiteral("color: #b7bac8;"));
+        details->setStyleSheet(QStringLiteral("color: %1;").arg(palette.textSecondary.name(QColor::HexRgb)));
         layout->addWidget(details);
     }
 
     auto *scope = new QLabel(tr("Allow once applies only to this request."), this);
     scope->setWordWrap(true);
-    scope->setStyleSheet(QStringLiteral("color: #a4a8b8; font-size: 11px;"));
+    scope->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(palette.textFaint.name(QColor::HexRgb)));
     layout->addWidget(scope);
 
     auto *buttons = new QHBoxLayout;

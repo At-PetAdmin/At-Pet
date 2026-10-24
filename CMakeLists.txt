@@ -26,6 +26,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/agentregistry.h
     app/settingsdialog.cpp
     app/settingsdialog.h
+    app/theme.cpp
+    app/theme.h
     assets/default/pet.qrc
 )
 
