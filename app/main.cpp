@@ -20,8 +20,6 @@
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QMenu>
-#include <QPainter>
-#include <QPainterPath>
 #include <QPointer>
 #include <QQueue>
 #include <QRegularExpression>
@@ -31,7 +29,6 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QIcon>
-#include <QPixmap>
 #include <QDebug>
 #include <algorithm>
 #include <QScreen>
@@ -87,23 +84,8 @@ QString sessionKey(const QString &agentKey, const QString &sessionId) {
     return agentKey + QChar(0x1f) + sessionId;
 }
 
-QIcon makeTrayIcon() {
-    QPixmap pixmap(64, 64);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(QPen(QColor(79, 67, 61), 3));
-    painter.setBrush(QColor(247, 185, 111));
-    painter.drawEllipse(QRectF(12, 16, 40, 40));
-    QPainterPath ears;
-    ears.moveTo(18, 25); ears.lineTo(15, 5); ears.lineTo(30, 20);
-    ears.moveTo(46, 25); ears.lineTo(49, 5); ears.lineTo(34, 20);
-    painter.drawPath(ears);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(52, 48, 50));
-    painter.drawEllipse(QPointF(25, 34), 2.5, 3.5);
-    painter.drawEllipse(QPointF(39, 34), 2.5, 3.5);
-    return QIcon(pixmap);
+QIcon appIcon() {
+    return QIcon(QStringLiteral(":/branding/logo.png"));
 }
 
 #ifdef Q_OS_WIN
@@ -844,7 +826,7 @@ private:
     }
 
     void createTrayIcon() {
-        tray_ = new QSystemTrayIcon(makeTrayIcon(), this);
+        tray_ = new QSystemTrayIcon(appIcon(), this);
         rebuildTrayMenu();
         tray_->show();
     }
@@ -872,6 +854,7 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Ni-ShuWu"));
     QCoreApplication::setApplicationName(QStringLiteral("At-Pet"));
+    app.setWindowIcon(appIcon());
     QApplication::setQuitOnLastWindowClosed(false);
     PetController controller;
     return app.exec();

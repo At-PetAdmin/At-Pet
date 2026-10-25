@@ -37,7 +37,7 @@ cmake --build build
 
 ### 从 CI 获取构建产物
 
-**Build Windows amd64 package** workflow 会在每个 Pull Request 和每次推送到 `main` 时构建免安装 Qt 的 Windows x86-64 压缩包，因此没有本地 Qt 环境的贡献者也能测试自己的改动。在运行记录的 **Artifacts** 区域下载 `At-Pet-windows-amd64`，解压后直接运行 `at-pet.exe`。推送 `v*` 标签时，压缩包和 `.sha256` 校验文件会一并附加到对应 GitHub Release。Windows ARM64 workflow 可手动运行用于测试，使用 `v*` 标签触发时会发布对应架构的包。
+**Build Windows amd64 package** workflow 会在每个 Pull Request 和每次推送到 `main` 时构建免安装 Qt 的 Windows x86-64 压缩包，因此没有本地 Qt 环境的贡献者也能测试自己的改动。在运行记录的 **Artifacts** 区域下载 `At-Pet-windows-amd64`，解压后直接运行 `at-pet.exe`。推送 `v*` 标签时，压缩包和 `.sha256` 校验文件会一并附加到对应 GitHub Release。Windows ARM64 workflow 可手动运行用于测试，使用 `v*` 标签触发时会发布对应架构的包。正式版本的压缩包及 SHA-256 校验文件也会一并保存在 `dist/`。
 
 ## 宠物库与格式
 
