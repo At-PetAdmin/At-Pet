@@ -151,10 +151,6 @@ jobs:
           } else {
             $tag = $env:RELEASE_TAG
             if (-not $tag.StartsWith('v')) { throw 'A workflow-dispatch release tag must start with v.' }
-            $tagCommit = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha' 2>$null | Select-Object -First 1
-            if ($LASTEXITCODE -ne 0 -or -not $tagCommit) {
-              throw "The requested release tag $tag does not exist in this repository."
-            }
           }
 
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
