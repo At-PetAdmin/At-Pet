@@ -1,0 +1,6 @@
+{
+  "id": "github-copilot",
+  "extends": "_claude-hook-family",
+  "agentApp": "github-copilot",
+  "description": "GitHub Copilot CLI hooks (integrations/agent-plugins/github-copilot)."
+}

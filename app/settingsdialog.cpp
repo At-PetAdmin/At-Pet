@@ -75,6 +75,18 @@ QString translatedAgentDescription(const AgentDefinition &agent) {
     return QCoreApplication::translate("AgentRegistry", source.constData());
 }
 
+QString integrationDisplayName(AgentIntegration integration) {
+    switch (integration) {
+    case AgentIntegration::BuiltInAdapter:
+        return QCoreApplication::translate("AgentRegistry", "Integration: built-in adapter, works as soon as the agent runs");
+    case AgentIntegration::ProfileShipped:
+        return QCoreApplication::translate("AgentRegistry", "Integration: bridge profile included; configure the agent to send events");
+    case AgentIntegration::ExternalRequired:
+        return QCoreApplication::translate("AgentRegistry", "Integration: no sender bundled; stays silent until one is configured");
+    }
+    return QCoreApplication::translate("AgentRegistry", "Integration: no sender bundled; stays silent until one is configured");
+}
+
 QString translatedAnimationName(const QString &name) {
     if (name == "idle") return QCoreApplication::translate("SettingsDialog", "Idle");
     if (name == "walk") return QCoreApplication::translate("SettingsDialog", "Walk");
@@ -965,8 +977,10 @@ void SettingsDialog::updateAgentDescriptions() {
     for (const AgentDefinition &agent : agentDefinitions()) {
         QLabel *label = agentDescriptionLabels_.value(agent.key, nullptr);
         if (label) {
-            label->setText(QStringLiteral("%1\n%2")
-                .arg(translatedAgentDescription(agent), tr("Monitoring strategy: %1").arg(monitorTypeDisplayName(agent.monitorType))));
+            label->setText(QStringLiteral("%1\n%2\n%3")
+                .arg(translatedAgentDescription(agent),
+                     tr("Monitoring strategy: %1").arg(monitorTypeDisplayName(agent.monitorType)),
+                     integrationDisplayName(agent.integration)));
         }
     }
 }

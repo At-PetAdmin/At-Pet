@@ -1,0 +1,27 @@
+{
+  "id": "kimi-code",
+  "agentApp": "kimi-code",
+  "description": "Kimi Code CLI hooks configured in ~/.kimi-code/config.toml (legacy: ~/.kimi/config.toml). Documented events: SessionStart, PreToolUse, Stop, SessionEnd. PostToolUse and UserPromptSubmit are candidates that stay inert if the CLI does not emit them. Source: https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html (checked 2026-10).",
+  "hook": { "paths": ["hook_event_name", "hookEventName", "event"] },
+  "session": ["session_id", "sessionId"],
+  "model": ["model"],
+  "toolName": ["tool_name", "toolName"],
+  "message": ["session_title", "message"],
+  "cwd": ["cwd"],
+  "events": {
+    "sessionstart": { "event": "thinking" },
+    "userpromptsubmit": { "event": "thinking" },
+    "turnstarted": { "event": "thinking" },
+    "pretooluse": { "event": "tool_start", "messageFrom": "toolName" },
+    "posttooluse": { "event": "tool_end" },
+    "permissionrequest": { "event": "permission" },
+    "interrupt": { "event": "cancelled" },
+    "stopfailure": { "event": "error", "messageFrom": "message" },
+    "subagentstart": { "event": "thinking" },
+    "subagentstop": { "event": "completed" },
+    "stop": { "event": "completed" },
+    "sessionend": { "event": "session_end" }
+  },
+  "limits": { "sessionId": 256, "toolName": 160, "message": 180 },
+  "notes": "No permission relay on purpose: Kimi Code has blocking PreToolUse hooks but no separate permission-request event, so prompting on every tool call would interrupt the user constantly."
+}

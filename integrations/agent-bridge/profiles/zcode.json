@@ -1,0 +1,6 @@
+{
+  "id": "zcode",
+  "extends": "_claude-hook-family",
+  "agentApp": "zcode",
+  "description": "ZCode plugin hooks."
+}

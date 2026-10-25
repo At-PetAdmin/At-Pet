@@ -1,0 +1,8 @@
+{
+  "id": "trae",
+  "extends": "_claude-hook-family",
+  "agentApp": "trae",
+  "description": "Trae IDE hooks (%userprofile%/.trae-cn/hooks.json or project .trae/hooks.json). Observation only: Trae decides approvals inside its own UI, and wiring PreToolUse to /permission would prompt on every tool call.",
+  "permission": null,
+  "notes": "Trae can read Claude Code hook config; do not point it at the same file or both agents fire the same hooks twice."
+}

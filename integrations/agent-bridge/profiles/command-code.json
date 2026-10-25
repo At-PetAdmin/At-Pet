@@ -1,0 +1,6 @@
+{
+  "id": "command-code",
+  "extends": "_claude-hook-family",
+  "agentApp": "command-code",
+  "description": "Command Code hooks (settings.json)."
+}

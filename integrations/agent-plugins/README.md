@@ -17,8 +17,14 @@ Source: [At-Pet_Agent-plugin](https://github.com/Ni-ShuWu/At-Pet_Agent-plugin) (
 | ZCode | `zcode/` | Plugin hooks |
 | DeepSeek Harness | `deepseek-harness/` | `dsh-hooks-codex` bridge |
 | PenguinHarness | `penguin-harness/` | Plugin hooks (`user_prompt`, `stop`) |
+| Kimi Code | `kimi-code/` | `config.toml` hooks through `agent-bridge` |
+| Trae | `agent-bridge` profile only | `hooks.json`; observation only |
+| Qoder / Qoder CN | `agent-bridge` profile only | `settings.json`; `PermissionRequest` |
+| Qwen Code | `agent-bridge` profile only | `.qwen/settings.json`; `PermissionRequest` |
 
 Every plugin except Claude Code and OpenCode uses its own copy of the zero-dependency `bridge.mjs`, so each directory can be installed on its own. Each directory has a README with install steps.
+
+`../agent-bridge/` holds a profile-driven replacement for those copies: one engine plus a JSON profile per agent, with the field contract for each profile traced back to the adapter or bridge it replaces. The plugins here are unaffected; switching one over is a one-line change in its hook command.
 
 ## Requirements
 

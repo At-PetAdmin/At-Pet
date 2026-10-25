@@ -1,0 +1,26 @@
+{
+  "id": "opencode-v2",
+  "agentApp": "opencode",
+  "description": "OpenCode V2 plugin events. Mirrors app/agentadapters/opencode-v2/adapter.cpp.",
+  "hook": { "paths": ["sourceEvent", "event"] },
+  "session": ["sessionID"],
+  "toolName": ["toolName", "tool"],
+  "message": ["message", "statusMessage"],
+  "cwd": ["directory", "cwd"],
+  "subagent": { "parentFrom": ["parentID", "parentSessionID"] },
+  "events": {
+    "sessioncreated": { "event": "started" },
+    "sessionstatus": [
+      { "event": "thinking", "when": { "path": "statusType", "in": ["busy", "retry"] } },
+      { "event": "idle", "when": { "path": "statusType", "equals": "idle" } }
+    ],
+    "sessionidle": { "event": "idle" },
+    "sessiondeleted": { "event": "idle" },
+    "toolexecutebefore": { "event": "tool_start", "messageFrom": "toolName" },
+    "toolexecuteafter": [
+      { "event": "error", "when": { "path": "statusType", "equals": "error" } },
+      { "event": "tool_end" }
+    ]
+  },
+  "limits": { "sessionId": 256, "toolName": 160, "message": 180 }
+}

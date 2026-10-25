@@ -1,0 +1,6 @@
+{
+  "id": "qwen-code",
+  "extends": "_claude-hook-family",
+  "agentApp": "qwen-code",
+  "description": "Qwen Code CLI hooks (~/.qwen/settings.json or project .qwen/settings.json). PermissionRequest returns decision.behavior."
+}
