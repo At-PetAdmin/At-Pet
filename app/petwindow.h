@@ -76,6 +76,7 @@ private:
     void stopGravity();
     void advanceGravity();
     QPointF dragReleaseVelocity(const QPoint &releasePosition) const;
+    QPoint boundedPosition(const QPoint &position, const QPoint &referencePoint) const;
     void showContextMenu(const QPoint &globalPosition);
     void loadSheet();
     void watchConfiguration();

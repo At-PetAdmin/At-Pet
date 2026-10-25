@@ -365,6 +365,24 @@ void PetWindow::advanceFreeMovement() {
         stopFreeMovement();
         return;
     }
+
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (gravityEnabled_ && screen) {
+        const QRect area = screen->availableGeometry();
+        const int floorY = qMax(area.top(), area.bottom() - height() + 1);
+        if (y() < floorY) {
+            startGravity();
+            return;
+        }
+    }
+    if (!screen) {
+        stopFreeMovement();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
+        return;
+    }
+
     if (!moving_) {
         if (animation_ != QStringLiteral("idle")) {
             scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
@@ -379,15 +397,6 @@ void PetWindow::advanceFreeMovement() {
         updateMovementAnimation();
     }
 
-    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    if (!screen) {
-        stopFreeMovement();
-        scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
-        return;
-    }
-
     const QRect area = screen->availableGeometry();
     const int minX = area.left();
     const int minY = area.top();
@@ -396,8 +405,10 @@ void PetWindow::advanceFreeMovement() {
     QVector<QPoint> availableDirections;
     if (x() > minX) availableDirections.append(QPoint(-1, 0));
     if (x() < maxX) availableDirections.append(QPoint(1, 0));
-    if (y() > minY) availableDirections.append(QPoint(0, -1));
-    if (y() < maxY) availableDirections.append(QPoint(0, 1));
+    if (!gravityEnabled_) {
+        if (y() > minY) availableDirections.append(QPoint(0, -1));
+        if (y() < maxY) availableDirections.append(QPoint(0, 1));
+    }
     if (availableDirections.isEmpty()) {
         stopFreeMovement();
         scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
@@ -409,9 +420,9 @@ void PetWindow::advanceFreeMovement() {
     }
 
     const QPoint nextPosition = pos() + movementDirection_ * 3;
-    const QPoint boundedPosition(qBound(minX, nextPosition.x(), maxX),
+    const QPoint clampedPosition(qBound(minX, nextPosition.x(), maxX),
                                  qBound(minY, nextPosition.y(), maxY));
-    move(boundedPosition);
+    move(clampedPosition);
     --movementRemaining_;
     if (movementRemaining_ <= 0) {
         stopFreeMovement();
@@ -702,12 +713,25 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event) {
                 dragSamples_.removeFirst();
             if (dragSamples_.size() > 64)
                 dragSamples_.remove(0, dragSamples_.size() - 64);
-            move(globalPosition - dragOffset_);
+            move(boundedPosition(globalPosition - dragOffset_, globalPosition));
         }
         event->accept();
         return;
     }
     QWidget::mouseMoveEvent(event);
+}
+
+QPoint PetWindow::boundedPosition(const QPoint &position, const QPoint &referencePoint) const {
+    QScreen *screen = QGuiApplication::screenAt(referencePoint);
+    if (!screen)
+        screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return position;
+    const QRect area = screen->availableGeometry();
+    return {qBound(area.left(), position.x(), qMax(area.left(), area.right() - width() + 1)),
+            qBound(area.top(), position.y(), qMax(area.top(), area.bottom() - height() + 1))};
 }
 
 QPointF PetWindow::dragReleaseVelocity(const QPoint &releasePosition) const {
