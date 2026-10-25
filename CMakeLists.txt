@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(AtPet VERSION 0.1.0 LANGUAGES CXX)
+project(AtPet VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,10 +28,24 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/settingsdialog.h
     app/theme.cpp
     app/theme.h
+    assets/branding/branding.qrc
     assets/default/pet.qrc
 )
 
 target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network)
+if(WIN32)
+    configure_file(
+        assets/branding/app-icon.rc.in
+        "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc"
+        COPYONLY
+    )
+    configure_file(
+        assets/branding/app-icon.ico
+        "${CMAKE_CURRENT_BINARY_DIR}/app-icon.ico"
+        COPYONLY
+    )
+    target_sources(at-pet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc")
+endif()
 qt_add_translations(at-pet
     TS_FILES translations/at-pet_zh_CN.ts
     RESOURCE_PREFIX "/i18n"

@@ -37,7 +37,7 @@ Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt
 
 ### Build artifacts from CI
 
-The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag.
+The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag. Release archives and SHA-256 checksum files are also checked in under `dist/` for tagged releases.
 
 ## Pet library and format
 
