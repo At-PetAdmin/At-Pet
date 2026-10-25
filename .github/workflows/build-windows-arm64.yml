@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional existing GitHub Release tag to upload this package to (e.g. v1.2.0).'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -18,10 +23,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: amd64_arm64
-
       - name: Install Qt ARM64
         id: qt-target
         uses: jurplel/install-qt-action@v4
@@ -31,6 +32,8 @@ jobs:
           target: desktop
           arch: win64_msvc2022_arm64_cross_compiled
           dir: ${{ runner.temp }}/Qt
+          cache: true
+          setup-python: false
 
       - name: Save Qt ARM64 path
         shell: pwsh
@@ -46,6 +49,8 @@ jobs:
           target: desktop
           arch: win64_msvc2022_64
           dir: ${{ runner.temp }}/Qt
+          cache: true
+          setup-python: false
 
       - name: Save Qt host path
         shell: pwsh
@@ -53,6 +58,10 @@ jobs:
           $hostRoot = Join-Path $env:RUNNER_TEMP 'Qt\Qt\6.8.3\msvc2022_64'
           if (-not (Test-Path $hostRoot)) { throw "The Qt host installation was not found at $hostRoot" }
           "QT_HOST_ROOT=$hostRoot" >> $env:GITHUB_ENV
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm64
 
       - name: Configure and build
         shell: pwsh
@@ -130,15 +139,29 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  At-Pet-windows-arm64.zip" | Set-Content -Path "$zip.sha256" -Encoding ascii
 
-      - name: Attach package to tagged release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Attach package to release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          if ($env:GITHUB_REF.StartsWith('refs/tags/v')) {
+            $tag = $env:GITHUB_REF_NAME
+          } else {
+            $tag = $env:RELEASE_TAG
+            if (-not $tag.StartsWith('v')) { throw 'A workflow-dispatch release tag must start with v.' }
+            $tagCommit = (gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag --jq .object.sha" 2>$null | Select-Object -First 1)
+            if ($LASTEXITCODE -ne 0 -or -not $tagCommit) {
+              throw "The requested release tag $tag does not exist in this repository."
+            }
+          }
+
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
+            if (-not $env:GITHUB_REF.StartsWith('refs/tags/v')) {
+              throw "The requested release $tag does not exist; refusing to create it from a manual run."
+            }
             gh release create $tag --repo $env:GITHUB_REPOSITORY --title "At-Pet $tag" --generate-notes
             if ($LASTEXITCODE -ne 0) {
               gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
