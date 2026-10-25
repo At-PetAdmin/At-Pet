@@ -30,6 +30,13 @@ const QStringList builtinAnimations = {
     QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
     QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
 };
+
+constexpr qreal gravityAcceleration = 0.65;
+constexpr qreal gravityTerminalVelocity = 18.0;
+constexpr qreal gravityHorizontalDecay = 0.965;
+constexpr qreal maxFlingVelocity = 30.0;
+constexpr qreal minFlingVelocity = 1.5;
+constexpr qint64 flingSampleWindowMs = 90;
 }
 
 PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
@@ -196,7 +203,7 @@ bool PetWindow::gravityEnabled() const {
     return gravityEnabled_;
 }
 
-void PetWindow::startGravity() {
+void PetWindow::startGravity(const QPointF &initialVelocity) {
     if (!gravityEnabled_ || !isVisible() || dragging_)
         return;
     stopFreeMovement();
@@ -210,20 +217,24 @@ void PetWindow::startGravity() {
     const int targetY = qMax(area.top(), area.bottom() - height() + 1);
     if (y() >= targetY) {
         move(x(), targetY);
-        gravityActive_ = false;
-        if (freeMovementEnabled_)
-            scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
-        return;
+        if (initialVelocity.isNull()) {
+            gravityActive_ = false;
+            if (freeMovementEnabled_)
+                scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+            return;
+        }
     }
 
     gravityActive_ = true;
-    gravityVelocity_ = 0.0;
+    gravityVelocity_ = initialVelocity.y();
+    gravityHorizontalVelocity_ = initialVelocity.x();
     gravityTimer_.start(16);
 }
 
 void PetWindow::stopGravity() {
     gravityTimer_.stop();
     gravityVelocity_ = 0.0;
+    gravityHorizontalVelocity_ = 0.0;
     gravityActive_ = false;
 }
 
@@ -242,17 +253,35 @@ void PetWindow::advanceGravity() {
     }
 
     const QRect area = screen->availableGeometry();
+    const int minX = area.left();
+    const int maxX = qMax(minX, area.right() - width() + 1);
     const int targetY = qMax(area.top(), area.bottom() - height() + 1);
-    if (y() >= targetY) {
-        move(x(), targetY);
-        stopGravity();
-        scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
-        return;
-    }
 
-    gravityVelocity_ = qMin<qreal>(gravityVelocity_ + 0.65, 18.0);
-    move(x(), qMin(targetY, y() + qMax(1, qRound(gravityVelocity_))));
-    if (y() >= targetY) {
+    if (y() < targetY || gravityVelocity_ < 0.0)
+        gravityVelocity_ = qMin<qreal>(gravityVelocity_ + gravityAcceleration, gravityTerminalVelocity);
+    else
+        gravityVelocity_ = 0.0;
+
+    gravityHorizontalVelocity_ *= gravityHorizontalDecay;
+    if (qAbs(gravityHorizontalVelocity_) < 0.5)
+        gravityHorizontalVelocity_ = 0.0;
+
+    int nextX = x() + qRound(gravityHorizontalVelocity_);
+    int nextY = y() + qRound(gravityVelocity_);
+    if (nextX < minX || nextX > maxX) {
+        nextX = qBound(minX, nextX, maxX);
+        gravityHorizontalVelocity_ = 0.0;
+    }
+    if (nextY <= area.top()) {
+        nextY = area.top();
+        gravityVelocity_ = 0.0;
+    } else if (nextY >= targetY) {
+        nextY = targetY;
+        gravityVelocity_ = 0.0;
+    }
+    move(nextX, nextY);
+
+    if (y() >= targetY && gravityVelocity_ == 0.0 && gravityHorizontalVelocity_ == 0.0) {
         stopGravity();
         scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
     }
@@ -646,6 +675,9 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
         dragOffset_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
         pressPosition_ = event->globalPosition().toPoint();
         dragging_ = false;
+        dragSamples_.clear();
+        dragVelocityTimer_.start();
+        dragSamples_.append({0, pressPosition_});
         event->accept();
         return;
     }
@@ -659,13 +691,49 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event) {
             dragging_ = true;
             stopFreeMovement();
             stopGravity();
+            dragVelocityTimer_.restart();
+            dragSamples_.clear();
+            dragSamples_.append({0, globalPosition});
         }
-        if (dragging_)
+        if (dragging_) {
+            dragSamples_.append({dragVelocityTimer_.elapsed(), globalPosition});
+            const qint64 nowMs = dragSamples_.last().timeMs;
+            while (dragSamples_.size() > 2 && nowMs - dragSamples_.first().timeMs > 250)
+                dragSamples_.removeFirst();
+            if (dragSamples_.size() > 64)
+                dragSamples_.remove(0, dragSamples_.size() - 64);
             move(globalPosition - dragOffset_);
+        }
         event->accept();
         return;
     }
     QWidget::mouseMoveEvent(event);
+}
+
+QPointF PetWindow::dragReleaseVelocity(const QPoint &releasePosition) const {
+    if (dragSamples_.isEmpty() || !dragVelocityTimer_.isValid())
+        return {};
+
+    const qint64 nowMs = dragVelocityTimer_.elapsed();
+    const DragSample *anchor = &dragSamples_.constFirst();
+    for (int i = dragSamples_.size() - 1; i >= 0; --i) {
+        if (nowMs - dragSamples_.at(i).timeMs >= flingSampleWindowMs) {
+            anchor = &dragSamples_.at(i);
+            break;
+        }
+    }
+
+    const qint64 elapsedMs = nowMs - anchor->timeMs;
+    if (elapsedMs < 10)
+        return {};
+
+    QPointF velocity = QPointF(releasePosition - anchor->position) * (16.0 / qreal(elapsedMs));
+    const qreal speed = qSqrt(velocity.x() * velocity.x() + velocity.y() * velocity.y());
+    if (speed < minFlingVelocity)
+        return {};
+    if (speed > maxFlingVelocity)
+        velocity *= maxFlingVelocity / speed;
+    return velocity;
 }
 
 void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
@@ -675,10 +743,13 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
         return;
     }
     const bool wasDragging = dragging_;
+    const QPointF flingVelocity = wasDragging
+        ? dragReleaseVelocity(event->globalPosition().toPoint()) : QPointF();
     dragging_ = false;
+    dragSamples_.clear();
     QWidget::mouseReleaseEvent(event);
     if (wasDragging && gravityEnabled_)
-        startGravity();
+        startGravity(flingVelocity);
     else if (wasDragging && freeMovementEnabled_)
         scheduleFreeMovement(QRandomGenerator::global()->bounded(1500, 4201));
 }

@@ -1,9 +1,11 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QFileSystemWatcher>
 #include <QImage>
 #include <QJsonObject>
 #include <QPoint>
+#include <QPointF>
 #include <QTimer>
 #include <QWidget>
 #include <QVector>
@@ -70,14 +72,20 @@ private:
     void stopFreeMovement();
     void updateMovementAnimation();
     QString movementAnimationForDirection(const QPoint &direction) const;
-    void startGravity();
+    void startGravity(const QPointF &initialVelocity = QPointF());
     void stopGravity();
     void advanceGravity();
+    QPointF dragReleaseVelocity(const QPoint &releasePosition) const;
     void showContextMenu(const QPoint &globalPosition);
     void loadSheet();
     void watchConfiguration();
     void useVectorFallback();
     void drawFallbackPet(QPainter &painter, const QRect &bounds);
+
+    struct DragSample {
+        qint64 timeMs = 0;
+        QPoint position;
+    };
 
     QString directory_;
     QString name_ = QStringLiteral("At-Pet");
@@ -94,6 +102,8 @@ private:
     QPoint movementDirection_;
     QString movementRestoreAnimation_;
     QString movementAnimationName_;
+    QVector<DragSample> dragSamples_;
+    QElapsedTimer dragVelocityTimer_;
     QPoint dragOffset_;
     QPoint pressPosition_;
     int frame_ = 0;
@@ -102,6 +112,7 @@ private:
     int framesPerSecond_ = 8;
     int movementRemaining_ = 0;
     qreal gravityVelocity_ = 0.0;
+    qreal gravityHorizontalVelocity_ = 0.0;
     qreal scale_ = 1.0;
     bool dragging_ = false;
     bool lookAtCopilot_ = false;
