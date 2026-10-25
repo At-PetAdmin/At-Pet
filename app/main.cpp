@@ -1,6 +1,7 @@
 #include "agentregistry.h"
 #include "httpapi.h"
 #include "permissiondialog.h"
+#include "questiondialog.h"
 #include "petwindow.h"
 #include "settingsdialog.h"
 
@@ -84,6 +85,26 @@ QString sessionKey(const QString &agentKey, const QString &sessionId) {
     return agentKey + QChar(0x1f) + sessionId;
 }
 
+bool isPotentiallyDangerous(const QJsonObject &request) {
+    if (request.value("dangerous").toBool() || request.value("isDangerous").toBool() ||
+        request.value("riskLevel").toString().compare(QStringLiteral("high"), Qt::CaseInsensitive) == 0)
+        return true;
+    const QString tool = request.value("toolName").toString().toLower();
+    const QString context = (request.value("description").toString() + QLatin1Char(' ') +
+                             request.value("command").toString() + QLatin1Char(' ') +
+                             request.value("input").toString()).toLower();
+    if (tool.contains("shell") || tool == "bash" || tool == "powershell" || tool == "terminal" || tool == "cmd")
+        return true;
+    static const QStringList riskPatterns = {
+        QStringLiteral("rm -rf"), QStringLiteral("remove-item"), QStringLiteral("delete"),
+        QStringLiteral("drop table"), QStringLiteral("format disk"), QStringLiteral("overwrite"),
+        QStringLiteral("chmod 777"), QStringLiteral("sudo ")
+    };
+    return std::any_of(riskPatterns.cbegin(), riskPatterns.cend(), [&context](const QString &pattern) {
+        return context.contains(pattern);
+    });
+}
+
 QIcon appIcon() {
     return QIcon(QStringLiteral(":/branding/logo.png"));
 }
@@ -122,10 +143,14 @@ public:
         QDir().mkpath(petLibraryPath());
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
+        gravityEnabled_ = QSettings().value("pet/gravity", false).toBool();
+        completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
         api_ = new HttpApi([this] { return stateJson(); }, this);
         connect(api_, &HttpApi::eventReceived, this, &PetController::onAgentEvent);
         connect(api_, &HttpApi::permissionRequestReceived, this, &PetController::onPermissionRequest);
         connect(api_, &HttpApi::permissionRequestCancelled, this, &PetController::onPermissionRequestCancelled);
+        connect(api_, &HttpApi::questionRequestReceived, this, &PetController::onQuestionRequest);
+        connect(api_, &HttpApi::questionRequestCancelled, this, &PetController::onQuestionRequestCancelled);
         connect(api_, &HttpApi::animationRequested, this, [this](const QString &name) {
             setAllAnimations(name);
         });
@@ -204,6 +229,7 @@ private:
         pets_.append(pet);
         pet->setLookAtCopilot(QSettings().value("pet/lookAtCopilot", false).toBool());
         pet->setFreeMovementEnabled(freeMovementEnabled_);
+        pet->setGravityEnabled(gravityEnabled_);
         QPoint topLeft = position;
         if (QScreen *screen = QGuiApplication::primaryScreen()) {
             const QRect area = screen->availableGeometry();
@@ -241,6 +267,7 @@ private:
             pet->setLookAtCopilot(enabled);
         });
         connect(pet, &PetWindow::freeMovementToggled, this, &PetController::setFreeMovementEnabled);
+        connect(pet, &PetWindow::gravityToggled, this, &PetController::setGravityEnabled);
         connect(pet, &PetWindow::settingsRequested, this, &PetController::showSettingsDialog);
         connect(pet, &PetWindow::previewRequested, this, [this](const QString &id) {
             const QString path = QDir(petLibraryPath()).filePath(id);
@@ -270,6 +297,11 @@ private:
             });
             connect(settingsDialog_, &SettingsDialog::lookAtCopilotToggled, this, [this](bool enabled) {
                 for (PetWindow *pet : visiblePets()) pet->setLookAtCopilot(enabled);
+            });
+            connect(settingsDialog_, &SettingsDialog::gravityToggled, this, &PetController::setGravityEnabled);
+            connect(settingsDialog_, &SettingsDialog::completionSoundToggled, this, [this](bool enabled) {
+                completionSoundEnabled_ = enabled;
+                QSettings().setValue("feedback/completionSound", enabled);
             });
             connect(settingsDialog_, &SettingsDialog::apiPortChanged, this, [this](quint16 port) {
                 if (api_->port() == port) return;
@@ -322,6 +354,15 @@ private:
         QSettings().setValue("pet/freeMovement", enabled);
         for (PetWindow *pet : visiblePets())
             pet->setFreeMovementEnabled(enabled);
+    }
+
+    void setGravityEnabled(bool enabled) {
+        if (gravityEnabled_ == enabled)
+            return;
+        gravityEnabled_ = enabled;
+        QSettings().setValue("pet/gravity", enabled);
+        for (PetWindow *pet : visiblePets())
+            pet->setGravityEnabled(enabled);
     }
 
     void updateSubagentPets() {
@@ -535,6 +576,63 @@ private:
         publishState();
     }
 
+    void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
+        questionQueue_.enqueue(qMakePair(requestId, request));
+        showNextQuestionDialog();
+    }
+
+    void onQuestionRequestCancelled(const QString &requestId) {
+        QQueue<QPair<QString, QJsonObject>> remaining;
+        while (!questionQueue_.isEmpty()) {
+            const auto queued = questionQueue_.dequeue();
+            if (queued.first != requestId)
+                remaining.enqueue(queued);
+        }
+        questionQueue_ = remaining;
+        if (currentQuestionRequestId_ == requestId) {
+            QuestionDialog *dialog = questionDialog_.data();
+            questionDialog_ = nullptr;
+            currentQuestionRequestId_.clear();
+            if (dialog)
+                dialog->dismiss();
+            QTimer::singleShot(0, this, &PetController::showNextQuestionDialog);
+        }
+    }
+
+    void showNextQuestionDialog() {
+        if (questionDialog_ || questionQueue_.isEmpty())
+            return;
+        const auto queued = questionQueue_.dequeue();
+        const QString requestId = queued.first;
+        const QJsonObject request = queued.second;
+        QStringList choices;
+        for (const QJsonValue &choice : request.value("choices").toArray())
+            choices.append(choice.toString());
+        PetWindow *anchor = visiblePets().isEmpty() ? nullptr : visiblePets().first();
+        auto *dialog = new QuestionDialog(requestId,
+            normalizeAgentApp(request.value("agentApp").toString()),
+            request.value("header").toString(), request.value("question").toString(), choices, anchor);
+        questionDialog_ = dialog;
+        currentQuestionRequestId_ = requestId;
+        connect(dialog, &QuestionDialog::answered, this, [this](const QString &id, const QString &answer) {
+            if (api_)
+                api_->resolveQuestion(id, true, answer);
+            questionDialog_ = nullptr;
+            currentQuestionRequestId_.clear();
+            QTimer::singleShot(0, this, &PetController::showNextQuestionDialog);
+        });
+        connect(dialog, &QuestionDialog::cancelled, this, [this](const QString &id) {
+            if (api_)
+                api_->resolveQuestion(id, false, {});
+            questionDialog_ = nullptr;
+            currentQuestionRequestId_.clear();
+            QTimer::singleShot(0, this, &PetController::showNextQuestionDialog);
+        });
+        dialog->show();
+        dialog->raise();
+        dialog->activateWindow();
+    }
+
     void onAgentEvent(const QJsonObject &event) {
         const QString sessionId = event.value("sessionId").toString().trimmed();
         if (sessionId.isEmpty())
@@ -543,6 +641,7 @@ private:
         const QString agentKey = agentAppKey(agentApp);
         const QString key = sessionKey(agentKey, sessionId);
         const QString eventName = eventToken(event.value("event").toString());
+        bool successfulCompletion = false;
         if (agentKey != "external" &&
             !QSettings().value(QStringLiteral("agents/monitor_") + agentKey, true).toBool()) {
             sessions_.remove(key);
@@ -578,6 +677,7 @@ private:
                    eventName == "stop" || eventName == "turncomplete" || eventName == "agentturncomplete") {
             animation = "done";
             terminal = true;
+            successfulCompletion = true;
         } else if (eventName == "cancelled" || eventName == "canceled" || eventName == "aborted" ||
                    eventName == "interrupt" || eventName == "interrupted") {
             animation = "cancelled";
@@ -596,6 +696,8 @@ private:
 
         SessionState state;
         const auto previous = sessions_.constFind(key);
+        successfulCompletion = successfulCompletion &&
+            (previous == sessions_.cend() || !previous->terminal);
         state.sessionId = sessionId;
         state.agentApp = agentApp;
         state.agentKey = agentKey;
@@ -615,6 +717,8 @@ private:
         state.terminal = terminal;
         sessions_.insert(key, state);
         applySessionAnimation();
+        if (successfulCompletion && completionSoundEnabled_)
+            QApplication::beep();
         if (terminal) {
             QTimer::singleShot(5000, this, [this, key, sequence = state.sequence] {
                 const auto it = sessions_.find(key);
@@ -664,7 +768,8 @@ private:
         const QString description = request.value("description").toString();
         PetWindow *anchor = visiblePets().isEmpty() ? nullptr : visiblePets().first();
         auto *dialog = new PermissionDialog(requestId,
-            normalizeAgentApp(request.value("agentApp").toString()), toolName, description, anchor);
+            normalizeAgentApp(request.value("agentApp").toString()), toolName, description,
+            isPotentiallyDangerous(request), anchor);
         permissionDialog_ = dialog;
         currentPermissionRequestId_ = requestId;
         connect(dialog, &PermissionDialog::decided, this,
@@ -839,6 +944,8 @@ private:
     bool translatorInstalled_ = false;
     bool subagentPetsEnabled_ = false;
     bool freeMovementEnabled_ = true;
+    bool gravityEnabled_ = false;
+    bool completionSoundEnabled_ = true;
     QVector<QPointer<PetWindow>> pets_;
     QHash<QString, QPointer<PetWindow>> subagentPetWindows_;
     QHash<QString, SessionState> sessions_;
@@ -846,6 +953,9 @@ private:
     QQueue<QPair<QString, QJsonObject>> permissionQueue_;
     QPointer<PermissionDialog> permissionDialog_;
     QString currentPermissionRequestId_;
+    QQueue<QPair<QString, QJsonObject>> questionQueue_;
+    QPointer<QuestionDialog> questionDialog_;
+    QString currentQuestionRequestId_;
     QTimer lookTimer_;
     QPointer<SettingsDialog> settingsDialog_;
 };

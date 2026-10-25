@@ -3,6 +3,7 @@
 #include "agentmonitor.h"
 #include "agentregistry.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QUuid>
@@ -35,6 +36,14 @@ void HttpApi::resolvePermission(const QString &requestId, bool allowOnce) {
         permissionHookRequests_.remove(hookSocket.data());
         sendJson(hookSocket, 200, response);
     }
+}
+
+void HttpApi::resolveQuestion(const QString &requestId, bool answered, const QString &answer) {
+    auto it = questionRequests_.find(requestId);
+    if (it == questionRequests_.end() || it->status != "pending")
+        return;
+    it->status = answered ? QStringLiteral("answered") : QStringLiteral("cancelled");
+    it->answer = answered ? answer.left(4000) : QString();
 }
 
 void HttpApi::acceptConnections() {
@@ -113,6 +122,38 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
     }
     if (method == "GET" && path == "/state") {
         sendJson(socket, 200, stateProvider_());
+        return;
+    }
+    const QByteArray questionPrefix = "/question/";
+    if (method == "GET" && path.startsWith(questionPrefix)) {
+        const QString requestId = QString::fromUtf8(path.mid(questionPrefix.size()));
+        auto it = questionRequests_.find(requestId);
+        if (it == questionRequests_.end()) {
+            sendJson(socket, 404, {{"error", "question request not found"}});
+            return;
+        }
+        const QString status = it->status;
+        const QString answer = it->answer;
+        if (status != "pending")
+            questionRequests_.erase(it);
+        QJsonObject response{{"requestId", requestId}, {"status", status}};
+        if (status == "answered")
+            response.insert("answer", answer);
+        sendJson(socket, 200, response);
+        return;
+    }
+    if (method == "DELETE" && path.startsWith(questionPrefix)) {
+        const QString requestId = QString::fromUtf8(path.mid(questionPrefix.size()));
+        auto it = questionRequests_.find(requestId);
+        if (it == questionRequests_.end()) {
+            sendJson(socket, 404, {{"error", "question request not found"}});
+            return;
+        }
+        const bool wasPending = it->status == "pending";
+        questionRequests_.erase(it);
+        if (wasPending)
+            emit questionRequestCancelled(requestId);
+        sendJson(socket, 202, {{"cancelled", wasPending}});
         return;
     }
     const QByteArray permissionPrefix = "/permission/";
@@ -217,6 +258,32 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
             sendJson(socket, 200, {});
         else
             sendJson(socket, 202, {{"accepted", true}});
+        return;
+    }
+    if (path == "/question") {
+        const QString agentApp = object.value("agentApp").toString().trimmed();
+        const QString question = object.value("question").toString().trimmed();
+        if (agentApp.isEmpty() || question.isEmpty()) {
+            sendJson(socket, 400, {{"error", "agentApp and question are required"}});
+            return;
+        }
+        const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QJsonObject request{{"requestId", requestId}, {"agentApp", agentApp.left(64)},
+                            {"question", question.left(2000)}};
+        request.insert("sessionId", object.value("sessionId").toString().trimmed().left(256));
+        request.insert("header", object.value("header").toString().left(160));
+        QJsonArray choices;
+        const QJsonArray inputChoices = object.value("choices").toArray();
+        for (qsizetype i = 0; i < inputChoices.size() && i < 20; ++i) {
+            const QString choice = inputChoices.at(i).toString().trimmed();
+            if (!choice.isEmpty())
+                choices.append(choice.left(200));
+        }
+        if (!choices.isEmpty())
+            request.insert("choices", choices);
+        questionRequests_.insert(requestId, {request});
+        emit questionRequestReceived(requestId, request);
+        sendJson(socket, 202, {{"accepted", true}, {"requestId", requestId}, {"status", "pending"}});
         return;
     }
     if (path == "/permission") {

@@ -13,7 +13,7 @@
 
 PermissionDialog::PermissionDialog(const QString &requestId, const QString &agentApp,
                                    const QString &toolName, const QString &description,
-                                   QWidget *anchor)
+                                   bool potentiallyDangerous, QWidget *anchor)
     : QDialog(nullptr, Qt::Dialog | Qt::WindowStaysOnTopHint | Qt::WindowTitleHint |
                          Qt::WindowSystemMenuHint),
       requestId_(requestId) {
@@ -35,6 +35,17 @@ PermissionDialog::PermissionDialog(const QString &requestId, const QString &agen
     heading->setWordWrap(true);
     heading->setStyleSheet(QStringLiteral("font-size: 15px; font-weight: 600;"));
     layout->addWidget(heading);
+
+    if (potentiallyDangerous) {
+        auto *warning = new QLabel(tr("Potentially dangerous action — review the details before allowing."), this);
+        warning->setWordWrap(true);
+        warning->setObjectName(QStringLiteral("dangerWarning"));
+        warning->setStyleSheet(QStringLiteral("color: %1; background: %2; border: 1px solid %3; border-radius: 6px; padding: 8px; font-weight: 600;")
+            .arg(palette.dangerText.name(QColor::HexRgb),
+                 palette.dangerBg.name(QColor::HexArgb),
+                 palette.dangerBorder.name(QColor::HexArgb)));
+        layout->addWidget(warning);
+    }
 
     if (!description.trimmed().isEmpty()) {
         auto *details = new QLabel(description, this);

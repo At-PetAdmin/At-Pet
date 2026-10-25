@@ -34,6 +34,8 @@ public:
     void setLookDirection(bool faceLeft);
     void setFreeMovementEnabled(bool enabled);
     bool freeMovementEnabled() const;
+    void setGravityEnabled(bool enabled);
+    bool gravityEnabled() const;
     void reloadDefinition();
 
 signals:
@@ -47,6 +49,7 @@ signals:
     void deleteRequested(const QString &petId);
     void lookAtToggled(bool enabled);
     void freeMovementToggled(bool enabled);
+    void gravityToggled(bool enabled);
     void previewRequested(const QString &petId);
     void settingsRequested();
 
@@ -65,6 +68,11 @@ private:
     void advanceFreeMovement();
     void scheduleFreeMovement(int delayMs);
     void stopFreeMovement();
+    void updateMovementAnimation();
+    QString movementAnimationForDirection(const QPoint &direction) const;
+    void startGravity();
+    void stopGravity();
+    void advanceGravity();
     void showContextMenu(const QPoint &globalPosition);
     void loadSheet();
     void watchConfiguration();
@@ -82,8 +90,10 @@ private:
     QTimer animationTimer_;
     QTimer speechTimer_;
     QTimer movementTimer_;
+    QTimer gravityTimer_;
     QPoint movementDirection_;
     QString movementRestoreAnimation_;
+    QString movementAnimationName_;
     QPoint dragOffset_;
     QPoint pressPosition_;
     int frame_ = 0;
@@ -91,11 +101,15 @@ private:
     int frameHeight_ = 128;
     int framesPerSecond_ = 8;
     int movementRemaining_ = 0;
+    qreal gravityVelocity_ = 0.0;
     qreal scale_ = 1.0;
     bool dragging_ = false;
     bool lookAtCopilot_ = false;
     bool faceLeft_ = false;
     bool freeMovementEnabled_ = false;
+    bool gravityEnabled_ = false;
+    bool gravityActive_ = false;
+    bool movementFacingLeft_ = false;
     bool moving_ = false;
     bool movementAnimationActive_ = false;
     bool settingMovementAnimation_ = false;
