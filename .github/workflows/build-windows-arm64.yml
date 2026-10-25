@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional existing GitHub Release tag to upload this package to (e.g. v1.2.0).'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -134,15 +139,29 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  At-Pet-windows-arm64.zip" | Set-Content -Path "$zip.sha256" -Encoding ascii
 
-      - name: Attach package to tagged release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Attach package to release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
+          if ($env:GITHUB_REF.StartsWith('refs/tags/v')) {
+            $tag = $env:GITHUB_REF_NAME
+          } else {
+            $tag = $env:RELEASE_TAG
+            if (-not $tag.StartsWith('v')) { throw 'A workflow-dispatch release tag must start with v.' }
+            $tagCommit = (gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$tag --jq .object.sha" 2>$null | Select-Object -First 1)
+            if ($LASTEXITCODE -ne 0 -or -not $tagCommit) {
+              throw "The requested release tag $tag does not exist in this repository."
+            }
+          }
+
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
+            if (-not $env:GITHUB_REF.StartsWith('refs/tags/v')) {
+              throw "The requested release $tag does not exist; refusing to create it from a manual run."
+            }
             gh release create $tag --repo $env:GITHUB_REPOSITORY --title "At-Pet $tag" --generate-notes
             if ($LASTEXITCODE -ne 0) {
               gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
