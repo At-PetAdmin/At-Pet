@@ -23,6 +23,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/agentadapters/opencode-v2/adapter.h
     app/permissiondialog.cpp
     app/permissiondialog.h
+    app/questiondialog.cpp
+    app/questiondialog.h
     app/agentregistry.h
     app/settingsdialog.cpp
     app/settingsdialog.h

@@ -11,12 +11,13 @@
 
 ## 功能特性
 
-- 透明、无边框、始终置顶的宠物窗口。拖动可移动；单击触发问候；双击输入想让宠物说的话；右键打开控制菜单。桌宠默认会在屏幕范围内上下左右自由走动，可从右键菜单关闭或重新开启，选择会被记住。
+- 透明、无边框、始终置顶的宠物窗口。拖动可移动；单击触发问候；双击输入想让宠物说的话；右键打开控制菜单。桌宠默认会在屏幕范围内上下左右自由走动，可从右键菜单关闭或重新开启，选择会被记住。可选重力功能会使桌宠在拖动后下落，也可从菜单或设置中开关。
 - 内置 Codex Pets 精灵桌宠作为默认宠物，并支持自定义精灵表动画，覆盖 idle、walk、sleep、thinking、work、review、工具执行、权限请求、完成、取消和错误等状态。
 - 导入、预览、切换、删除和召唤宠物库中的每一只有效宠物；也可选择为检测到的每个子代理会话显示独立桌宠。
 - 监视已导入的 `pet.json` 及其所在文件夹，修改后无需重启即可重新加载配置和精灵图。
 - 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和 Agent 事件。Claude Code HTTP hooks 与 OpenCode V2 插件提供原生适配器；兼容 MCP 的客户端可选择使用 stdio 桥接主动上报事件，其他来源也可使用通用 HTTP API。
 - Agent Monitoring 设置会显示每个来源的接入策略，并可过滤用于控制动画的事件。At-Pet 不会扫描 Agent 进程或读取与机器相关的日志路径；原生集成需在对应 Agent 应用中安装。
+- 可选的任务完成提示音（在常规设置中取消勾选“Agent 任务完成时播放声音”即可静音）。权限弹窗会通过启发式规则对潜在危险操作进行视觉高亮；此警告不会改变“仅本次允许/拒绝”选项。Agent 也可以通过本地 HTTP API 向用户提问。
 - Windows 专属选项：让宠物看向标题中包含 “Copilot” 的可见窗口。这只会改变桌宠朝向，不会检测或同步 Copilot 会话状态。公开的 `github/app` 仓库不包含桌面客户端实现，也未公开状态事件 API，因此 GitHub Copilot 需要外部事件发送端才能同步状态。
 - 托盘菜单支持显示/隐藏宠物、导入宠物、召唤宠物库中的全部宠物，以及在简体中文和英语之间切换。默认跟随系统语言，并记住您的选择。
 
@@ -68,7 +69,8 @@ cmake --build build
 }
 ```
 
-支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。
+支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。如需左右方向分别显示走路动画，可按需定义 `walkLeft` 和/或 `walkRight`（也接受 `walk_left`/`walk_right` 或 `walk-left`/`walk-right`）；移动时会选择对应方向的动画，未定义时回退到 `walk`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。
+`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。
 在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
 
 ## 本地 API
@@ -85,12 +87,15 @@ cmake --build build
 - `POST /permission` — 例如 `{"sessionId":"session-1","agentApp":"claude-code","toolName":"Bash","description":"Run tests"}`，用于显示权限请求弹窗。响应中包含 `requestId`。
 - `GET /permission/{requestId}` — 轮询 `pending`、`allowed_once` 或 `denied`。决策后的首次轮询会消费该结果，后续请求返回 404。
 - `DELETE /permission/{requestId}` — 取消通用待处理权限请求并关闭对应弹窗；Claude HTTP hook 请求不能通过此端点取消。
+- `POST /question` — 打开 Agent 提问弹窗：`{"agentApp":"my-agent","sessionId":"session-1","question":"应该选择哪个选项？","choices":["A","B"]}`。必填 `agentApp` 和 `question`；`header` 和 `choices` 可选，用户也可以输入自定义回答。
+- `GET /question/{requestId}` — 轮询 `pending`、`answered`（包含 `answer`）或 `cancelled`；作出决定后的首次轮询会消费结果。
+- `DELETE /question/{requestId}` — 取消请求并关闭提问弹窗。
 - `POST /agent-event/claudecode` — 接收 Claude Code HTTP hook 原生 payload，包括 `PermissionRequest`；权限 hook 会保持连接，直到用户选择仅本次允许或拒绝。
 - `POST /agent-event/opencode` — 接收随附 OpenCode V2 插件归一化后的事件。
 
 Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool_start`/`tool_running` → tool，`tool_end` → thinking，权限/审批请求 → permission，`work` → work，`review`/`reflection` → review，`completed`/`done` → done，`cancelled`/`aborted` → cancelled，`error`/`failed` → error。多个 `sessionId` 会被独立跟踪；最近更新的非子代理会话驱动主桌宠。设置 `isSubagent` 或 `parentSessionId` 标识子会话；在 Agent Monitoring 设置中启用后，每个子会话会拥有独立桌宠。终止状态动画会短暂显示，然后由下一个活动会话或空闲状态接管。发送 `idle` 或 `session_end` 可移除会话。
 
-权限弹窗仅提供 **Allow once（仅本次允许）** 和 **Deny（拒绝）**；关闭弹窗也会按拒绝处理。请求不会自动超时或自动拒绝。通用集成需轮询结果并将决定落实到对应工具请求；Claude 原生 HTTP hook 会在用户决定后收到原生 allow/deny 响应，OpenCode 插件则等待同一决定并映射为其权限 effect。At-Pet 不会执行工具，Agent Monitoring 中的动画过滤开关也不会影响权限请求。
+权限弹窗仅提供 **Allow once（仅本次允许）** 和 **Deny（拒绝）**；关闭弹窗也会按拒绝处理。潜在危险操作会根据启发式规则显示警告；警告仅供参考，不会改变决策选项。请求不会自动超时或自动拒绝。通用集成需轮询结果并将决定落实到对应工具请求；Claude 原生 HTTP hook 会在用户决定后收到原生 allow/deny 响应，OpenCode 插件则等待同一决定并映射为其权限 effect。At-Pet 不会执行工具，Agent Monitoring 中的动画过滤开关也不会影响权限请求。
 
 ### 原生集成
 
@@ -115,6 +120,8 @@ Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool
 **OpenCode V2：** 将 [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) 复制到项目的 `.opencode/plugins/` 文件夹，或全局目录 `%USERPROFILE%\.config\opencode\plugins\`，然后重启 OpenCode。仅当 At-Pet 使用非默认本地端口时才需设置 `AT_PET_URL`。插件会上报会话/工具事件，并将 `ask` 权限决定交给 At-Pet；若 At-Pet 不可用，则保留 OpenCode 原有的 `ask` 决定。插件卸载时，如果仍有权限弹窗，插件会取消待处理请求并关闭弹窗，不会更改 OpenCode 原有的 `ask` 决定。
 
 **可选 MCP Server：** 兼容 MCP 的客户端可按 [`integrations/at-pet-mcp/README_CN.md`](integrations/at-pet-mcp/README_CN.md) 配置本地 stdio 桥接。工具仅在被明确调用时上报事件；与 hooks 和插件不同，MCP 不会自动监听生命周期。
+
+更多 Agent 接入说明请参阅 [At-Pet Agent 对接插件仓库](https://github.com/Ni-ShuWu/At-Pet_Agent-plugin)。
 
 PowerShell 请求示例：
 

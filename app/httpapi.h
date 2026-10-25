@@ -17,11 +17,14 @@ public:
     quint16 port() const;
     void publishState();
     void resolvePermission(const QString &requestId, bool allowOnce);
+    void resolveQuestion(const QString &requestId, bool answered, const QString &answer);
 
 signals:
     void eventReceived(const QJsonObject &event);
     void permissionRequestReceived(const QString &requestId, const QJsonObject &request);
     void permissionRequestCancelled(const QString &requestId);
+    void questionRequestReceived(const QString &requestId, const QJsonObject &request);
+    void questionRequestCancelled(const QString &requestId);
     void animationRequested(const QString &name);
     void speechRequested(const QString &text);
     void summonRequested(const QJsonObject &request);
@@ -42,11 +45,17 @@ private:
         bool isClaudeHttpHook = false;
         QPointer<QTcpSocket> hookSocket;
     };
+    struct QuestionRequest {
+        QJsonObject details;
+        QString status = QStringLiteral("pending");
+        QString answer;
+    };
 
     QTcpServer server_;
     std::function<QJsonObject()> stateProvider_;
     QList<QTcpSocket *> eventClients_;
     QHash<QTcpSocket *, QByteArray> requestBuffers_;
     QHash<QString, PermissionRequest> permissionRequests_;
+    QHash<QString, QuestionRequest> questionRequests_;
     QHash<QTcpSocket *, QString> permissionHookRequests_;
 };

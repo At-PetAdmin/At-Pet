@@ -69,6 +69,8 @@ signals:
     void petSwitched(const QString &petId);
     void languageChanged(const QString &language);
     void lookAtCopilotToggled(bool enabled);
+    void gravityToggled(bool enabled);
+    void completionSoundToggled(bool enabled);
     void apiPortChanged(quint16 port);
     void agentFilterChanged();
     void subagentPetSettingChanged(bool enabled);
@@ -138,6 +140,8 @@ private:
     QComboBox *languageCombo_ = nullptr;
     QComboBox *themeCombo_ = nullptr;
     QCheckBox *lookAtCopilotCheck_ = nullptr;
+    QCheckBox *gravityCheck_ = nullptr;
+    QCheckBox *completionSoundCheck_ = nullptr;
     QSpinBox *apiPortSpin_ = nullptr;
     QPushButton *btnSaveGeneral_ = nullptr;
     QPushButton *btnClose_ = nullptr;
