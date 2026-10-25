@@ -804,6 +804,16 @@ ID：%2
     </message>
     <message>
         <location filename="../app/settingsdialog.cpp" line="520"/>
+        <source>Gravity strength:</source>
+        <translation>重力系数：</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="527"/>
+        <source>1.00 is the default. Higher values make pets fall faster.</source>
+        <translation>1.00 为默认值，数值越大下落越快。</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="528"/>
         <source>Play a sound when an Agent task completes</source>
         <translation>Agent 任务完成时播放提示音</translation>
     </message>

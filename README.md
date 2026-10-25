@@ -11,7 +11,7 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 
 ## Features
 
-- Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls. Pets can freely wander up, down, left, and right within the screen; toggle this behavior from the context menu (enabled by default and remembered). Optional gravity makes a pet fall after being dragged and can be toggled from the menu or settings.
+- Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls. Pets can freely wander up, down, left, and right within the screen; toggle this behavior from the context menu (enabled by default and remembered). Optional gravity makes a pet fall after being dragged, carrying the momentum of the drag when it is flung; with gravity on, a pet only wanders along the floor and falls back down whenever it is lifted. A flung pet bounces off the screen edges instead of stopping dead, and **Gravity strength** in General Settings scales how fast it falls (1.00 by default). Dragging, flinging, and gravity all keep the pet fully on screen.
 - Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
 - Import, preview, switch, delete, and summon every valid pet in the library; optionally show a separate pet for each detected subagent session.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.

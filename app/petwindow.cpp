@@ -30,6 +30,17 @@ const QStringList builtinAnimations = {
     QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
     QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
 };
+
+constexpr qreal gravityAcceleration = 0.65;
+constexpr qreal gravityTerminalVelocity = 18.0;
+constexpr qreal gravityHorizontalDecay = 0.965;
+constexpr qreal wallBounceRestitution = 0.6;
+constexpr qreal minBounceVelocity = 1.5;
+constexpr qreal minGravityScale = 0.1;
+constexpr qreal maxGravityScale = 3.0;
+constexpr qreal maxFlingVelocity = 30.0;
+constexpr qreal minFlingVelocity = 1.5;
+constexpr qint64 flingSampleWindowMs = 90;
 }
 
 PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
@@ -196,7 +207,15 @@ bool PetWindow::gravityEnabled() const {
     return gravityEnabled_;
 }
 
-void PetWindow::startGravity() {
+void PetWindow::setGravityScale(qreal scale) {
+    gravityScale_ = qBound(minGravityScale, scale, maxGravityScale);
+}
+
+qreal PetWindow::gravityScale() const {
+    return gravityScale_;
+}
+
+void PetWindow::startGravity(const QPointF &initialVelocity) {
     if (!gravityEnabled_ || !isVisible() || dragging_)
         return;
     stopFreeMovement();
@@ -210,20 +229,24 @@ void PetWindow::startGravity() {
     const int targetY = qMax(area.top(), area.bottom() - height() + 1);
     if (y() >= targetY) {
         move(x(), targetY);
-        gravityActive_ = false;
-        if (freeMovementEnabled_)
-            scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
-        return;
+        if (initialVelocity.isNull()) {
+            gravityActive_ = false;
+            if (freeMovementEnabled_)
+                scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+            return;
+        }
     }
 
     gravityActive_ = true;
-    gravityVelocity_ = 0.0;
+    gravityVelocity_ = initialVelocity.y();
+    gravityHorizontalVelocity_ = initialVelocity.x();
     gravityTimer_.start(16);
 }
 
 void PetWindow::stopGravity() {
     gravityTimer_.stop();
     gravityVelocity_ = 0.0;
+    gravityHorizontalVelocity_ = 0.0;
     gravityActive_ = false;
 }
 
@@ -242,17 +265,38 @@ void PetWindow::advanceGravity() {
     }
 
     const QRect area = screen->availableGeometry();
+    const int minX = area.left();
+    const int maxX = qMax(minX, area.right() - width() + 1);
     const int targetY = qMax(area.top(), area.bottom() - height() + 1);
-    if (y() >= targetY) {
-        move(x(), targetY);
-        stopGravity();
-        scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
-        return;
-    }
 
-    gravityVelocity_ = qMin<qreal>(gravityVelocity_ + 0.65, 18.0);
-    move(x(), qMin(targetY, y() + qMax(1, qRound(gravityVelocity_))));
-    if (y() >= targetY) {
+    if (y() < targetY || gravityVelocity_ < 0.0)
+        gravityVelocity_ = qMin<qreal>(gravityVelocity_ + gravityAcceleration * gravityScale_,
+                                       gravityTerminalVelocity);
+    else
+        gravityVelocity_ = 0.0;
+
+    gravityHorizontalVelocity_ *= gravityHorizontalDecay;
+    if (qAbs(gravityHorizontalVelocity_) < 0.5)
+        gravityHorizontalVelocity_ = 0.0;
+
+    int nextX = x() + qRound(gravityHorizontalVelocity_);
+    int nextY = y() + qRound(gravityVelocity_);
+    if (nextX < minX || nextX > maxX) {
+        nextX = qBound(minX, nextX, maxX);
+        gravityHorizontalVelocity_ = qAbs(gravityHorizontalVelocity_) >= minBounceVelocity
+            ? -gravityHorizontalVelocity_ * wallBounceRestitution : 0.0;
+    }
+    if (nextY <= area.top()) {
+        nextY = area.top();
+        gravityVelocity_ = qAbs(gravityVelocity_) >= minBounceVelocity
+            ? -gravityVelocity_ * wallBounceRestitution : 0.0;
+    } else if (nextY >= targetY) {
+        nextY = targetY;
+        gravityVelocity_ = 0.0;
+    }
+    move(nextX, nextY);
+
+    if (y() >= targetY && gravityVelocity_ == 0.0 && gravityHorizontalVelocity_ == 0.0) {
         stopGravity();
         scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
     }
@@ -336,6 +380,24 @@ void PetWindow::advanceFreeMovement() {
         stopFreeMovement();
         return;
     }
+
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (gravityEnabled_ && screen) {
+        const QRect area = screen->availableGeometry();
+        const int floorY = qMax(area.top(), area.bottom() - height() + 1);
+        if (y() < floorY) {
+            startGravity();
+            return;
+        }
+    }
+    if (!screen) {
+        stopFreeMovement();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
+        return;
+    }
+
     if (!moving_) {
         if (animation_ != QStringLiteral("idle")) {
             scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
@@ -350,15 +412,6 @@ void PetWindow::advanceFreeMovement() {
         updateMovementAnimation();
     }
 
-    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!screen)
-        screen = QGuiApplication::primaryScreen();
-    if (!screen) {
-        stopFreeMovement();
-        scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
-        return;
-    }
-
     const QRect area = screen->availableGeometry();
     const int minX = area.left();
     const int minY = area.top();
@@ -367,8 +420,10 @@ void PetWindow::advanceFreeMovement() {
     QVector<QPoint> availableDirections;
     if (x() > minX) availableDirections.append(QPoint(-1, 0));
     if (x() < maxX) availableDirections.append(QPoint(1, 0));
-    if (y() > minY) availableDirections.append(QPoint(0, -1));
-    if (y() < maxY) availableDirections.append(QPoint(0, 1));
+    if (!gravityEnabled_) {
+        if (y() > minY) availableDirections.append(QPoint(0, -1));
+        if (y() < maxY) availableDirections.append(QPoint(0, 1));
+    }
     if (availableDirections.isEmpty()) {
         stopFreeMovement();
         scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
@@ -380,9 +435,9 @@ void PetWindow::advanceFreeMovement() {
     }
 
     const QPoint nextPosition = pos() + movementDirection_ * 3;
-    const QPoint boundedPosition(qBound(minX, nextPosition.x(), maxX),
+    const QPoint clampedPosition(qBound(minX, nextPosition.x(), maxX),
                                  qBound(minY, nextPosition.y(), maxY));
-    move(boundedPosition);
+    move(clampedPosition);
     --movementRemaining_;
     if (movementRemaining_ <= 0) {
         stopFreeMovement();
@@ -646,6 +701,9 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
         dragOffset_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
         pressPosition_ = event->globalPosition().toPoint();
         dragging_ = false;
+        dragSamples_.clear();
+        dragVelocityTimer_.start();
+        dragSamples_.append({0, pressPosition_});
         event->accept();
         return;
     }
@@ -659,13 +717,62 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event) {
             dragging_ = true;
             stopFreeMovement();
             stopGravity();
+            dragVelocityTimer_.restart();
+            dragSamples_.clear();
+            dragSamples_.append({0, globalPosition});
         }
-        if (dragging_)
-            move(globalPosition - dragOffset_);
+        if (dragging_) {
+            dragSamples_.append({dragVelocityTimer_.elapsed(), globalPosition});
+            const qint64 nowMs = dragSamples_.last().timeMs;
+            while (dragSamples_.size() > 2 && nowMs - dragSamples_.first().timeMs > 250)
+                dragSamples_.removeFirst();
+            if (dragSamples_.size() > 64)
+                dragSamples_.remove(0, dragSamples_.size() - 64);
+            move(boundedPosition(globalPosition - dragOffset_, globalPosition));
+        }
         event->accept();
         return;
     }
     QWidget::mouseMoveEvent(event);
+}
+
+QPoint PetWindow::boundedPosition(const QPoint &position, const QPoint &referencePoint) const {
+    QScreen *screen = QGuiApplication::screenAt(referencePoint);
+    if (!screen)
+        screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return position;
+    const QRect area = screen->availableGeometry();
+    return {qBound(area.left(), position.x(), qMax(area.left(), area.right() - width() + 1)),
+            qBound(area.top(), position.y(), qMax(area.top(), area.bottom() - height() + 1))};
+}
+
+QPointF PetWindow::dragReleaseVelocity(const QPoint &releasePosition) const {
+    if (dragSamples_.isEmpty() || !dragVelocityTimer_.isValid())
+        return {};
+
+    const qint64 nowMs = dragVelocityTimer_.elapsed();
+    const DragSample *anchor = &dragSamples_.constFirst();
+    for (int i = dragSamples_.size() - 1; i >= 0; --i) {
+        if (nowMs - dragSamples_.at(i).timeMs >= flingSampleWindowMs) {
+            anchor = &dragSamples_.at(i);
+            break;
+        }
+    }
+
+    const qint64 elapsedMs = nowMs - anchor->timeMs;
+    if (elapsedMs < 10)
+        return {};
+
+    QPointF velocity = QPointF(releasePosition - anchor->position) * (16.0 / qreal(elapsedMs));
+    const qreal speed = qSqrt(velocity.x() * velocity.x() + velocity.y() * velocity.y());
+    if (speed < minFlingVelocity)
+        return {};
+    if (speed > maxFlingVelocity)
+        velocity *= maxFlingVelocity / speed;
+    return velocity;
 }
 
 void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
@@ -675,10 +782,13 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
         return;
     }
     const bool wasDragging = dragging_;
+    const QPointF flingVelocity = wasDragging
+        ? dragReleaseVelocity(event->globalPosition().toPoint()) : QPointF();
     dragging_ = false;
+    dragSamples_.clear();
     QWidget::mouseReleaseEvent(event);
     if (wasDragging && gravityEnabled_)
-        startGravity();
+        startGravity(flingVelocity);
     else if (wasDragging && freeMovementEnabled_)
         scheduleFreeMovement(QRandomGenerator::global()->bounded(1500, 4201));
 }

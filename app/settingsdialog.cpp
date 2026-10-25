@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -517,15 +518,24 @@ void SettingsDialog::setupUi() {
 
     gravityCheck_ = new QCheckBox(tr("Enable gravity (pet falls after being dragged)"), uiGroup);
     uiForm->addWidget(gravityCheck_, 3, 0, 1, 2);
+    gravityScaleLabel_ = new QLabel(tr("Gravity strength:"), uiGroup);
+    uiForm->addWidget(gravityScaleLabel_, 4, 0);
+    gravityScaleSpin_ = new QDoubleSpinBox(uiGroup);
+    gravityScaleSpin_->setRange(0.1, 3.0);
+    gravityScaleSpin_->setSingleStep(0.1);
+    gravityScaleSpin_->setDecimals(2);
+    gravityScaleSpin_->setValue(1.0);
+    gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
+    uiForm->addWidget(gravityScaleSpin_, 4, 1);
     completionSoundCheck_ = new QCheckBox(tr("Play a sound when an Agent task completes"), uiGroup);
-    uiForm->addWidget(completionSoundCheck_, 4, 0, 1, 2);
+    uiForm->addWidget(completionSoundCheck_, 5, 0, 1, 2);
 
     apiPortLabel_ = new QLabel(tr("Local API Port:"), uiGroup);
-    uiForm->addWidget(apiPortLabel_, 5, 0);
+    uiForm->addWidget(apiPortLabel_, 6, 0);
     apiPortSpin_ = new QSpinBox(uiGroup);
     apiPortSpin_->setRange(1024, 65535);
     apiPortSpin_->setValue(8765);
-    uiForm->addWidget(apiPortSpin_, 5, 1);
+    uiForm->addWidget(apiPortSpin_, 6, 1);
 
     generalLayout->addWidget(uiGroup);
     generalLayout->addStretch(1);
@@ -579,6 +589,7 @@ void SettingsDialog::loadSettings() {
 
     lookAtCopilotCheck_->setChecked(settings.value("pet/lookAtCopilot", false).toBool());
     gravityCheck_->setChecked(settings.value("pet/gravity", false).toBool());
+    gravityScaleSpin_->setValue(settings.value("pet/gravityScale", 1.0).toDouble());
     completionSoundCheck_->setChecked(settings.value("feedback/completionSound", true).toBool());
 
     QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
@@ -606,12 +617,14 @@ void SettingsDialog::onSaveGeneralSettings() {
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
     settings.setValue("pet/lookAtCopilot", lookAtCopilotCheck_->isChecked());
     settings.setValue("pet/gravity", gravityCheck_->isChecked());
+    settings.setValue("pet/gravityScale", gravityScaleSpin_->value());
     settings.setValue("feedback/completionSound", completionSoundCheck_->isChecked());
     settings.setValue("api/port", apiPortSpin_->value());
 
     emit languageChanged(newLang);
     emit lookAtCopilotToggled(lookAtCopilotCheck_->isChecked());
     emit gravityToggled(gravityCheck_->isChecked());
+    emit gravityScaleChanged(gravityScaleSpin_->value());
     emit completionSoundToggled(completionSoundCheck_->isChecked());
     emit apiPortChanged(quint16(apiPortSpin_->value()));
 
@@ -1018,6 +1031,8 @@ void SettingsDialog::retranslateUi() {
     themeCombo_->setItemText(1, tr("Light"));
     themeCombo_->setItemText(2, tr("Dark"));
     lookAtCopilotCheck_->setText(tr("Look toward a visible Copilot window (direction only; Windows)"));
+    gravityScaleLabel_->setText(tr("Gravity strength:"));
+    gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
     apiPortLabel_->setText(tr("Local API Port:"));
     btnSaveGeneral_->setText(tr("Apply General Settings"));
     btnClose_->setText(tr("Close"));
