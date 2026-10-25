@@ -144,6 +144,7 @@ public:
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
         gravityEnabled_ = QSettings().value("pet/gravity", false).toBool();
+        gravityScale_ = qBound(0.1, QSettings().value("pet/gravityScale", 1.0).toDouble(), 3.0);
         completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
         api_ = new HttpApi([this] { return stateJson(); }, this);
         connect(api_, &HttpApi::eventReceived, this, &PetController::onAgentEvent);
@@ -229,6 +230,7 @@ private:
         pets_.append(pet);
         pet->setLookAtCopilot(QSettings().value("pet/lookAtCopilot", false).toBool());
         pet->setFreeMovementEnabled(freeMovementEnabled_);
+        pet->setGravityScale(gravityScale_);
         pet->setGravityEnabled(gravityEnabled_);
         QPoint topLeft = position;
         if (QScreen *screen = QGuiApplication::primaryScreen()) {
@@ -299,6 +301,7 @@ private:
                 for (PetWindow *pet : visiblePets()) pet->setLookAtCopilot(enabled);
             });
             connect(settingsDialog_, &SettingsDialog::gravityToggled, this, &PetController::setGravityEnabled);
+            connect(settingsDialog_, &SettingsDialog::gravityScaleChanged, this, &PetController::setGravityScale);
             connect(settingsDialog_, &SettingsDialog::completionSoundToggled, this, [this](bool enabled) {
                 completionSoundEnabled_ = enabled;
                 QSettings().setValue("feedback/completionSound", enabled);
@@ -363,6 +366,16 @@ private:
         QSettings().setValue("pet/gravity", enabled);
         for (PetWindow *pet : visiblePets())
             pet->setGravityEnabled(enabled);
+    }
+
+    void setGravityScale(qreal scale) {
+        scale = qBound(0.1, scale, 3.0);
+        if (qFuzzyCompare(gravityScale_, scale))
+            return;
+        gravityScale_ = scale;
+        QSettings().setValue("pet/gravityScale", scale);
+        for (PetWindow *pet : visiblePets())
+            pet->setGravityScale(scale);
     }
 
     void updateSubagentPets() {
@@ -945,6 +958,7 @@ private:
     bool subagentPetsEnabled_ = false;
     bool freeMovementEnabled_ = true;
     bool gravityEnabled_ = false;
+    qreal gravityScale_ = 1.0;
     bool completionSoundEnabled_ = true;
     QVector<QPointer<PetWindow>> pets_;
     QHash<QString, QPointer<PetWindow>> subagentPetWindows_;

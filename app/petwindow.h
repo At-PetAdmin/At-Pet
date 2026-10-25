@@ -38,6 +38,8 @@ public:
     bool freeMovementEnabled() const;
     void setGravityEnabled(bool enabled);
     bool gravityEnabled() const;
+    void setGravityScale(qreal scale);
+    qreal gravityScale() const;
     void reloadDefinition();
 
 signals:
@@ -114,6 +116,7 @@ private:
     int movementRemaining_ = 0;
     qreal gravityVelocity_ = 0.0;
     qreal gravityHorizontalVelocity_ = 0.0;
+    qreal gravityScale_ = 1.0;
     qreal scale_ = 1.0;
     bool dragging_ = false;
     bool lookAtCopilot_ = false;

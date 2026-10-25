@@ -34,6 +34,10 @@ const QStringList builtinAnimations = {
 constexpr qreal gravityAcceleration = 0.65;
 constexpr qreal gravityTerminalVelocity = 18.0;
 constexpr qreal gravityHorizontalDecay = 0.965;
+constexpr qreal wallBounceRestitution = 0.6;
+constexpr qreal minBounceVelocity = 1.5;
+constexpr qreal minGravityScale = 0.1;
+constexpr qreal maxGravityScale = 3.0;
 constexpr qreal maxFlingVelocity = 30.0;
 constexpr qreal minFlingVelocity = 1.5;
 constexpr qint64 flingSampleWindowMs = 90;
@@ -203,6 +207,14 @@ bool PetWindow::gravityEnabled() const {
     return gravityEnabled_;
 }
 
+void PetWindow::setGravityScale(qreal scale) {
+    gravityScale_ = qBound(minGravityScale, scale, maxGravityScale);
+}
+
+qreal PetWindow::gravityScale() const {
+    return gravityScale_;
+}
+
 void PetWindow::startGravity(const QPointF &initialVelocity) {
     if (!gravityEnabled_ || !isVisible() || dragging_)
         return;
@@ -258,7 +270,8 @@ void PetWindow::advanceGravity() {
     const int targetY = qMax(area.top(), area.bottom() - height() + 1);
 
     if (y() < targetY || gravityVelocity_ < 0.0)
-        gravityVelocity_ = qMin<qreal>(gravityVelocity_ + gravityAcceleration, gravityTerminalVelocity);
+        gravityVelocity_ = qMin<qreal>(gravityVelocity_ + gravityAcceleration * gravityScale_,
+                                       gravityTerminalVelocity);
     else
         gravityVelocity_ = 0.0;
 
@@ -270,11 +283,13 @@ void PetWindow::advanceGravity() {
     int nextY = y() + qRound(gravityVelocity_);
     if (nextX < minX || nextX > maxX) {
         nextX = qBound(minX, nextX, maxX);
-        gravityHorizontalVelocity_ = 0.0;
+        gravityHorizontalVelocity_ = qAbs(gravityHorizontalVelocity_) >= minBounceVelocity
+            ? -gravityHorizontalVelocity_ * wallBounceRestitution : 0.0;
     }
     if (nextY <= area.top()) {
         nextY = area.top();
-        gravityVelocity_ = 0.0;
+        gravityVelocity_ = qAbs(gravityVelocity_) >= minBounceVelocity
+            ? -gravityVelocity_ * wallBounceRestitution : 0.0;
     } else if (nextY >= targetY) {
         nextY = targetY;
         gravityVelocity_ = 0.0;
