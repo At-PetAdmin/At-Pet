@@ -13,8 +13,12 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QStandardPaths>
+#include <QRandomGenerator>
+#include <QScreen>
 #include <QSettings>
+#include <QShowEvent>
+#include <QHideEvent>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 #include <QtMath>
@@ -26,6 +30,17 @@ const QStringList builtinAnimations = {
     QStringLiteral("error"), QStringLiteral("done"), QStringLiteral("cancelled"),
     QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
 };
+
+constexpr qreal gravityAcceleration = 0.65;
+constexpr qreal gravityTerminalVelocity = 18.0;
+constexpr qreal gravityHorizontalDecay = 0.965;
+constexpr qreal wallBounceRestitution = 0.6;
+constexpr qreal minBounceVelocity = 1.5;
+constexpr qreal minGravityScale = 0.1;
+constexpr qreal maxGravityScale = 3.0;
+constexpr qreal maxFlingVelocity = 30.0;
+constexpr qreal minFlingVelocity = 1.5;
+constexpr qint64 flingSampleWindowMs = 90;
 }
 
 PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
@@ -37,7 +52,12 @@ PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
     resize(176, 176);
 
     animationTimer_.setTimerType(Qt::PreciseTimer);
+    movementTimer_.setSingleShot(true);
+    movementTimer_.setTimerType(Qt::PreciseTimer);
+    gravityTimer_.setTimerType(Qt::PreciseTimer);
     connect(&animationTimer_, &QTimer::timeout, this, &PetWindow::tick);
+    connect(&movementTimer_, &QTimer::timeout, this, &PetWindow::advanceFreeMovement);
+    connect(&gravityTimer_, &QTimer::timeout, this, &PetWindow::advanceGravity);
     connect(&speechTimer_, &QTimer::timeout, this, [this] {
         speech_.clear();
         update();
@@ -107,16 +127,30 @@ void PetWindow::setAnimationFps(const QString &name, int fps) {
 void PetWindow::setAnimation(const QString &name) {
     if (!builtinAnimations.contains(name) && !definition_.value("animations").toObject().contains(name))
         return;
-    if (animation_ == name)
-        return;
-    animation_ = name;
-    frame_ = 0;
-    const QJsonObject animation = definition_.value("animations").toObject().value(name).toObject();
-    const int defaultFps = qBound(1, animation.value("fps").toInt(framesPerSecond_), 30);
-    const int fps = QSettings().value(animationFpsKey(petId(), name), defaultFps).toInt();
-    animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
-    emit animationChanged(animation_);
-    update();
+
+    const bool externalAnimation = !settingMovementAnimation_;
+    const bool cancelledMovement = externalAnimation && (moving_ || movementAnimationActive_);
+    if (cancelledMovement) {
+        movementTimer_.stop();
+        moving_ = false;
+        movementRemaining_ = 0;
+        movementDirection_ = {};
+        movementAnimationActive_ = false;
+        movementAnimationName_.clear();
+        movementRestoreAnimation_.clear();
+    }
+    if (animation_ != name) {
+        animation_ = name;
+        frame_ = 0;
+        const QJsonObject animation = definition_.value("animations").toObject().value(name).toObject();
+        const int defaultFps = qBound(1, animation.value("fps").toInt(framesPerSecond_), 30);
+        const int fps = QSettings().value(animationFpsKey(petId(), name), defaultFps).toInt();
+        animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
+        emit animationChanged(animation_);
+        update();
+    }
+    if (cancelledMovement)
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1200, 3201));
 }
 
 void PetWindow::setSpeech(const QString &text) {
@@ -139,6 +173,278 @@ void PetWindow::setLookDirection(bool faceLeft) {
         return;
     faceLeft_ = faceLeft;
     update();
+}
+
+void PetWindow::setFreeMovementEnabled(bool enabled) {
+    if (freeMovementEnabled_ == enabled)
+        return;
+    freeMovementEnabled_ = enabled;
+    if (!enabled) {
+        stopFreeMovement();
+    } else if (isVisible()) {
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+    }
+}
+
+bool PetWindow::freeMovementEnabled() const {
+    return freeMovementEnabled_;
+}
+
+void PetWindow::setGravityEnabled(bool enabled) {
+    if (gravityEnabled_ == enabled)
+        return;
+    gravityEnabled_ = enabled;
+    if (enabled) {
+        startGravity();
+    } else {
+        stopGravity();
+        if (freeMovementEnabled_ && isVisible())
+            scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+    }
+}
+
+bool PetWindow::gravityEnabled() const {
+    return gravityEnabled_;
+}
+
+void PetWindow::setGravityScale(qreal scale) {
+    gravityScale_ = qBound(minGravityScale, scale, maxGravityScale);
+}
+
+qreal PetWindow::gravityScale() const {
+    return gravityScale_;
+}
+
+void PetWindow::startGravity(const QPointF &initialVelocity) {
+    if (!gravityEnabled_ || !isVisible() || dragging_)
+        return;
+    stopFreeMovement();
+
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return;
+    const QRect area = screen->availableGeometry();
+    const int targetY = qMax(area.top(), area.bottom() - height() + 1);
+    if (y() >= targetY) {
+        move(x(), targetY);
+        if (initialVelocity.isNull()) {
+            gravityActive_ = false;
+            if (freeMovementEnabled_)
+                scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+            return;
+        }
+    }
+
+    gravityActive_ = true;
+    gravityVelocity_ = initialVelocity.y();
+    gravityHorizontalVelocity_ = initialVelocity.x();
+    gravityTimer_.start(16);
+}
+
+void PetWindow::stopGravity() {
+    gravityTimer_.stop();
+    gravityVelocity_ = 0.0;
+    gravityHorizontalVelocity_ = 0.0;
+    gravityActive_ = false;
+}
+
+void PetWindow::advanceGravity() {
+    if (!gravityActive_ || !gravityEnabled_ || dragging_ || !isVisible()) {
+        stopGravity();
+        return;
+    }
+
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen) {
+        stopGravity();
+        return;
+    }
+
+    const QRect area = screen->availableGeometry();
+    const int minX = area.left();
+    const int maxX = qMax(minX, area.right() - width() + 1);
+    const int targetY = qMax(area.top(), area.bottom() - height() + 1);
+
+    if (y() < targetY || gravityVelocity_ < 0.0)
+        gravityVelocity_ = qMin<qreal>(gravityVelocity_ + gravityAcceleration * gravityScale_,
+                                       gravityTerminalVelocity);
+    else
+        gravityVelocity_ = 0.0;
+
+    gravityHorizontalVelocity_ *= gravityHorizontalDecay;
+    if (qAbs(gravityHorizontalVelocity_) < 0.5)
+        gravityHorizontalVelocity_ = 0.0;
+
+    int nextX = x() + qRound(gravityHorizontalVelocity_);
+    int nextY = y() + qRound(gravityVelocity_);
+    if (nextX < minX || nextX > maxX) {
+        nextX = qBound(minX, nextX, maxX);
+        gravityHorizontalVelocity_ = qAbs(gravityHorizontalVelocity_) >= minBounceVelocity
+            ? -gravityHorizontalVelocity_ * wallBounceRestitution : 0.0;
+    }
+    if (nextY <= area.top()) {
+        nextY = area.top();
+        gravityVelocity_ = qAbs(gravityVelocity_) >= minBounceVelocity
+            ? -gravityVelocity_ * wallBounceRestitution : 0.0;
+    } else if (nextY >= targetY) {
+        nextY = targetY;
+        gravityVelocity_ = 0.0;
+    }
+    move(nextX, nextY);
+
+    if (y() >= targetY && gravityVelocity_ == 0.0 && gravityHorizontalVelocity_ == 0.0) {
+        stopGravity();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+    }
+}
+
+void PetWindow::scheduleFreeMovement(int delayMs) {
+    if (!freeMovementEnabled_ || !isVisible() || dragging_ || gravityActive_ || movementTimer_.isActive())
+        return;
+    movementTimer_.start(qMax(0, delayMs));
+}
+
+void PetWindow::stopFreeMovement() {
+    movementTimer_.stop();
+    const bool restoreAnimation = movementAnimationActive_ &&
+                                  animation_ == movementAnimationName_ &&
+                                  !movementRestoreAnimation_.isEmpty();
+    const QString animationToRestore = movementRestoreAnimation_;
+    moving_ = false;
+    movementRemaining_ = 0;
+    movementDirection_ = {};
+    movementAnimationActive_ = false;
+    movementAnimationName_.clear();
+    movementRestoreAnimation_.clear();
+    if (restoreAnimation && animation_ != animationToRestore)
+        setAnimation(animationToRestore);
+}
+
+QString PetWindow::movementAnimationForDirection(const QPoint &direction) const {
+    const QJsonObject animations = definition_.value("animations").toObject();
+    if (spriteSheet_.isNull())
+        return QStringLiteral("walk");
+
+    if (direction.x() == 0)
+        return animations.contains(QStringLiteral("walk")) ? QStringLiteral("walk") : QString();
+
+    const QStringList names = direction.x() < 0
+        ? QStringList{QStringLiteral("walkLeft"), QStringLiteral("walk_left"), QStringLiteral("walk-left")}
+        : QStringList{QStringLiteral("walkRight"), QStringLiteral("walk_right"), QStringLiteral("walk-right")};
+    for (const QString &name : names) {
+        if (animations.contains(name))
+            return name;
+    }
+    return animations.contains(QStringLiteral("walk")) ? QStringLiteral("walk") : QString();
+}
+
+void PetWindow::updateMovementAnimation() {
+    if (!moving_)
+        return;
+    if (movementDirection_.x() != 0)
+        movementFacingLeft_ = movementDirection_.x() < 0;
+
+    const QString desiredAnimation = movementAnimationForDirection(movementDirection_);
+    if (desiredAnimation.isEmpty()) {
+        if (movementAnimationActive_ && animation_ == movementAnimationName_ &&
+            !movementRestoreAnimation_.isEmpty()) {
+            settingMovementAnimation_ = true;
+            setAnimation(movementRestoreAnimation_);
+            settingMovementAnimation_ = false;
+        }
+        movementAnimationActive_ = false;
+        movementAnimationName_.clear();
+        movementRestoreAnimation_.clear();
+        return;
+    }
+
+    if (!movementAnimationActive_)
+        movementRestoreAnimation_ = animation_;
+    movementAnimationActive_ = true;
+    movementAnimationName_ = desiredAnimation;
+    settingMovementAnimation_ = true;
+    setAnimation(desiredAnimation);
+    settingMovementAnimation_ = false;
+}
+
+void PetWindow::advanceFreeMovement() {
+    if (!freeMovementEnabled_ || !isVisible() || gravityActive_) {
+        stopFreeMovement();
+        return;
+    }
+    if (dragging_) {
+        stopFreeMovement();
+        return;
+    }
+
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (gravityEnabled_ && screen) {
+        const QRect area = screen->availableGeometry();
+        const int floorY = qMax(area.top(), area.bottom() - height() + 1);
+        if (y() < floorY) {
+            startGravity();
+            return;
+        }
+    }
+    if (!screen) {
+        stopFreeMovement();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
+        return;
+    }
+
+    if (!moving_) {
+        if (animation_ != QStringLiteral("idle")) {
+            scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
+            return;
+        }
+        movementRemaining_ = QRandomGenerator::global()->bounded(20, 56);
+        QVector<QPoint> directions = {QPoint(-1, 0), QPoint(1, 0)};
+        if (!gravityEnabled_)
+            directions << QPoint(0, -1) << QPoint(0, 1);
+        movementDirection_ = directions.at(QRandomGenerator::global()->bounded(int(directions.size())));
+        moving_ = true;
+        updateMovementAnimation();
+    }
+
+    const QRect area = screen->availableGeometry();
+    const int minX = area.left();
+    const int minY = area.top();
+    const int maxX = qMax(minX, area.right() - width() + 1);
+    const int maxY = qMax(minY, area.bottom() - height() + 1);
+    QVector<QPoint> availableDirections;
+    if (x() > minX) availableDirections.append(QPoint(-1, 0));
+    if (x() < maxX) availableDirections.append(QPoint(1, 0));
+    if (!gravityEnabled_) {
+        if (y() > minY) availableDirections.append(QPoint(0, -1));
+        if (y() < maxY) availableDirections.append(QPoint(0, 1));
+    }
+    if (availableDirections.isEmpty()) {
+        stopFreeMovement();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1800, 4501));
+        return;
+    }
+    if (!availableDirections.contains(movementDirection_)) {
+        movementDirection_ = availableDirections.at(QRandomGenerator::global()->bounded(availableDirections.size()));
+        updateMovementAnimation();
+    }
+
+    const QPoint nextPosition = pos() + movementDirection_ * 3;
+    const QPoint clampedPosition(qBound(minX, nextPosition.x(), maxX),
+                                 qBound(minY, nextPosition.y(), maxY));
+    move(clampedPosition);
+    --movementRemaining_;
+    if (movementRemaining_ <= 0) {
+        stopFreeMovement();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1500, 4201));
+        return;
+    }
+    movementTimer_.start(40);
 }
 
 void PetWindow::watchConfiguration() {
@@ -253,6 +559,20 @@ void PetWindow::tick() {
     update();
 }
 
+void PetWindow::showEvent(QShowEvent *event) {
+    QWidget::showEvent(event);
+    if (gravityEnabled_)
+        startGravity();
+    else if (freeMovementEnabled_)
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+}
+
+void PetWindow::hideEvent(QHideEvent *event) {
+    stopFreeMovement();
+    stopGravity();
+    QWidget::hideEvent(event);
+}
+
 void PetWindow::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -291,7 +611,9 @@ void PetWindow::paintEvent(QPaintEvent *) {
                                frameWidth_, frameHeight_);
             if (source.right() <= spriteSheet_.width() && source.bottom() <= spriteSheet_.height()) {
                 painter.save();
-                if (lookAtCopilot_ && faceLeft_) {
+                const bool faceLeft = lookAtCopilot_ ? faceLeft_ :
+                    (movementAnimationActive_ && movementFacingLeft_);
+                if (faceLeft) {
                     painter.translate(bounds.left() + bounds.right(), 0);
                     painter.scale(-1, 1);
                 }
@@ -379,6 +701,9 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
         dragOffset_ = event->globalPosition().toPoint() - frameGeometry().topLeft();
         pressPosition_ = event->globalPosition().toPoint();
         dragging_ = false;
+        dragSamples_.clear();
+        dragVelocityTimer_.start();
+        dragSamples_.append({0, pressPosition_});
         event->accept();
         return;
     }
@@ -388,14 +713,66 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
 void PetWindow::mouseMoveEvent(QMouseEvent *event) {
     if (event->buttons() & Qt::LeftButton) {
         const QPoint globalPosition = event->globalPosition().toPoint();
-        if ((globalPosition - pressPosition_).manhattanLength() > 4)
+        if ((globalPosition - pressPosition_).manhattanLength() > 4 && !dragging_) {
             dragging_ = true;
-        if (dragging_)
-            move(globalPosition - dragOffset_);
+            stopFreeMovement();
+            stopGravity();
+            dragVelocityTimer_.restart();
+            dragSamples_.clear();
+            dragSamples_.append({0, globalPosition});
+        }
+        if (dragging_) {
+            dragSamples_.append({dragVelocityTimer_.elapsed(), globalPosition});
+            const qint64 nowMs = dragSamples_.last().timeMs;
+            while (dragSamples_.size() > 2 && nowMs - dragSamples_.first().timeMs > 250)
+                dragSamples_.removeFirst();
+            if (dragSamples_.size() > 64)
+                dragSamples_.remove(0, dragSamples_.size() - 64);
+            move(boundedPosition(globalPosition - dragOffset_, globalPosition));
+        }
         event->accept();
         return;
     }
     QWidget::mouseMoveEvent(event);
+}
+
+QPoint PetWindow::boundedPosition(const QPoint &position, const QPoint &referencePoint) const {
+    QScreen *screen = QGuiApplication::screenAt(referencePoint);
+    if (!screen)
+        screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return position;
+    const QRect area = screen->availableGeometry();
+    return {qBound(area.left(), position.x(), qMax(area.left(), area.right() - width() + 1)),
+            qBound(area.top(), position.y(), qMax(area.top(), area.bottom() - height() + 1))};
+}
+
+QPointF PetWindow::dragReleaseVelocity(const QPoint &releasePosition) const {
+    if (dragSamples_.isEmpty() || !dragVelocityTimer_.isValid())
+        return {};
+
+    const qint64 nowMs = dragVelocityTimer_.elapsed();
+    const DragSample *anchor = &dragSamples_.constFirst();
+    for (int i = dragSamples_.size() - 1; i >= 0; --i) {
+        if (nowMs - dragSamples_.at(i).timeMs >= flingSampleWindowMs) {
+            anchor = &dragSamples_.at(i);
+            break;
+        }
+    }
+
+    const qint64 elapsedMs = nowMs - anchor->timeMs;
+    if (elapsedMs < 10)
+        return {};
+
+    QPointF velocity = QPointF(releasePosition - anchor->position) * (16.0 / qreal(elapsedMs));
+    const qreal speed = qSqrt(velocity.x() * velocity.x() + velocity.y() * velocity.y());
+    if (speed < minFlingVelocity)
+        return {};
+    if (speed > maxFlingVelocity)
+        velocity *= maxFlingVelocity / speed;
+    return velocity;
 }
 
 void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
@@ -404,8 +781,16 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
         event->accept();
         return;
     }
+    const bool wasDragging = dragging_;
+    const QPointF flingVelocity = wasDragging
+        ? dragReleaseVelocity(event->globalPosition().toPoint()) : QPointF();
     dragging_ = false;
+    dragSamples_.clear();
     QWidget::mouseReleaseEvent(event);
+    if (wasDragging && gravityEnabled_)
+        startGravity(flingVelocity);
+    else if (wasDragging && freeMovementEnabled_)
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1500, 4201));
 }
 
 void PetWindow::mouseDoubleClickEvent(QMouseEvent *event) {
@@ -462,6 +847,14 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
     }
     menu.addSeparator();
     menu.addAction(tr("Settings & Library…"), this, &PetWindow::settingsRequested);
+    QAction *movementAction = menu.addAction(tr("Walk freely"));
+    movementAction->setCheckable(true);
+    movementAction->setChecked(freeMovementEnabled_);
+    connect(movementAction, &QAction::toggled, this, &PetWindow::freeMovementToggled);
+    QAction *gravityAction = menu.addAction(tr("Gravity"));
+    gravityAction->setCheckable(true);
+    gravityAction->setChecked(gravityEnabled_);
+    connect(gravityAction, &QAction::toggled, this, &PetWindow::gravityToggled);
     QAction *lookAction = menu.addAction(tr("Look at Copilot"));
     lookAction->setCheckable(true);
     lookAction->setChecked(lookAtCopilot_);

@@ -11,7 +11,7 @@ class PermissionDialog final : public QDialog {
 public:
     explicit PermissionDialog(const QString &requestId, const QString &agentApp,
                               const QString &toolName, const QString &description,
-                              QWidget *anchor = nullptr);
+                              bool potentiallyDangerous, QWidget *anchor = nullptr);
     void dismiss();
 
 signals:

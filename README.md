@@ -11,12 +11,13 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 
 ## Features
 
-- Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls.
+- Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls. Pets can freely wander up, down, left, and right within the screen; toggle this behavior from the context menu (enabled by default and remembered). Optional gravity makes a pet fall after being dragged, carrying the momentum of the drag when it is flung; with gravity on, a pet only wanders along the floor and falls back down whenever it is lifted. A flung pet bounces off the screen edges instead of stopping dead, and **Gravity strength** in General Settings scales how fast it falls (1.00 by default). Dragging, flinging, and gravity all keep the pet fully on screen.
 - Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
 - Import, preview, switch, delete, and summon every valid pet in the library; optionally show a separate pet for each detected subagent session.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
 - Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; MCP-compatible clients can use the optional stdio bridge for explicit event reporting, and other sources can use the generic HTTP API.
 - Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
+- Optional completion chime (muted via **Play a sound when an Agent task completes** in General Settings). Permission prompts visually highlight potentially dangerous actions as a heuristic; the warning does not change the Allow once / Deny choices. Agents can also ask the user a question through the local HTTP API.
 - Windows-only option to look toward a visible window whose title contains “Copilot”. This only changes the pet's direction; it does not detect or synchronize Copilot session status. The public `github/app` repository does not contain the desktop app implementation or expose a status event API, so GitHub Copilot requires an external event sender.
 - System-tray controls for showing/hiding pets, importing pets, summoning the whole library, and switching between Simplified Chinese and English. The default follows the system locale; your selection is remembered.（托盘菜单支持简体中文/英语切换，默认跟随系统语言并记住选择。）
 
@@ -37,7 +38,7 @@ Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt
 
 ### Build artifacts from CI
 
-The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag.
+The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag. Release archives and SHA-256 checksum files are also checked in under `dist/` for tagged releases.
 
 ## Pet library and format
 
@@ -68,7 +69,8 @@ Example `pet.json` in the reference project's format:
 }
 ```
 
-`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
+`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays.
+ For distinct horizontal walking animations, optionally define `walkLeft` and/or `walkRight` (also accepted: `walk_left`/`walk_right` or `walk-left`/`walk-right`); At-Pet selects the direction-specific animation while moving and falls back to `walk` when it is missing. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
 On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
 ## Local API
@@ -85,12 +87,15 @@ The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choo
 - `POST /permission` — `{"sessionId":"session-1","agentApp":"claude-code","toolName":"Bash","description":"Run tests"}` to show a permission prompt. The response includes a `requestId`.
 - `GET /permission/{requestId}` — poll for `pending`, `allowed_once`, or `denied`. The first poll after a decision consumes that result; later polls return 404.
 - `DELETE /permission/{requestId}` — cancel a generic pending permission request and dismiss its prompt; Claude HTTP hook requests cannot be cancelled this way.
+- `POST /question` — open a question dialog: `{"agentApp":"my-agent","sessionId":"session-1","question":"Which option should I use?","choices":["A","B"]}`. `agentApp` and `question` are required; `header` and `choices` are optional, and the user can type a custom answer.
+- `GET /question/{requestId}` — poll for `pending`, `answered` (includes `answer`), or `cancelled`; the first poll after a decision consumes the result.
+- `DELETE /question/{requestId}` — cancel the request and dismiss its dialog.
 - `POST /agent-event/claudecode` — accepts Claude Code HTTP hook payloads, including `PermissionRequest`; the permission hook stays open until the user chooses Allow once or Deny.
 - `POST /agent-event/opencode` — accepts events normalized by the included OpenCode V2 plugin.
 
 Agent `event` values map as follows: `thinking`/`model_thinking` → thinking, `tool_start`/`tool_running` → tool, `tool_end` → thinking, permission or approval requests → permission, `work` → work, `review`/`reflection` → review, `completed`/`done` → done, `cancelled`/`aborted` → cancelled, and `error`/`failed` → error. Multiple `sessionId` values are tracked independently; the most recently updated non-subagent session drives the main pets. Set `isSubagent` or `parentSessionId` to mark child sessions; when enabled in Agent Monitoring settings, each gets a separate pet. Terminal animations are shown briefly before the next active session or idle state takes over. Send `idle` or `session_end` to remove a session.
 
-Permission prompts offer only **Allow once** or **Deny**; closing the dialog also denies. Pending requests do not time out or auto-deny. Generic integrations poll the result and enforce it for that tool request. Claude's HTTP hook receives a native allow/deny response after the prompt; the OpenCode plugin waits for the same decision and maps it to OpenCode's permission effect. At-Pet never executes tools, and the Agent Monitoring animation filters do not affect permission prompts.
+Permission prompts offer only **Allow once** or **Deny**; closing the dialog also denies. Potentially dangerous actions receive a visual warning based on heuristic matching; it is advisory only and does not alter the decision options. Pending requests do not time out or auto-deny. Generic integrations poll the result and enforce it for that tool request. Claude's HTTP hook receives a native allow/deny response after the prompt; the OpenCode plugin waits for the same decision and maps it to OpenCode's permission effect. At-Pet never executes tools, and the Agent Monitoring animation filters do not affect permission prompts.
 
 ### Native integrations
 
@@ -115,6 +120,8 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 **OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
 
 **Optional MCP server:** MCP-compatible clients can use the local stdio bridge described in [`integrations/at-pet-mcp/README.md`](integrations/at-pet-mcp/README.md). Its tools report events only when explicitly called; unlike hooks and plugins, MCP does not automatically observe lifecycle events.
+
+For an additional agent integration tutorial, see the [At-Pet Agent integration plugin](https://github.com/Ni-ShuWu/At-Pet_Agent-plugin).
 
 Example PowerShell request:
 
