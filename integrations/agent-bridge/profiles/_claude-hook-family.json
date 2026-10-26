@@ -1,0 +1,44 @@
+{
+  "id": "_claude-hook-family",
+  "description": "Shared field contract for agent hooks that follow the Claude Code hook payload shape. Verified against integrations/agent-plugins/*/bridge.mjs and app/agentadapters/claude-code/adapter.cpp.",
+  "hook": { "paths": ["hook_event_name", "hookEventName", "hook", "event_name"] },
+  "session": ["session_id", "sessionId", "sessionID"],
+  "model": ["model", "model_name"],
+  "toolName": ["tool_name", "toolName"],
+  "cwd": ["cwd", "workspace", "workspace_root"],
+  "message": ["message", "error", "notification.message"],
+  "subagent": {
+    "flag": ["is_subagent", "isSubagent"],
+    "hooks": ["SubagentStart", "SubagentStop"],
+    "idFrom": ["agent_id", "agentId"]
+  },
+  "events": {
+    "sessionstart": { "event": "thinking" },
+    "userpromptsubmit": { "event": "thinking" },
+    "userpromptsubmitted": { "event": "thinking" },
+    "userprompt": { "event": "thinking" },
+    "pretooluse": { "event": "tool_start", "messageFrom": "toolName" },
+    "posttooluse": { "event": "tool_end" },
+    "posttoolusefailure": { "event": "error", "messageFrom": "message" },
+    "erroroccurred": { "event": "error", "messageFrom": "message" },
+    "permissionrequest": { "event": "permission" },
+    "notification": { "event": "permission", "when": { "path": "notification_type", "equals": "permission_prompt" } },
+    "stop": { "event": "completed" },
+    "agentstop": { "event": "completed" },
+    "subagentstart": { "event": "thinking" },
+    "subagentstop": { "event": "completed" },
+    "sessionend": { "event": "session_end" }
+  },
+  "permission": {
+    "hook": "permissionrequest",
+    "toolName": ["tool_name", "toolName"],
+    "description": ["tool_input", "toolInput"],
+    "response": {
+      "style": "hookSpecificOutput",
+      "eventName": "PermissionRequest",
+      "allow": { "behavior": "allow" },
+      "deny": { "behavior": "deny", "message": "Denied in At-Pet." }
+    }
+  },
+  "limits": { "sessionId": 256, "toolName": 160, "message": 180 }
+}

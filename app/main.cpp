@@ -195,6 +195,7 @@ private:
         QString animation;
         QString model;
         QString message;
+        QString source;
         QDateTime updatedAt;
         quint64 sequence = 0;
         bool isSubagent = false;
@@ -725,6 +726,7 @@ private:
         state.animation = animation;
         state.model = event.value("model").toString().left(120);
         state.message = event.value("message").toString().left(180);
+        state.source = event.value("source").toString().left(40);
         state.updatedAt = QDateTime::currentDateTimeUtc();
         state.sequence = ++sessionSequence_;
         state.terminal = terminal;
@@ -838,6 +840,8 @@ private:
                                 {"updatedAt", it->updatedAt.toString(Qt::ISODate)}};
             if (!it->parentSessionId.isEmpty())
                 session.insert("parentSessionId", it->parentSessionId);
+            if (!it->source.isEmpty())
+                session.insert("source", it->source);
             sessions.append(session);
         }
         QJsonArray supportedAgentApps;
@@ -846,6 +850,7 @@ private:
             supportedAgentApps.append(agent.displayName);
             QJsonObject source{{"key", agent.key}, {"displayName", agent.displayName},
                                {"monitorType", agentMonitorTypeId(agent.monitorType)}};
+            source.insert("integration", agentIntegrationId(agent.integration));
             if (agent.monitorType != AgentMonitorType::ExternalHttpApi)
                 source.insert("nativeEndpoint", QStringLiteral("/agent-event/%1").arg(agent.key));
             agentSources.append(source);

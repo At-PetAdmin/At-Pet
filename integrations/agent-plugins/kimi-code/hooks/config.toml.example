@@ -1,0 +1,33 @@
+# Append these blocks to your Kimi Code config.toml.
+# Replace C:/path/to/At-Pet with the absolute path to this repository.
+
+[[hooks]]
+event = "SessionStart"
+matcher = "startup"
+command = "node \"C:/path/to/At-Pet/integrations/agent-bridge/bridge.mjs\" --profile kimi-code"
+timeout = 10
+
+[[hooks]]
+event = "PreToolUse"
+matcher = ""
+command = "node \"C:/path/to/At-Pet/integrations/agent-bridge/bridge.mjs\" --profile kimi-code"
+timeout = 10
+
+[[hooks]]
+event = "PostToolUse"
+matcher = ""
+command = "node \"C:/path/to/At-Pet/integrations/agent-bridge/bridge.mjs\" --profile kimi-code"
+timeout = 10
+
+[[hooks]]
+event = "Stop"
+matcher = ""
+command = "node \"C:/path/to/At-Pet/integrations/agent-bridge/bridge.mjs\" --profile kimi-code"
+timeout = 10
+
+[[hooks]]
+event = "SessionEnd"
+matcher = ""
+command = "node \"C:/path/to/At-Pet/integrations/agent-bridge/bridge.mjs\" --profile kimi-code"
+timeout = 10
+

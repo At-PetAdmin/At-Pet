@@ -1,0 +1,6 @@
+{
+  "id": "qoder",
+  "extends": "_claude-hook-family",
+  "agentApp": "qoder",
+  "description": "Qoder IDE, JetBrains plugin and CLI hooks. PermissionRequest returns decision.behavior, so the full relay is enabled."
+}

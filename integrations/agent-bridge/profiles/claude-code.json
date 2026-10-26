@@ -1,0 +1,11 @@
+{
+  "id": "claude-code",
+  "extends": "_claude-hook-family",
+  "agentApp": "claude-code",
+  "description": "Claude Code HTTP hooks. Mirrors app/agentadapters/claude-code/adapter.cpp so the generic bridge can reproduce the native adapter without touching C++.",
+  "permission": {
+    "hook": "permissionrequest",
+    "title": "Claude Code permission request",
+    "description": ["tool_input"]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "id": "qoder-cn",
+  "extends": "_claude-hook-family",
+  "agentApp": "qoder-cn",
+  "description": "Qoder CN (formerly Tongyi Lingma) hooks. Same event surface as Qoder; prefer a project .qoder/settings.json because the user-level path differs between docs."
+}

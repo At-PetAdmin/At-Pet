@@ -1,0 +1,6 @@
+{
+  "id": "deepseek-harness",
+  "extends": "_claude-hook-family",
+  "agentApp": "deepseek-harness",
+  "description": "DeepSeek Harness hooks."
+}

@@ -10,57 +10,90 @@ enum class AgentMonitorType {
     OpenCodeV2Plugin
 };
 
+// What actually ships in this repository for a given agent. The settings window
+// uses it so a listed agent is never mistaken for a working integration.
+enum class AgentIntegration {
+    BuiltInAdapter,   // native C++ adapter, nothing to configure
+    ProfileShipped,   // bridge/profile included, the agent still needs its hook configured
+    ExternalRequired  // name only; this repository ships no sender yet
+};
+
 struct AgentDefinition {
     QString key;
     QString displayName;
     QString description;
     QStringList aliases;
     AgentMonitorType monitorType = AgentMonitorType::ExternalHttpApi;
+    AgentIntegration integration = AgentIntegration::ExternalRequired;
 };
 
 inline const QVector<AgentDefinition> &agentDefinitions() {
     static const QVector<AgentDefinition> definitions = {
         {QStringLiteral("githubcopilot"), QStringLiteral("GitHub Copilot"),
-         QStringLiteral("GitHub Copilot app; no native status adapter is available, so events require an external HTTP integration"),
+         QStringLiteral("GitHub Copilot CLI; the bridge profile is included, the Copilot app exposes no status API"),
          {QStringLiteral("copilot"), QStringLiteral("githubcopilotchat"),
           QStringLiteral("vscodecopilot"), QStringLiteral("visualstudiocopilot"),
-          QStringLiteral("jetbrainscopilot")}, AgentMonitorType::ExternalHttpApi},
+          QStringLiteral("jetbrainscopilot")}, AgentMonitorType::ExternalHttpApi,
+         AgentIntegration::ProfileShipped},
         {QStringLiteral("zcode"), QStringLiteral("ZCode"),
-         QStringLiteral("ZCode Agent and development assistant"), {QStringLiteral("zcodeassistant")},
-         AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("ZCode CLI hooks"), {QStringLiteral("zcodeassistant")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
+        {QStringLiteral("kimicode"), QStringLiteral("Kimi Code"),
+         QStringLiteral("Kimi Code CLI config.toml hooks"),
+         {QStringLiteral("kimi"), QStringLiteral("kimicli"), QStringLiteral("kimicodecli")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
         {QStringLiteral("deepseekharness"), QStringLiteral("DeepSeek Harness"),
-         QStringLiteral("DeepSeek CLI and local agent workflow harness"),
-         {QStringLiteral("deepseek"), QStringLiteral("deepseekcli")}, AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("DeepSeek Harness hook bridge"),
+         {QStringLiteral("deepseek"), QStringLiteral("deepseekcli")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
         {QStringLiteral("opencode"), QStringLiteral("OpenCode"),
          QStringLiteral("Open-source terminal AI coding assistant"), {QStringLiteral("opencodeai")},
-         AgentMonitorType::OpenCodeV2Plugin},
+         AgentMonitorType::OpenCodeV2Plugin, AgentIntegration::BuiltInAdapter},
         {QStringLiteral("antigravity"), QStringLiteral("Antigravity"),
-         QStringLiteral("Antigravity Agent tools and IDE extensions"), {}, AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("Antigravity agent tools; no sender is bundled yet"), {},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ExternalRequired},
         {QStringLiteral("commandcode"), QStringLiteral("Command Code"),
-         QStringLiteral("CLI command automation agent"), {QStringLiteral("command")},
-         AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("Command Code CLI hooks"), {QStringLiteral("command")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
         {QStringLiteral("claudecode"), QStringLiteral("Claude Code"),
-         QStringLiteral("Anthropic Claude Code CLI and hooks"),
-         {QStringLiteral("claude"), QStringLiteral("claudecli")}, AgentMonitorType::ClaudeCodeHttpHooks},
+         QStringLiteral("Anthropic Claude Code CLI HTTP hooks"),
+         {QStringLiteral("claude"), QStringLiteral("claudecli")},
+         AgentMonitorType::ClaudeCodeHttpHooks, AgentIntegration::BuiltInAdapter},
         {QStringLiteral("openaicodex"), QStringLiteral("OpenAI Codex"),
-         QStringLiteral("OpenAI Codex CLI and agent events"),
+         QStringLiteral("OpenAI Codex CLI hooks and permission requests"),
          {QStringLiteral("codex"), QStringLiteral("codexcli"), QStringLiteral("openaicli")},
-         AgentMonitorType::ExternalHttpApi},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
         {QStringLiteral("geminicli"), QStringLiteral("Gemini CLI"),
-         QStringLiteral("Google Gemini CLI and extensions"),
-         {QStringLiteral("gemini"), QStringLiteral("googlegemini")}, AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("Google Gemini CLI hooks; no sender is bundled yet"),
+         {QStringLiteral("gemini"), QStringLiteral("googlegemini")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ExternalRequired},
         {QStringLiteral("cursor"), QStringLiteral("Cursor"),
-         QStringLiteral("Cursor editor and agent events"), {QStringLiteral("cursorai")},
-         AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("Cursor agent hooks; no sender is bundled yet"), {QStringLiteral("cursorai")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ExternalRequired},
         {QStringLiteral("windsurf"), QStringLiteral("Windsurf"),
-         QStringLiteral("Windsurf editor and agent events"), {QStringLiteral("codeium")},
-         AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("Windsurf agent hooks; no sender is bundled yet"), {QStringLiteral("codeium")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ExternalRequired},
         {QStringLiteral("workbuddy"), QStringLiteral("WorkBuddy"),
-         QStringLiteral("Tencent WorkBuddy agent with CodeBuddy-compatible hooks"), {QStringLiteral("codebuddy")},
-         AgentMonitorType::ExternalHttpApi},
+         QStringLiteral("Tencent WorkBuddy with CodeBuddy-compatible hooks"), {QStringLiteral("codebuddy")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
         {QStringLiteral("penguinharness"), QStringLiteral("PenguinHarness"),
-         QStringLiteral("PenguinHarness agent platform hooks"), {QStringLiteral("penguin")},
-         AgentMonitorType::ExternalHttpApi}
+         QStringLiteral("PenguinHarness plugin hooks"), {QStringLiteral("penguin")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
+        {QStringLiteral("trae"), QStringLiteral("Trae"),
+         QStringLiteral("Trae IDE and Trae SOLO hooks; observation only, approvals stay in Trae"),
+         {QStringLiteral("traeai"), QStringLiteral("traesolo")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
+        {QStringLiteral("qoder"), QStringLiteral("Qoder"),
+         QStringLiteral("Qoder IDE, JetBrains plugin and CLI hooks"), {QStringLiteral("qoderai")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
+        {QStringLiteral("qodercn"), QStringLiteral("Qoder CN"),
+         QStringLiteral("Qoder CN, formerly Tongyi Lingma"),
+         {QStringLiteral("lingma"), QStringLiteral("tongyilingma")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
+        {QStringLiteral("qwencode"), QStringLiteral("Qwen Code"),
+         QStringLiteral("Alibaba Qwen Code CLI hooks"),
+         {QStringLiteral("qwen"), QStringLiteral("qwencli"), QStringLiteral("qwencodecli")},
+         AgentMonitorType::ExternalHttpApi, AgentIntegration::ProfileShipped},
     };
     return definitions;
 }
@@ -95,6 +128,18 @@ inline QString agentMonitorTypeId(AgentMonitorType type) {
         return QStringLiteral("opencode_v2_plugin");
     }
     return QStringLiteral("external_http_api");
+}
+
+inline QString agentIntegrationId(AgentIntegration integration) {
+    switch (integration) {
+    case AgentIntegration::BuiltInAdapter:
+        return QStringLiteral("built_in_adapter");
+    case AgentIntegration::ProfileShipped:
+        return QStringLiteral("bridge_profile");
+    case AgentIntegration::ExternalRequired:
+        return QStringLiteral("external_required");
+    }
+    return QStringLiteral("external_required");
 }
 
 inline const AgentDefinition *agentDefinitionFor(const QString &name) {

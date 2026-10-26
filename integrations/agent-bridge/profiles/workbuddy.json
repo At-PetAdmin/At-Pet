@@ -1,0 +1,6 @@
+{
+  "id": "workbuddy",
+  "extends": "_claude-hook-family",
+  "agentApp": "workbuddy",
+  "description": "WorkBuddy / CodeBuddy compatible hooks."
+}

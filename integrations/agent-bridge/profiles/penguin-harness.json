@@ -1,0 +1,6 @@
+{
+  "id": "penguin-harness",
+  "extends": "_claude-hook-family",
+  "agentApp": "penguin-harness",
+  "description": "PenguinHarness plugin hooks."
+}

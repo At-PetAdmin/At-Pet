@@ -1,0 +1,13 @@
+{
+  "name": "at-pet-agent-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Profile-driven bridge that turns agent hook payloads into At-Pet events.",
+  "scripts": {
+	"test": "node --test test/bridge.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "id": "openai-codex",
+  "extends": "_claude-hook-family",
+  "agentApp": "openai-codex",
+  "description": "OpenAI Codex hooks (integrations/agent-plugins/openai-codex/hooks/hooks.json)."
+}

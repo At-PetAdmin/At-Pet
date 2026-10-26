@@ -4,56 +4,109 @@
 <context>
     <name>AgentRegistry</name>
     <message>
-        <source>GitHub Copilot app; no native status adapter is available, so events require an external HTTP integration</source>
-        <translation type="vanished">GitHub Copilot 应用目前没有内置状态适配器；需要外部 HTTP 集成发送事件。</translation>
+        <location filename="../app/settingsdialog.cpp" line="82"/>
+        <source>Integration: built-in adapter, works as soon as the agent runs</source>
+        <translation>集成方式：内置适配器，Agent 一运行即可上报</translation>
     </message>
     <message>
-        <source>ZCode Agent and development assistant</source>
-        <translation type="vanished">ZCode Agent 与开发助手</translation>
+        <location filename="../app/settingsdialog.cpp" line="84"/>
+        <source>Integration: bridge profile included; configure the agent to send events</source>
+        <translation>集成方式：已附带桥接 profile，需在 Agent 侧配置发送事件</translation>
     </message>
     <message>
-        <source>DeepSeek CLI and local agent workflow harness</source>
-        <translation type="vanished">DeepSeek CLI 与本地 Agent 工作流工具</translation>
+        <location filename="../app/settingsdialog.cpp" line="86"/>
+        <source>Integration: no sender bundled; stays silent until one is configured</source>
+        <translation>集成方式：尚未内置发送端，配置发送端前不会有事件</translation>
     </message>
     <message>
+        <location filename="../app/agentregistry.h" line="33"/>
+        <source>GitHub Copilot CLI; the bridge profile is included, the Copilot app exposes no status API</source>
+        <translation>GitHub Copilot CLI；已附带桥接 profile，Copilot 应用本身不暴露状态 API</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="39"/>
+        <source>ZCode CLI hooks</source>
+        <translation>ZCode CLI Hook</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="42"/>
+        <source>Kimi Code CLI config.toml hooks</source>
+        <translation>Kimi Code CLI 的 config.toml Hook</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="46"/>
+        <source>DeepSeek Harness hook bridge</source>
+        <translation>DeepSeek Harness Hook 桥接</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="50"/>
         <source>Open-source terminal AI coding assistant</source>
-        <translation type="vanished">开源终端 AI 编程助手</translation>
+        <translation>开源终端 AI 编程助手</translation>
     </message>
     <message>
-        <source>Antigravity Agent tools and IDE extensions</source>
-        <translation type="vanished">Antigravity Agent 工具及 IDE 扩展</translation>
+        <location filename="../app/agentregistry.h" line="53"/>
+        <source>Antigravity agent tools; no sender is bundled yet</source>
+        <translation>Antigravity Agent 工具；尚未内置发送端</translation>
     </message>
     <message>
-        <source>CLI command automation agent</source>
-        <translation type="vanished">命令行自动化 Agent</translation>
+        <location filename="../app/agentregistry.h" line="56"/>
+        <source>Command Code CLI hooks</source>
+        <translation>Command Code CLI Hook</translation>
     </message>
     <message>
-        <source>Anthropic Claude Code CLI and hooks</source>
-        <translation type="vanished">Anthropic Claude Code 命令行工具及 hooks</translation>
+        <location filename="../app/agentregistry.h" line="59"/>
+        <source>Anthropic Claude Code CLI HTTP hooks</source>
+        <translation>Anthropic Claude Code CLI HTTP Hook</translation>
     </message>
     <message>
-        <source>OpenAI Codex CLI and agent events</source>
-        <translation type="vanished">OpenAI Codex CLI 与 Agent 事件</translation>
+        <location filename="../app/agentregistry.h" line="63"/>
+        <source>OpenAI Codex CLI hooks and permission requests</source>
+        <translation>OpenAI Codex CLI Hook 与权限请求</translation>
     </message>
     <message>
-        <source>Google Gemini CLI and extensions</source>
-        <translation type="vanished">Google Gemini CLI 与扩展</translation>
+        <location filename="../app/agentregistry.h" line="67"/>
+        <source>Google Gemini CLI hooks; no sender is bundled yet</source>
+        <translation>Google Gemini CLI Hook；尚未内置发送端</translation>
     </message>
     <message>
-        <source>Cursor editor and agent events</source>
-        <translation type="vanished">Cursor 编辑器与 Agent 事件</translation>
+        <location filename="../app/agentregistry.h" line="71"/>
+        <source>Cursor agent hooks; no sender is bundled yet</source>
+        <translation>Cursor Agent Hook；尚未内置发送端</translation>
     </message>
     <message>
-        <source>Windsurf editor and agent events</source>
-        <translation type="vanished">Windsurf 编辑器与 Agent 事件</translation>
+        <location filename="../app/agentregistry.h" line="74"/>
+        <source>Windsurf agent hooks; no sender is bundled yet</source>
+        <translation>Windsurf Agent Hook；尚未内置发送端</translation>
     </message>
     <message>
-        <source>Tencent WorkBuddy agent with CodeBuddy-compatible hooks</source>
-        <translation type="vanished">腾讯 WorkBuddy Agent，兼容 CodeBuddy Hook</translation>
+        <location filename="../app/agentregistry.h" line="77"/>
+        <source>Tencent WorkBuddy with CodeBuddy-compatible hooks</source>
+        <translation>腾讯 WorkBuddy，兼容 CodeBuddy Hook</translation>
     </message>
     <message>
-        <source>PenguinHarness agent platform hooks</source>
-        <translation type="vanished">PenguinHarness Agent 平台 Hook</translation>
+        <location filename="../app/agentregistry.h" line="80"/>
+        <source>PenguinHarness plugin hooks</source>
+        <translation>PenguinHarness 插件 Hook</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="83"/>
+        <source>Trae IDE and Trae SOLO hooks; observation only, approvals stay in Trae</source>
+        <translation>Trae IDE 与 Trae SOLO Hook；仅观察，授权仍在 Trae 内完成</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="87"/>
+        <source>Qoder IDE, JetBrains plugin and CLI hooks</source>
+        <translation>Qoder IDE、JetBrains 插件与 CLI Hook</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="90"/>
+        <source>Qoder CN, formerly Tongyi Lingma</source>
+        <translation>Qoder CN（原通义灵码）</translation>
+    </message>
+    <message>
+        <location filename="../app/agentregistry.h" line="94"/>
+        <source>Alibaba Qwen Code CLI hooks</source>
+        <translation>阿里 Qwen Code CLI Hook</translation>
     </message>
 </context>
 <context>
