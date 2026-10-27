@@ -28,6 +28,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -37,6 +38,7 @@
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTabWidget>
+#include <QDialogButtonBox>
 #include <QVBoxLayout>
 #include <QUrl>
 #include <QtMath>
@@ -44,6 +46,16 @@
 namespace {
 QString petLibraryPath() {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
+}
+
+bool lookAtMouseSetting() {
+    QSettings settings;
+    if (settings.contains(QStringLiteral("pet/lookAtMouse")))
+        return settings.value(QStringLiteral("pet/lookAtMouse")).toBool();
+    const bool legacy = settings.value(QStringLiteral("pet/lookAtCopilot"), false).toBool();
+    settings.setValue(QStringLiteral("pet/lookAtMouse"), legacy);
+    settings.remove(QStringLiteral("pet/lookAtCopilot"));
+    return legacy;
 }
 
 QString animationFpsKey(const QString &petId, const QString &animation) {
@@ -404,6 +416,9 @@ void SettingsDialog::setupUi() {
     auto *btnActionLayout = new QHBoxLayout;
     btnDeletePet_ = new QPushButton(tr("Delete Pet"), petLibraryTab);
     btnDeletePet_->setObjectName("dangerBtn");
+    btnEditPetJson_ = new QPushButton(tr("Edit pet.json…"), petLibraryTab);
+    btnEditPetJson_->setToolTip(tr("Edit the selected pet's configuration; changes reload instantly."));
+    btnActionLayout->addWidget(btnEditPetJson_);
     btnActionLayout->addWidget(btnDeletePet_);
     leftCol->addLayout(btnActionLayout);
 
@@ -525,29 +540,33 @@ void SettingsDialog::setupUi() {
     themeCombo_->addItem(tr("Dark"), QStringLiteral("dark"));
     uiForm->addWidget(themeCombo_, 1, 1);
 
-    lookAtCopilotCheck_ = new QCheckBox(tr("Look toward a visible Copilot window (direction only; Windows)"), uiGroup);
-    uiForm->addWidget(lookAtCopilotCheck_, 2, 0, 1, 2);
+    lookAtMouseCheck_ = new QCheckBox(tr("Eyes follow the mouse cursor (Windows)"), uiGroup);
+    uiForm->addWidget(lookAtMouseCheck_, 2, 0, 1, 2);
+
+    autoDndCheck_ = new QCheckBox(tr("Do not disturb automatically in full-screen apps (shrink to the screen edge)"), uiGroup);
+    autoDndCheck_->setToolTip(tr("When a full-screen game or editor is in the foreground, the pet shrinks into a small\nbubble at the screen edge. Summon it again from the tray icon."));
+    uiForm->addWidget(autoDndCheck_, 3, 0, 1, 2);
 
     gravityCheck_ = new QCheckBox(tr("Enable gravity (pet falls after being dragged)"), uiGroup);
-    uiForm->addWidget(gravityCheck_, 3, 0, 1, 2);
+    uiForm->addWidget(gravityCheck_, 4, 0, 1, 2);
     gravityScaleLabel_ = new QLabel(tr("Gravity strength:"), uiGroup);
-    uiForm->addWidget(gravityScaleLabel_, 4, 0);
+    uiForm->addWidget(gravityScaleLabel_, 5, 0);
     gravityScaleSpin_ = new QDoubleSpinBox(uiGroup);
     gravityScaleSpin_->setRange(0.1, 3.0);
     gravityScaleSpin_->setSingleStep(0.1);
     gravityScaleSpin_->setDecimals(2);
     gravityScaleSpin_->setValue(1.0);
     gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
-    uiForm->addWidget(gravityScaleSpin_, 4, 1);
+    uiForm->addWidget(gravityScaleSpin_, 5, 1);
     completionSoundCheck_ = new QCheckBox(tr("Play a sound when an Agent task completes"), uiGroup);
-    uiForm->addWidget(completionSoundCheck_, 5, 0, 1, 2);
+    uiForm->addWidget(completionSoundCheck_, 6, 0, 1, 2);
 
     apiPortLabel_ = new QLabel(tr("Local API Port:"), uiGroup);
-    uiForm->addWidget(apiPortLabel_, 6, 0);
+    uiForm->addWidget(apiPortLabel_, 7, 0);
     apiPortSpin_ = new QSpinBox(uiGroup);
     apiPortSpin_->setRange(1024, 65535);
     apiPortSpin_->setValue(8765);
-    uiForm->addWidget(apiPortSpin_, 6, 1);
+    uiForm->addWidget(apiPortSpin_, 7, 1);
 
     generalLayout->addWidget(uiGroup);
     generalLayout->addStretch(1);
@@ -572,6 +591,7 @@ void SettingsDialog::setupUi() {
     connect(btnImportFiles_, &QPushButton::clicked, this, &SettingsDialog::onImportConfigAndSheet);
     connect(btnImportFolder_, &QPushButton::clicked, this, &SettingsDialog::onImportFolder);
     connect(btnDeletePet_, &QPushButton::clicked, this, &SettingsDialog::onDeletePet);
+    connect(btnEditPetJson_, &QPushButton::clicked, this, &SettingsDialog::onEditPetJson);
     connect(btnApplyPet_, &QPushButton::clicked, this, &SettingsDialog::onApplyAsActivePet);
     connect(animCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         if (index >= 0)
@@ -599,7 +619,8 @@ void SettingsDialog::loadSettings() {
     const int themeIdx = themeCombo_->findData(theme);
     if (themeIdx >= 0) themeCombo_->setCurrentIndex(themeIdx);
 
-    lookAtCopilotCheck_->setChecked(settings.value("pet/lookAtCopilot", false).toBool());
+    lookAtMouseCheck_->setChecked(lookAtMouseSetting());
+    autoDndCheck_->setChecked(settings.value("pet/autoDoNotDisturb", true).toBool());
     gravityCheck_->setChecked(settings.value("pet/gravity", false).toBool());
     gravityScaleSpin_->setValue(settings.value("pet/gravityScale", 1.0).toDouble());
     completionSoundCheck_->setChecked(settings.value("feedback/completionSound", true).toBool());
@@ -627,14 +648,16 @@ void SettingsDialog::onSaveGeneralSettings() {
     const QString newLang = languageCombo_->currentData().toString();
     settings.setValue("ui/language", newLang);
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
-    settings.setValue("pet/lookAtCopilot", lookAtCopilotCheck_->isChecked());
+    settings.setValue("pet/lookAtMouse", lookAtMouseCheck_->isChecked());
+    settings.setValue("pet/autoDoNotDisturb", autoDndCheck_->isChecked());
     settings.setValue("pet/gravity", gravityCheck_->isChecked());
     settings.setValue("pet/gravityScale", gravityScaleSpin_->value());
     settings.setValue("feedback/completionSound", completionSoundCheck_->isChecked());
     settings.setValue("api/port", apiPortSpin_->value());
 
     emit languageChanged(newLang);
-    emit lookAtCopilotToggled(lookAtCopilotCheck_->isChecked());
+    emit lookAtMouseToggled(lookAtMouseCheck_->isChecked());
+    emit autoDoNotDisturbToggled(autoDndCheck_->isChecked());
     emit gravityToggled(gravityCheck_->isChecked());
     emit gravityScaleChanged(gravityScaleSpin_->value());
     emit completionSoundToggled(completionSoundCheck_->isChecked());
@@ -693,6 +716,7 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
     if (!current) return;
     const QString id = current->data(Qt::UserRole).toString();
     btnDeletePet_->setEnabled(id != "default");
+    btnEditPetJson_->setEnabled(!id.isEmpty() && id != "default");
     petInfoBaseText_ = tr("Pet details are unavailable.");
 
     if (id == "default" || id.isEmpty()) {
@@ -997,6 +1021,63 @@ void SettingsDialog::onDeletePet() {
     refreshPetsList();
 }
 
+void SettingsDialog::onEditPetJson() {
+    const QString id = currentSelectedPetId();
+    if (id.isEmpty() || id == "default") return;
+    const QString path = QDir(QDir(petLibraryPath()).filePath(id)).filePath("pet.json");
+    QFile source(path);
+    if (!source.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, tr("Edit pet.json"),
+            tr("Could not open %1 for editing.").arg(path));
+        return;
+    }
+    QString text = QString::fromUtf8(source.readAll());
+    source.close();
+    if (text.startsWith(QChar(0xfeff))) text.remove(0, 1);
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Edit %1").arg(path));
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *hint = new QLabel(tr("Animations, sprite layout and random quotes (\"quotes\") are read from this file. "
+                               "Saving reloads the pet instantly."), &dialog);
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+    auto *editor = new QPlainTextEdit(text, &dialog);
+    QFont mono(QStringLiteral("Consolas"));
+    mono.setStyleHint(QFont::Monospace);
+    editor->setFont(mono);
+    dialog.resize(760, 560);
+    layout->addWidget(editor, 1);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&dialog, editor] {
+        QJsonParseError error;
+        const QJsonDocument document = QJsonDocument::fromJson(editor->toPlainText().toUtf8(), &error);
+        if (error.error != QJsonParseError::NoError || !document.isObject()) {
+            const QString detail = error.error == QJsonParseError::NoError
+                ? tr("The configuration must be a JSON object.")
+                : tr("Invalid JSON at offset %1: %2").arg(error.offset).arg(error.errorString());
+            QMessageBox::warning(&dialog, tr("Edit pet.json"), detail);
+            return;
+        }
+        dialog.accept();
+    });
+
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    QSaveFile target(path);
+    if (!target.open(QIODevice::WriteOnly) || target.write(editor->toPlainText().toUtf8()) < 0 || !target.commit()) {
+        QMessageBox::warning(this, tr("Edit pet.json"),
+            tr("Could not save %1.").arg(path));
+        return;
+    }
+    QSettings().sync();
+    importStatusLabel_->setText(tr("Saved %1. The pet reloads automatically.").arg(QFileInfo(path).fileName()));
+    importStatusLabel_->show();
+    onPetSelected(petList_->currentItem(), nullptr);
+}
+
 void SettingsDialog::updateAgentDescriptions() {
     for (const AgentDefinition &agent : agentDefinitions()) {
         QLabel *label = agentDescriptionLabels_.value(agent.key, nullptr);
@@ -1020,6 +1101,8 @@ void SettingsDialog::retranslateUi() {
     btnImportFiles_->setText(tr("Import Config + Sheet…"));
     btnImportFolder_->setText(tr("Import Folder…"));
     btnDeletePet_->setText(tr("Delete Pet"));
+    btnEditPetJson_->setText(tr("Edit pet.json…"));
+    btnEditPetJson_->setToolTip(tr("Edit the selected pet's configuration; changes reload instantly."));
     previewLabel_->setText(tr("Pet Animation Preview:"));
     actionPreviewLabel_->setText(tr("Action Preview:"));
     fpsLabel_->setText(tr("FPS:"));
@@ -1044,7 +1127,9 @@ void SettingsDialog::retranslateUi() {
     themeCombo_->setItemText(0, tr("Follow System"));
     themeCombo_->setItemText(1, tr("Light"));
     themeCombo_->setItemText(2, tr("Dark"));
-    lookAtCopilotCheck_->setText(tr("Look toward a visible Copilot window (direction only; Windows)"));
+    lookAtMouseCheck_->setText(tr("Eyes follow the mouse cursor (Windows)"));
+    autoDndCheck_->setText(tr("Do not disturb automatically in full-screen apps (shrink to the screen edge)"));
+    autoDndCheck_->setToolTip(tr("When a full-screen game or editor is in the foreground, the pet shrinks into a small\nbubble at the screen edge. Summon it again from the tray icon."));
     gravityScaleLabel_->setText(tr("Gravity strength:"));
     gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
     apiPortLabel_->setText(tr("Local API Port:"));

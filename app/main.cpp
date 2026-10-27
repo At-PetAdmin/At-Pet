@@ -7,6 +7,7 @@
 
 #include <QActionGroup>
 #include <QApplication>
+#include <QCursor>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -26,6 +27,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QLineEdit>
 #include <QLocale>
@@ -109,24 +111,53 @@ QIcon appIcon() {
     return QIcon(QStringLiteral(":/branding/logo.png"));
 }
 
-#ifdef Q_OS_WIN
-struct CopilotWindowInfo {
-    HWND window = nullptr;
-    RECT bounds{};
-};
+bool lookAtMouseSetting() {
+    QSettings settings;
+    if (settings.contains(QStringLiteral("pet/lookAtMouse")))
+        return settings.value(QStringLiteral("pet/lookAtMouse")).toBool();
+    const bool legacy = settings.value(QStringLiteral("pet/lookAtCopilot"), false).toBool();
+    settings.setValue(QStringLiteral("pet/lookAtMouse"), legacy);
+    settings.remove(QStringLiteral("pet/lookAtCopilot"));
+    return legacy;
+}
 
-BOOL CALLBACK findCopilotWindow(HWND window, LPARAM data) {
-    if (!IsWindowVisible(window))
-        return TRUE;
-    wchar_t title[256]{};
-    GetWindowTextW(window, title, 256);
-    if (QString::fromWCharArray(title).contains(QStringLiteral("Copilot"), Qt::CaseInsensitive)) {
-        auto *info = reinterpret_cast<CopilotWindowInfo *>(data);
-        info->window = window;
-        GetWindowRect(window, &info->bounds);
-        return FALSE;
-    }
-    return TRUE;
+#ifdef Q_OS_WIN
+QString windowClassName(HWND window) {
+    wchar_t name[256]{};
+    GetClassNameW(window, name, 256);
+    return QString::fromWCharArray(name);
+}
+
+bool isShellSurface(HWND window) {
+    static const QStringList classes = {
+        QStringLiteral("Progman"), QStringLiteral("WorkerW"),
+        QStringLiteral("Shell_TrayWnd"), QStringLiteral("Shell_SecondaryTrayWnd"),
+        QStringLiteral("Windows.UI.Core.CoreWindow"),
+        QStringLiteral("XamlExplorerHostIslandWindow"),
+        QStringLiteral("MultitaskingViewFrame"), QStringLiteral("ForegroundStaging")
+    };
+    return classes.contains(windowClassName(window));
+}
+
+bool foregroundWindowIsFullscreen() {
+    HWND window = GetForegroundWindow();
+    if (!window || !IsWindowVisible(window) || IsIconic(window) || isShellSurface(window))
+        return false;
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == GetCurrentProcessId())
+        return false;
+    RECT bounds{};
+    if (!GetWindowRect(window, &bounds))
+        return false;
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info))
+        return false;
+    const RECT monitor = info.rcMonitor;
+    constexpr LONG tolerance = 3;
+    return bounds.left <= monitor.left + tolerance && bounds.top <= monitor.top + tolerance &&
+           bounds.right >= monitor.right - tolerance && bounds.bottom >= monitor.bottom - tolerance;
 }
 #endif
 }
@@ -146,6 +177,7 @@ public:
         gravityEnabled_ = QSettings().value("pet/gravity", false).toBool();
         gravityScale_ = qBound(0.1, QSettings().value("pet/gravityScale", 1.0).toDouble(), 3.0);
         completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
+        autoDoNotDisturbEnabled_ = QSettings().value("pet/autoDoNotDisturb", true).toBool();
         api_ = new HttpApi([this] { return stateJson(); }, this);
         connect(api_, &HttpApi::eventReceived, this, &PetController::onAgentEvent);
         connect(api_, &HttpApi::permissionRequestReceived, this, &PetController::onPermissionRequest);
@@ -175,9 +207,15 @@ public:
 
         createTrayIcon();
         startSelectedPet();
-        lookTimer_.setInterval(2000);
-        connect(&lookTimer_, &QTimer::timeout, this, &PetController::updateLookDirection);
+        lookTimer_.setInterval(120);
+        connect(&lookTimer_, &QTimer::timeout, this, &PetController::updateLookTarget);
         lookTimer_.start();
+        fullscreenTimer_.setInterval(900);
+        connect(&fullscreenTimer_, &QTimer::timeout, this, &PetController::updateFullscreenState);
+        fullscreenTimer_.start();
+        housekeepingTimer_.setInterval(5000);
+        connect(&housekeepingTimer_, &QTimer::timeout, this, &PetController::pruneStaleSessions);
+        housekeepingTimer_.start();
     }
 
     ~PetController() override {
@@ -229,7 +267,7 @@ private:
     PetWindow *createPet(const QString &directory, const QPoint &position) {
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
-        pet->setLookAtCopilot(QSettings().value("pet/lookAtCopilot", false).toBool());
+        pet->setLookAtMouse(lookAtMouseSetting());
         pet->setFreeMovementEnabled(freeMovementEnabled_);
         pet->setGravityScale(gravityScale_);
         pet->setGravityEnabled(gravityEnabled_);
@@ -243,7 +281,8 @@ private:
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
             pet->setAnimation("interact");
-            pet->setSpeech(tr("Hi! Double-click to chat."));
+            const QString quote = pet->randomQuote();
+            pet->setSpeech(quote.isEmpty() ? tr("Hi! Double-click to chat.") : quote);
             QTimer::singleShot(1200, pet, [this, pet] {
                 if (pet->animation() == "interact")
                     pet->setAnimation("idle");
@@ -265,9 +304,13 @@ private:
         connect(pet, &PetWindow::importFolderRequested, this, &PetController::importPetFolder);
         connect(pet, &PetWindow::summonAllRequested, this, &PetController::summonAll);
         connect(pet, &PetWindow::deleteRequested, this, &PetController::deletePet);
-        connect(pet, &PetWindow::lookAtToggled, pet, [pet](bool enabled) {
-            QSettings().setValue("pet/lookAtCopilot", enabled);
-            pet->setLookAtCopilot(enabled);
+        connect(pet, &PetWindow::lookAtMouseToggled, pet, [pet](bool enabled) {
+            QSettings().setValue(QStringLiteral("pet/lookAtMouse"), enabled);
+            pet->setLookAtMouse(enabled);
+        });
+        connect(pet, &PetWindow::doNotDisturbToggled, this, [this](bool enabled) {
+            if (syncingDoNotDisturb_) return;
+            setManualDoNotDisturb(enabled);
         });
         connect(pet, &PetWindow::freeMovementToggled, this, &PetController::setFreeMovementEnabled);
         connect(pet, &PetWindow::gravityToggled, this, &PetController::setGravityEnabled);
@@ -286,6 +329,7 @@ private:
         });
         connect(pet, &QObject::destroyed, this, [this] { publishState(); });
         pet->show();
+        applyDoNotDisturbTo(pet);
         publishState();
         return pet;
     }
@@ -298,8 +342,13 @@ private:
             connect(settingsDialog_, &SettingsDialog::languageChanged, this, [this](const QString &language) {
                 setLanguage(language);
             });
-            connect(settingsDialog_, &SettingsDialog::lookAtCopilotToggled, this, [this](bool enabled) {
-                for (PetWindow *pet : visiblePets()) pet->setLookAtCopilot(enabled);
+            connect(settingsDialog_, &SettingsDialog::lookAtMouseToggled, this, [this](bool enabled) {
+                for (PetWindow *pet : visiblePets()) pet->setLookAtMouse(enabled);
+            });
+            connect(settingsDialog_, &SettingsDialog::autoDoNotDisturbToggled, this, [this](bool enabled) {
+                autoDoNotDisturbEnabled_ = enabled;
+                QSettings().setValue(QStringLiteral("pet/autoDoNotDisturb"), enabled);
+                applyDoNotDisturb();
             });
             connect(settingsDialog_, &SettingsDialog::gravityToggled, this, &PetController::setGravityEnabled);
             connect(settingsDialog_, &SettingsDialog::gravityScaleChanged, this, &PetController::setGravityScale);
@@ -548,6 +597,7 @@ private:
     }
 
     void summonAll() {
+        releaseDoNotDisturb();
         QDir library(petLibraryPath());
         const QFileInfoList directories = library.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         QVector<QString> validPets;
@@ -864,18 +914,15 @@ private:
         if (api_) api_->publishState();
     }
 
-    void updateLookDirection() {
-#ifdef Q_OS_WIN
-        CopilotWindowInfo info;
-        EnumWindows(findCopilotWindow, reinterpret_cast<LPARAM>(&info));
-        if (info.window) {
-            for (PetWindow *pet : visiblePets()) {
-                if (!pet->isVisible()) continue;
-                const bool faceLeft = (info.bounds.left + info.bounds.right) / 2 < pet->frameGeometry().center().x();
-                pet->setLookDirection(faceLeft);
-            }
+    void updateLookTarget() {
+        const QPoint cursor = QCursor::pos();
+        for (PetWindow *pet : visiblePets()) {
+            if (!pet->isVisible() || !pet->lookAtMouse()) continue;
+            pet->setLookTarget(cursor);
         }
-#endif
+    }
+
+    void pruneStaleSessions() {
         const QDateTime cutoff = QDateTime::currentDateTimeUtc().addSecs(-1800);
         bool removedStaleSession = false;
         for (auto it = sessions_.begin(); it != sessions_.end();) {
@@ -888,6 +935,70 @@ private:
         }
         if (removedStaleSession)
             applySessionAnimation();
+    }
+
+    void updateFullscreenState() {
+#ifdef Q_OS_WIN
+        const bool fullscreen = foregroundWindowIsFullscreen();
+#else
+        const bool fullscreen = false;
+#endif
+        fullscreenTicks_ = fullscreen ? qMin(fullscreenTicks_ + 1, 2) : 0;
+        const bool active = fullscreenTicks_ >= 2;
+        if (active == fullscreenActive_)
+            return;
+        fullscreenActive_ = active;
+        if (!active)
+            dndSuppressed_ = false;
+        applyDoNotDisturb();
+    }
+
+    bool doNotDisturbActive() const {
+        return manualDoNotDisturb_ ||
+            (autoDoNotDisturbEnabled_ && fullscreenActive_ && !dndSuppressed_);
+    }
+
+    void applyDoNotDisturb() {
+        const bool active = doNotDisturbActive();
+        if (active == doNotDisturbActive_)
+            return;
+        doNotDisturbActive_ = active;
+        for (PetWindow *pet : visiblePets())
+            applyDoNotDisturbTo(pet);
+    }
+
+    void applyDoNotDisturbTo(PetWindow *pet) {
+        if (!pet) return;
+        const bool previous = syncingDoNotDisturb_;
+        syncingDoNotDisturb_ = true;
+        pet->setDoNotDisturb(doNotDisturbActive_);
+        syncingDoNotDisturb_ = previous;
+    }
+
+    void setManualDoNotDisturb(bool enabled) {
+        manualDoNotDisturb_ = enabled;
+        dndSuppressed_ = !enabled && fullscreenActive_;
+        if (dndAction_ && dndAction_->isChecked() != enabled) {
+            const QSignalBlocker blocker(dndAction_);
+            dndAction_->setChecked(enabled);
+        }
+        applyDoNotDisturb();
+    }
+
+    void releaseDoNotDisturb() {
+        manualDoNotDisturb_ = false;
+        dndSuppressed_ = fullscreenActive_;
+        if (dndAction_ && dndAction_->isChecked()) {
+            const QSignalBlocker blocker(dndAction_);
+            dndAction_->setChecked(false);
+        }
+        applyDoNotDisturb();
+    }
+
+    void summonPets() {
+        releaseDoNotDisturb();
+        for (PetWindow *pet : visiblePets()) pet->show();
+        if (visiblePets().isEmpty()) startSelectedPet();
     }
 
     void setLanguage(const QString &language, bool persist = true) {
@@ -918,11 +1029,14 @@ private:
         tray_->setToolTip(tr("At-Pet — local agent companion"));
         QMenu *oldMenu = trayMenu_;
         trayMenu_ = new QMenu;
-        trayMenu_->addAction(tr("Summon selected pet"), this, [this] {
-            for (PetWindow *pet : visiblePets()) pet->show();
-            if (visiblePets().isEmpty()) startSelectedPet();
-        });
+        trayMenu_->addAction(tr("Summon selected pet"), this, &PetController::summonPets);
         trayMenu_->addAction(tr("Summon all pets"), this, &PetController::summonAll);
+        dndAction_ = trayMenu_->addAction(tr("Do not disturb"));
+        dndAction_->setCheckable(true);
+        dndAction_->setChecked(manualDoNotDisturb_);
+        connect(dndAction_, &QAction::toggled, this, [this](bool enabled) {
+            setManualDoNotDisturb(enabled);
+        });
         trayMenu_->addAction(tr("Import config + spritesheet…"), this, &PetController::importPet);
         trayMenu_->addAction(tr("Import pet folder…"), this, &PetController::importPetFolder);
         trayMenu_->addAction(tr("Settings & Library…"), this, &PetController::showSettingsDialog);
@@ -965,6 +1079,14 @@ private:
     bool gravityEnabled_ = false;
     qreal gravityScale_ = 1.0;
     bool completionSoundEnabled_ = true;
+    bool autoDoNotDisturbEnabled_ = true;
+    bool manualDoNotDisturb_ = false;
+    bool doNotDisturbActive_ = false;
+    bool fullscreenActive_ = false;
+    bool dndSuppressed_ = false;
+    bool syncingDoNotDisturb_ = false;
+    int fullscreenTicks_ = 0;
+    QAction *dndAction_ = nullptr;
     QVector<QPointer<PetWindow>> pets_;
     QHash<QString, QPointer<PetWindow>> subagentPetWindows_;
     QHash<QString, SessionState> sessions_;
@@ -976,6 +1098,8 @@ private:
     QPointer<QuestionDialog> questionDialog_;
     QString currentQuestionRequestId_;
     QTimer lookTimer_;
+    QTimer fullscreenTimer_;
+    QTimer housekeepingTimer_;
     QPointer<SettingsDialog> settingsDialog_;
 };
 
