@@ -39,7 +39,7 @@ if(WIN32)
     configure_file(
         assets/branding/app-icon.rc.in
         "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc"
-        COPYONLY
+        @ONLY
     )
     configure_file(
         assets/branding/app-icon.ico

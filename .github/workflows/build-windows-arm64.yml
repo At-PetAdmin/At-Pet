@@ -78,6 +78,41 @@ jobs:
             -DQt6WidgetsTools_DIR="$widgetsToolsDir"
           cmake --build build-arm64 --parallel
 
+      - name: Sign executable
+        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+        shell: pwsh
+        env:
+          CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:CERT_PASSWORD) {
+            throw 'WINDOWS_CERT_PASSWORD must be set when WINDOWS_CERT_PFX_BASE64 is configured.'
+          }
+
+          $signtool = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin') -Filter 'signtool.exe' -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Directory.Name -eq 'x64' -and ($_.Directory.Parent.Name -as [version]) } |
+            Sort-Object { [version]$_.Directory.Parent.Name } -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw 'signtool.exe was not found in the Windows SDK.' }
+
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+            $signed = $false
+            foreach ($timestamp in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com')) {
+              & $signtool sign /f $pfx /p $env:CERT_PASSWORD /fd SHA256 /tr $timestamp /td SHA256 'build-arm64\at-pet.exe'
+              if ($LASTEXITCODE -eq 0) { $signed = $true; break }
+            }
+            if (-not $signed) { throw 'signtool could not sign at-pet.exe.' }
+
+            & $signtool verify /pa 'build-arm64\at-pet.exe'
+            if ($LASTEXITCODE -ne 0) { throw 'Signature verification failed.' }
+          } finally {
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host 'Signed and verified at-pet.exe.'
+
       - name: Package
         shell: pwsh
         run: |

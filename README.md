@@ -40,6 +40,17 @@ Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt
 
 The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag. Release archives and SHA-256 checksum files are also checked in under `dist/` for tagged releases.
 
+### Windows version metadata and code signing
+
+`assets/branding/app-icon.rc.in` embeds the window icon and a version resource, so `at-pet.exe` reports `At-Pet`, `At-PetAdmin`, and the CMake project version (`PROJECT_VERSION`) under **Properties > Details** and through the version API. Windows still labels unsigned downloads as **Unknown publisher**; only an Authenticode signature changes that. Both Windows workflows sign `at-pet.exe` when these repository secrets are configured and skip the step when they are not:
+
+| Secret | Value |
+| --- | --- |
+| `WINDOWS_CERT_PFX_BASE64` | Base64 of the code-signing `.pfx` file, for example `[Convert]::ToBase64String([IO.File]::ReadAllBytes('at-pet.pfx'))` |
+| `WINDOWS_CERT_PASSWORD` | Password for the `.pfx` file |
+
+Local builds and pull requests from forks without the secrets stay unsigned, so they keep working for contributors.
+
 ## Pet library and format
 
 Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once.
