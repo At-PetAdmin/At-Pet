@@ -113,7 +113,7 @@ Run the checks that apply to your change:
 
 ## Commit messages and pull requests
 
-Please submit contribution text in the language of the guide you are following: English for this guide and Simplified Chinese for the Chinese guide.
+Please submit contribution text in the language of the guide you are following: English for this guide and Simplified Chinese for the Chinese guide. Pull request descriptions are the exception: GitHub pre-fills the bilingual template in `.github/pull_request_template.md`, so fill in both the English and the Simplified Chinese part.
 
 1. Fork the repository and create a topic branch from `main`.
 2. Make your change and verify it using the checklist above.
