@@ -16,6 +16,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
+    env:
+      SIGNING_ENABLED: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +81,7 @@ jobs:
           cmake --build build-arm64 --parallel
 
       - name: Sign executable
-        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+        if: env.SIGNING_ENABLED == 'true'
         shell: pwsh
         env:
           CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}

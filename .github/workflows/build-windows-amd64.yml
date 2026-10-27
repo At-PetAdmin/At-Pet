@@ -22,6 +22,8 @@ jobs:
   build:
     runs-on: windows-2022
     timeout-minutes: 30
+    env:
+      SIGNING_ENABLED: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -71,7 +73,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE." }
 
       - name: Sign executable
-        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+        if: env.SIGNING_ENABLED == 'true'
         shell: pwsh
         env:
           CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
