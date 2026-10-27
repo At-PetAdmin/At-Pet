@@ -40,6 +40,17 @@ cmake --build build
 
 **Build Windows amd64 package** workflow 会在每个 Pull Request 和每次推送到 `main` 时构建免安装 Qt 的 Windows x86-64 压缩包，因此没有本地 Qt 环境的贡献者也能测试自己的改动。在运行记录的 **Artifacts** 区域下载 `At-Pet-windows-amd64`，解压后直接运行 `at-pet.exe`。推送 `v*` 标签时，压缩包和 `.sha256` 校验文件会一并附加到对应 GitHub Release。Windows ARM64 workflow 可手动运行用于测试，使用 `v*` 标签触发时会发布对应架构的包。正式版本的压缩包及 SHA-256 校验文件也会一并保存在 `dist/`。
 
+### Windows 版本信息与代码签名
+
+`assets/branding/app-icon.rc.in` 同时嵌入窗口图标和版本资源，因此 `at-pet.exe` 的 **属性 > 详细信息** 以及版本 API 会显示 `At-Pet`、`At-PetAdmin` 和 CMake 工程版本（`PROJECT_VERSION`）。Windows 对未签名的下载仍会提示 **未知发布者**，只有 Authenticode 签名才能消除该提示。两个 Windows workflow 在配置了以下仓库 Secret 时会对 `at-pet.exe` 签名，未配置时自动跳过：
+
+| Secret | 取值 |
+| --- | --- |
+| `WINDOWS_CERT_PFX_BASE64` | 代码签名 `.pfx` 文件的 Base64，例如 `[Convert]::ToBase64String([IO.File]::ReadAllBytes('at-pet.pfx'))` |
+| `WINDOWS_CERT_PASSWORD` | `.pfx` 文件的密码 |
+
+没有配置这些 Secret 的本地构建和来自 fork 的 Pull Request 仍保持未签名，不影响贡献者构建。
+
 ## 宠物库与格式
 
 通过宠物右键菜单或托盘菜单中的 **导入配置与精灵表…**，可以分别选择 `pet.json` 和图片。应用会把两者复制为新的宠物库条目，重写精灵图文件名，并在名称重复时追加数字后缀。对于包含 `pet.json` 及其引用资源的完整文件夹，仍可使用 **导入宠物文件夹…**。导入的宠物可以预览 12 秒，或切换为主位置。“召唤全部宠物”会同时打开库中所有有效条目。
