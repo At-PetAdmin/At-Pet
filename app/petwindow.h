@@ -162,6 +162,7 @@ private:
     qreal gravityVelocity_ = 0.0;
     qreal gravityHorizontalVelocity_ = 0.0;
     qreal gravityScale_ = 1.0;
+    qreal bounceSquash_ = 0.0;
     qreal scale_ = 1.0;
     qreal slideVelocity_ = 0.0;
     bool dragging_ = false;

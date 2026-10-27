@@ -43,6 +43,13 @@ constexpr qreal gravityTerminalVelocity = 18.0;
 constexpr qreal gravityHorizontalDecay = 0.965;
 constexpr qreal wallBounceRestitution = 0.6;
 constexpr qreal minBounceVelocity = 1.5;
+constexpr qreal floorBounceRestitution = 0.74;
+constexpr qreal floorBounceFriction = 0.86;
+constexpr qreal minFloorBounceVelocity = 2.0;
+constexpr qreal maxFloorBounceVelocity = 16.0;
+constexpr qreal bounceSquashPerVelocity = 0.018;
+constexpr qreal maxBounceSquash = 0.3;
+constexpr qreal bounceSquashDecay = 0.035;
 constexpr qreal minGravityScale = 0.1;
 constexpr qreal maxGravityScale = 3.0;
 constexpr qreal maxFlingVelocity = 30.0;
@@ -809,6 +816,10 @@ void PetWindow::stopGravity() {
     gravityVelocity_ = 0.0;
     gravityHorizontalVelocity_ = 0.0;
     gravityActive_ = false;
+    if (bounceSquash_ != 0.0) {
+        bounceSquash_ = 0.0;
+        update();
+    }
 }
 
 void PetWindow::advanceGravity() {
@@ -853,9 +864,22 @@ void PetWindow::advanceGravity() {
             ? -gravityVelocity_ * wallBounceRestitution : 0.0;
     } else if (nextY >= targetY) {
         nextY = targetY;
-        gravityVelocity_ = 0.0;
+        const qreal impact = qMin(gravityVelocity_, maxFloorBounceVelocity);
+        if (impact >= minFloorBounceVelocity) {
+            gravityVelocity_ = -impact * floorBounceRestitution;
+            gravityHorizontalVelocity_ *= floorBounceFriction;
+            bounceSquash_ = qMin(maxBounceSquash,
+                                 qMax(bounceSquash_, impact * bounceSquashPerVelocity));
+        } else {
+            gravityVelocity_ = 0.0;
+        }
     }
     move(nextX, nextY);
+
+    if (bounceSquash_ > 0.0) {
+        bounceSquash_ = qMax(0.0, bounceSquash_ - bounceSquashDecay);
+        update();
+    }
 
     if (y() >= targetY && gravityVelocity_ == 0.0 && gravityHorizontalVelocity_ == 0.0) {
         stopGravity();
@@ -1231,6 +1255,14 @@ void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
 
     const QJsonObject animations = definition_.value("animations").toObject();
     const QJsonObject animation = animations.value(animation_).toObject();
+    painter.save();
+    if (bounceSquash_ > 0.001) {
+        const qreal anchorX = bounds.center().x();
+        const qreal anchorY = bounds.bottom() + 1.0;
+        painter.translate(anchorX, anchorY);
+        painter.scale(1.0 + bounceSquash_ * 0.6, 1.0 - bounceSquash_);
+        painter.translate(-anchorX, -anchorY);
+    }
     if (!spriteSheet_.isNull() && !animation.isEmpty()) {
         QVector<int> frames;
         const QJsonValue configuredFrames = animation.value("frames");
@@ -1275,6 +1307,7 @@ void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
     } else {
         drawFallbackPet(painter, bounds);
     }
+    painter.restore();
 }
 
 void PetWindow::drawFallbackPet(QPainter &painter, const QRect &bounds) {
