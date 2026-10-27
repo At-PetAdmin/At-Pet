@@ -18,7 +18,12 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 - Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; MCP-compatible clients can use the optional stdio bridge for explicit event reporting, and other sources can use the generic HTTP API.
 - Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
 - Optional completion chime (muted via **Play a sound when an Agent task completes** in General Settings). Permission prompts visually highlight potentially dangerous actions as a heuristic; the warning does not change the Allow once / Deny choices. Agents can also ask the user a question through the local HTTP API.
-- Windows-only option to look toward a visible window whose title contains “Copilot”. This only changes the pet's direction; it does not detect or synchronize Copilot session status. The public `github/app` repository does not contain the desktop app implementation or expose a status event API, so GitHub Copilot requires an external event sender.
+- Windows-only option to make the pet's eyes follow the mouse pointer (**Look at the mouse cursor** in the right-click menu, or **Eyes follow the mouse cursor (Windows)** in General Settings). This only changes the pet's gaze; it does not detect or synchronize Copilot session status.
+- Perch (widget) mode: drop a pet on the title bar of another window — VS Code, the Copilot app, Explorer, and similar framed windows — and it walks onto the edge and sits there. A perched pet rides along when you move or resize the host window, can slide down the frame on its own or via **Slide down the window frame**, and hops off when you drag it away.
+- Do not disturb: when a full-screen game or editor is in the foreground and **Do not disturb automatically in full-screen apps (shrink to the screen edge)** is enabled, every pet shrinks into a small bubble that hugs the screen edge. Summon it again from the tray icon (or untick **Do not disturb**), and it returns to where it was. The tray menu also offers the mode manually.
+- Poking a pet (single click) shows a random line, read from `quotes`/`pokeQuotes` in `pet.json`; without them the built-in greeting is used.
+- Animation groups: `animationGroups.rest` (for example `["idle", "sleep"]`) periodically switches a resting pet between those animations instead of always showing `idle`.
+- **Edit pet.json…** in the pet library tab opens the selected pet's configuration in a text editor, validates the JSON before saving, and hot-reloads the pet immediately.
 - System-tray controls for showing/hiding pets, importing pets, summoning the whole library, and switching between Simplified Chinese and English. The default follows the system locale; your selection is remembered.（托盘菜单支持简体中文/英语切换，默认跟随系统语言并记住选择。）
 
 ## Build (Windows / Qt MinGW)
@@ -53,8 +58,7 @@ Local builds and pull requests from forks without the secrets stay unsigned, so 
 
 ## Pet library and format
 
-Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once.
-
+Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once. **Edit pet.json…** opens the selected library entry's configuration in a text editor; saving validates the JSON and hot-reloads the pet without restarting.
 Example `pet.json` in the reference project's format:
 
 ```json
@@ -76,13 +80,19 @@ Example `pet.json` in the reference project's format:
     "done": { "row": 7, "frames": 4 },
     "cancelled": { "row": 8, "frames": 4 },
     "error": { "row": 9, "frames": 4 }
-  }
+  },
+  "animationGroups": {
+    "rest": ["idle", "sleep"]
+  },
+  "quotes": [
+    "Need a hand with that refactor?",
+    "Remember to stretch!"
+  ]
 }
 ```
 
 `sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays.
- For distinct horizontal walking animations, optionally define `walkLeft` and/or `walkRight` (also accepted: `walk_left`/`walk_right` or `walk-left`/`walk-right`); At-Pet selects the direction-specific animation while moving and falls back to `walk` when it is missing. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order. Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.
-On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
+ For distinct horizontal walking animations, optionally define `walkLeft` and/or `walkRight` (also accepted: `walk_left`/`walk_right` or `walk-left`/`walk-right`); At-Pet selects the direction-specific animation while moving and falls back to `walk` when it is missing. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order.  Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. `animationGroups` names reusable sets of animations; the `rest` group (a comma-separated string, an array, or `[{"name": ...}]`) makes an idle pet switch to one of those animations every 8–20 seconds and hold it for 3.5–9 seconds, so a "resting" pet alternates between e.g. `idle` and `sleep` instead of freezing on one pose. Entries that do not exist in `animations` are ignored. `quotes` (also `pokeQuotes`) adds random lines — a string, an array of strings, or objects with a `text` field — shown when the pet is poked. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
 ## Local API
 

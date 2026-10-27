@@ -23,6 +23,13 @@
 #include <QUrl>
 #include <QtMath>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace {
 const QStringList builtinAnimations = {
     QStringLiteral("idle"), QStringLiteral("walk"), QStringLiteral("sleep"),
@@ -41,7 +48,108 @@ constexpr qreal maxGravityScale = 3.0;
 constexpr qreal maxFlingVelocity = 30.0;
 constexpr qreal minFlingVelocity = 1.5;
 constexpr qint64 flingSampleWindowMs = 90;
+
+constexpr qreal compactWindowScale = 0.55;
+constexpr int compactMinWidth = 96;
+constexpr int compactMinHeight = 104;
+constexpr int attachPollMs = 80;
+constexpr int slideIntervalMs = 16;
+constexpr qreal slideAcceleration = 0.45;
+constexpr qreal slideMaxSpeed = 9.0;
+constexpr int slideBottomMargin = 8;
+constexpr int edgeSnapDepth = 26;
+constexpr int titleBarSnapDepth = 34;
+constexpr int titleBarOverlap = 8;
+constexpr int sideEdgeOverlap = 12;
+constexpr int restIdleDelayMinMs = 8000;
+constexpr int restIdleDelayMaxMs = 20000;
+constexpr int restHoldMinMs = 3500;
+constexpr int restHoldMaxMs = 9000;
 }
+
+#ifdef Q_OS_WIN
+namespace {
+struct HostWindowInfo {
+    HWND handle = nullptr;
+    QRect bounds;
+};
+
+bool isShellSurfaceClass(const QString &className) {
+    static const QStringList ignored = {
+        QStringLiteral("Progman"), QStringLiteral("WorkerW"),
+        QStringLiteral("Shell_TrayWnd"), QStringLiteral("Shell_SecondaryTrayWnd"),
+        QStringLiteral("Windows.UI.Core.CoreWindow"),
+        QStringLiteral("XamlExplorerHostIslandWindow")
+    };
+    return ignored.contains(className);
+}
+
+bool isEligibleHostWindow(HWND window) {
+    if (!window || !IsWindowVisible(window) || IsIconic(window))
+        return false;
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == GetCurrentProcessId())
+        return false;
+    if (GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)
+        return false;
+    if ((GetWindowLongPtrW(window, GWL_STYLE) & (WS_CAPTION | WS_THICKFRAME)) == 0)
+        return false;
+    RECT rect{};
+    if (!GetWindowRect(window, &rect))
+        return false;
+    if (rect.right - rect.left < 200 || rect.bottom - rect.top < 120)
+        return false;
+    wchar_t className[128]{};
+    GetClassNameW(window, className, 128);
+    return !isShellSurfaceClass(QString::fromWCharArray(className));
+}
+
+struct HostWindowSearch {
+    QPoint point;
+    HostWindowInfo result;
+};
+
+BOOL CALLBACK findHostWindow(HWND window, LPARAM data) {
+    auto *search = reinterpret_cast<HostWindowSearch *>(data);
+    if (!isEligibleHostWindow(window))
+        return TRUE;
+    RECT rect{};
+    if (!GetWindowRect(window, &rect))
+        return TRUE;
+    const QRect bounds(QPoint(rect.left, rect.top),
+                       QSize(rect.right - rect.left, rect.bottom - rect.top));
+    const int titleBottom = bounds.top() + qMax(titleBarSnapDepth, 30);
+    const bool inTitleBand = search->point.y() >= bounds.top() - titleBarSnapDepth &&
+                             search->point.y() <= titleBottom &&
+                             search->point.x() >= bounds.left() &&
+                             search->point.x() <= bounds.right();
+    const bool onVerticalEdge = search->point.y() >= bounds.top() &&
+                                search->point.y() <= bounds.bottom() &&
+                                (qAbs(search->point.x() - bounds.left()) <= edgeSnapDepth ||
+                                 qAbs(search->point.x() - bounds.right()) <= edgeSnapDepth);
+    if (!inTitleBand && !onVerticalEdge)
+        return TRUE;
+    search->result.handle = window;
+    search->result.bounds = bounds;
+    return FALSE;
+}
+
+HostWindowInfo hostWindowAt(const QPoint &point) {
+    HostWindowSearch search;
+    search.point = point;
+    EnumWindows(findHostWindow, reinterpret_cast<LPARAM>(&search));
+    return search.result;
+}
+
+QRect windowBounds(HWND window) {
+    RECT rect{};
+    if (!window || !GetWindowRect(window, &rect))
+        return {};
+    return QRect(QPoint(rect.left, rect.top), QSize(rect.right - rect.left, rect.bottom - rect.top));
+}
+}
+#endif
 
 PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
     : QWidget(parent), directory_(petDirectory) {
@@ -58,6 +166,16 @@ PetWindow::PetWindow(const QString &petDirectory, QWidget *parent)
     connect(&animationTimer_, &QTimer::timeout, this, &PetWindow::tick);
     connect(&movementTimer_, &QTimer::timeout, this, &PetWindow::advanceFreeMovement);
     connect(&gravityTimer_, &QTimer::timeout, this, &PetWindow::advanceGravity);
+    attachTimer_.setInterval(attachPollMs);
+    slideTimer_.setInterval(slideIntervalMs);
+    slideTimer_.setTimerType(Qt::PreciseTimer);
+    restTimer_.setSingleShot(true);
+    connect(&attachTimer_, &QTimer::timeout, this, &PetWindow::trackAttachedWindow);
+    connect(&slideTimer_, &QTimer::timeout, this, &PetWindow::advanceSliding);
+    connect(&restTimer_, &QTimer::timeout, this, [this] {
+        if (resting_) endRest();
+        else beginRest();
+    });
     connect(&speechTimer_, &QTimer::timeout, this, [this] {
         speech_.clear();
         update();
@@ -151,6 +269,14 @@ void PetWindow::setAnimation(const QString &name) {
     }
     if (cancelledMovement)
         scheduleFreeMovement(QRandomGenerator::global()->bounded(1200, 3201));
+    if (!settingRestAnimation_ && !settingMovementAnimation_) {
+        if (name == QStringLiteral("idle")) {
+            if (!movementAnimationActive_ && !moving_)
+                scheduleRest();
+        } else {
+            cancelRest();
+        }
+    }
 }
 
 void PetWindow::setSpeech(const QString &text) {
@@ -159,20 +285,454 @@ void PetWindow::setSpeech(const QString &text) {
     update();
 }
 
-void PetWindow::setLookAtCopilot(bool enabled) {
-    if (lookAtCopilot_ == enabled)
+void PetWindow::setLookAtMouse(bool enabled) {
+    if (lookAtMouse_ == enabled)
         return;
-    lookAtCopilot_ = enabled;
-    if (!enabled)
+    lookAtMouse_ = enabled;
+    if (!enabled) {
+        lookOffset_ = {};
         faceLeft_ = false;
+    }
     update();
 }
 
-void PetWindow::setLookDirection(bool faceLeft) {
-    if (faceLeft_ == faceLeft)
+bool PetWindow::lookAtMouse() const {
+    return lookAtMouse_;
+}
+
+void PetWindow::setLookTarget(const QPoint &globalPosition) {
+    if (!lookAtMouse_)
         return;
-    faceLeft_ = faceLeft;
+    const QPoint delta = globalPosition - frameGeometry().center();
+    const QPointF offset(qBound(-1.0, delta.x() / static_cast<double>(qMax(80, width())), 1.0),
+                         qBound(-1.0, delta.y() / static_cast<double>(qMax(80, height())), 1.0));
+    if (qAbs(offset.x() - lookOffset_.x()) < 0.01 && qAbs(offset.y() - lookOffset_.y()) < 0.01)
+        return;
+    lookOffset_ = offset;
+    faceLeft_ = offset.x() < -0.08;
     update();
+}
+
+QString PetWindow::randomQuote() const {
+    QStringList quotes;
+    const auto collect = [&quotes](const QJsonValue &value) {
+        if (value.isString()) {
+            const QString text = value.toString().trimmed();
+            if (!text.isEmpty())
+                quotes.append(text);
+            return;
+        }
+        if (!value.isArray())
+            return;
+        for (const QJsonValue &entry : value.toArray()) {
+            QString text;
+            if (entry.isString())
+                text = entry.toString();
+            else if (entry.isObject())
+                text = entry.toObject().value("text").toString();
+            text = text.trimmed();
+            if (!text.isEmpty())
+                quotes.append(text);
+        }
+    };
+    collect(definition_.value("quotes"));
+    collect(definition_.value("pokeQuotes"));
+    if (quotes.isEmpty())
+        return {};
+    return quotes.at(QRandomGenerator::global()->bounded(int(quotes.size())));
+}
+
+QStringList PetWindow::animationGroup(const QString &groupName) const {
+    const auto names = [](const QJsonValue &value) {
+        QStringList result;
+        const auto append = [&result](QString name) {
+            name = name.trimmed();
+            if (!name.isEmpty() && !result.contains(name))
+                result.append(name);
+        };
+        if (value.isString()) {
+            for (const QString &part : value.toString().split(QLatin1Char(',')))
+                append(part);
+        } else if (value.isArray()) {
+            for (const QJsonValue &entry : value.toArray()) {
+                if (entry.isString())
+                    append(entry.toString());
+                else if (entry.isObject())
+                    append(entry.toObject().value("name").toString());
+            }
+        }
+        return result;
+    };
+
+    QStringList requested = names(definition_.value("animationGroups").toObject().value(groupName));
+    if (requested.isEmpty())
+        requested = names(definition_.value(groupName));
+    if (requested.isEmpty() && groupName == QStringLiteral("rest"))
+        requested = {QStringLiteral("idle"), QStringLiteral("sleep")};
+
+    const QJsonObject animations = definition_.value("animations").toObject();
+    QStringList available;
+    for (const QString &name : requested) {
+        if (animations.contains(name))
+            available.append(name);
+    }
+    return available;
+}
+
+void PetWindow::scheduleRest() {
+    restTimer_.stop();
+    if (doNotDisturb_ || isHidden())
+        return;
+    if (animationGroup(QStringLiteral("rest")).isEmpty())
+        return;
+    restTimer_.start(QRandomGenerator::global()->bounded(restIdleDelayMinMs, restIdleDelayMaxMs));
+}
+
+void PetWindow::beginRest() {
+    const QStringList group = animationGroup(QStringLiteral("rest"));
+    if (group.isEmpty() || doNotDisturb_ || isHidden() || dragging_ || sliding_ || gravityActive_ ||
+        attachedToWindow()) {
+        scheduleRest();
+        return;
+    }
+    if (animation_ != QStringLiteral("idle") || moving_ || movementAnimationActive_) {
+        restTimer_.start(qMax(600, restIdleDelayMinMs / 4));
+        return;
+    }
+    if (freeMovementEnabled_ && movementTimer_.isActive()) {
+        stopFreeMovement();
+        restPausedMovement_ = true;
+    }
+    QStringList candidates = group;
+    if (candidates.size() > 1) {
+        QStringList preferred = candidates;
+        preferred.removeAll(animation_);
+        if (preferred.isEmpty())
+            preferred = group;
+        if (preferred.size() > 1) {
+            QStringList nonRepeat = preferred;
+            nonRepeat.removeAll(restAnimation_);
+            if (!nonRepeat.isEmpty())
+                preferred = nonRepeat;
+        }
+        candidates = preferred;
+    }
+    const QString pick = candidates.at(QRandomGenerator::global()->bounded(int(candidates.size())));
+    restAnimation_ = pick;
+    resting_ = true;
+    settingRestAnimation_ = true;
+    setAnimation(pick);
+    settingRestAnimation_ = false;
+    restTimer_.start(QRandomGenerator::global()->bounded(restHoldMinMs, restHoldMaxMs));
+}
+
+void PetWindow::endRest() {
+    resting_ = false;
+    settingRestAnimation_ = true;
+    setAnimation(QStringLiteral("idle"));
+    settingRestAnimation_ = false;
+    scheduleRest();
+    resumeMovementAfterRest();
+}
+
+void PetWindow::resumeMovementAfterRest() {
+    if (!restPausedMovement_)
+        return;
+    restPausedMovement_ = false;
+    if (freeMovementEnabled_ && isVisible() && !doNotDisturb_)
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1200, 3201));
+}
+
+void PetWindow::cancelRest() {
+    restTimer_.stop();
+    const bool restoreIdle = resting_ && !restAnimation_.isEmpty() && animation_ == restAnimation_;
+    resting_ = false;
+    restAnimation_.clear();
+    if (restoreIdle) {
+        settingRestAnimation_ = true;
+        setAnimation(QStringLiteral("idle"));
+        settingRestAnimation_ = false;
+    }
+    resumeMovementAfterRest();
+}
+
+void PetWindow::setDoNotDisturb(bool enabled) {
+    if (doNotDisturb_ == enabled)
+        return;
+    doNotDisturb_ = enabled;
+    emit doNotDisturbToggled(enabled);
+    if (enabled) {
+        doNotDisturbRestoreGeometry_ = frameGeometry();
+        detachFromWindow();
+        stopFreeMovement();
+        stopGravity();
+        cancelRest();
+        speech_.clear();
+        applyDisplaySize();
+        dockToNearestEdge();
+        setWindowOpacity(0.94);
+        setSpeech(tr("Do not disturb — summon me from the tray."));
+    } else {
+        applyDisplaySize();
+        if (!doNotDisturbRestoreGeometry_.isNull()) {
+            move(boundedPosition(doNotDisturbRestoreGeometry_.topLeft(),
+                                 doNotDisturbRestoreGeometry_.center()));
+            doNotDisturbRestoreGeometry_ = {};
+        }
+        setWindowOpacity(1.0);
+        speech_.clear();
+        update();
+        if (isVisible()) {
+            if (gravityEnabled_)
+                startGravity();
+            else if (freeMovementEnabled_)
+                scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+            if (animation_ == QStringLiteral("idle"))
+                scheduleRest();
+        }
+    }
+}
+
+bool PetWindow::doNotDisturb() const {
+    return doNotDisturb_;
+}
+
+bool PetWindow::attachedToWindow() const {
+    return attachment_ != AttachmentEdge::None;
+}
+
+void PetWindow::releaseFromWindow() {
+    if (!attachedToWindow())
+        return;
+    detachFromWindow();
+    setSpeech(tr("Let go of the window."));
+}
+
+void PetWindow::slideDownBorder() {
+    startSliding(true);
+}
+
+void PetWindow::applyDisplaySize() {
+    if (baseSize_.isEmpty())
+        baseSize_ = QSize(176, 176);
+    if (doNotDisturb_) {
+        resize(qMax(compactMinWidth, qRound(baseSize_.width() * compactWindowScale)),
+               qMax(compactMinHeight, qRound(baseSize_.height() * compactWindowScale)));
+    } else {
+        resize(baseSize_);
+    }
+    update();
+}
+
+void PetWindow::dockToNearestEdge() {
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return;
+    const QRect area = screen->availableGeometry();
+    const bool leftSide = frameGeometry().center().x() <= area.center().x();
+    const int targetX = leftSide ? area.left() + 6 : area.right() - width() - 6;
+    const int targetY = qBound(area.top() + 6, y(),
+                               qMax(area.top() + 6, area.bottom() - height() - 6));
+    move(targetX, targetY);
+}
+
+bool PetWindow::tryAttachToWindow(const QPoint &dropPoint, const QPointF &velocity) {
+#ifdef Q_OS_WIN
+    const HostWindowInfo host = hostWindowAt(dropPoint);
+    if (!host.handle || host.bounds.isEmpty())
+        return false;
+
+    const QRect &bounds = host.bounds;
+    AttachmentEdge edge = AttachmentEdge::Top;
+    if (dropPoint.y() > bounds.top() + qMax(titleBarSnapDepth, 30)) {
+        const int leftDistance = qAbs(dropPoint.x() - bounds.left());
+        const int rightDistance = qAbs(dropPoint.x() - bounds.right());
+        if (qMin(leftDistance, rightDistance) > edgeSnapDepth)
+            return false;
+        edge = leftDistance <= rightDistance ? AttachmentEdge::Left : AttachmentEdge::Right;
+    }
+
+    hostWindow_ = quintptr(host.handle);
+    hostBounds_ = bounds;
+    attachment_ = edge;
+    sliding_ = false;
+    slideTimer_.stop();
+    stopFreeMovement();
+    stopGravity();
+    if (edge == AttachmentEdge::Top) {
+        attachmentOffset_ = qBound(0, x() - bounds.left(), qMax(0, bounds.width() - width()));
+    } else {
+        attachmentOffset_ = qBound(0, y() - bounds.top(),
+                                   qMax(0, bounds.height() - height() + slideBottomMargin));
+    }
+    positionAttachedWindow();
+    attachTimer_.start(attachPollMs);
+    setSpeech(tr("Perched on the window edge."));
+    emit attachmentChanged(true);
+    if (edge == AttachmentEdge::Top && freeMovementEnabled_)
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(700, 1601));
+    else if (edge != AttachmentEdge::Top && velocity.y() > 5.0)
+        startSliding(false);
+    else if (edge != AttachmentEdge::Top)
+        setSpeech(tr("Hanging on the window frame…"));
+    update();
+    return true;
+#else
+    Q_UNUSED(dropPoint);
+    Q_UNUSED(velocity);
+    return false;
+#endif
+}
+
+void PetWindow::detachFromWindow() {
+    if (attachment_ == AttachmentEdge::None)
+        return;
+    attachTimer_.stop();
+    slideTimer_.stop();
+    sliding_ = false;
+    slideVelocity_ = 0.0;
+    hostWindow_ = 0;
+    hostBounds_ = {};
+    attachment_ = AttachmentEdge::None;
+    attachmentOffset_ = 0;
+    stopFreeMovement();
+    emit attachmentChanged(false);
+    update();
+    if (isVisible() && !doNotDisturb_) {
+        if (gravityEnabled_)
+            startGravity();
+        else if (freeMovementEnabled_)
+            scheduleFreeMovement(QRandomGenerator::global()->bounded(900, 3201));
+    }
+}
+
+void PetWindow::trackAttachedWindow() {
+#ifdef Q_OS_WIN
+    const HWND window = reinterpret_cast<HWND>(hostWindow_);
+    if (!window || !IsWindow(window) || !IsWindowVisible(window) || IsIconic(window)) {
+        detachFromWindow();
+        return;
+    }
+    const QRect bounds = windowBounds(window);
+    if (bounds.isEmpty()) {
+        detachFromWindow();
+        return;
+    }
+    if (bounds != hostBounds_) {
+        hostBounds_ = bounds;
+        positionAttachedWindow();
+    }
+#else
+    detachFromWindow();
+#endif
+}
+
+void PetWindow::positionAttachedWindow() {
+    if (attachment_ == AttachmentEdge::None || hostBounds_.isEmpty())
+        return;
+    QScreen *screen = QGuiApplication::screenAt(hostBounds_.center());
+    if (!screen)
+        screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return;
+    const QRect area = screen->availableGeometry();
+    QPoint target = pos();
+    switch (attachment_) {
+    case AttachmentEdge::Top:
+        attachmentOffset_ = qBound(0, attachmentOffset_, qMax(0, hostBounds_.width() - width()));
+        target = {hostBounds_.left() + attachmentOffset_,
+                  hostBounds_.top() - height() + titleBarOverlap};
+        break;
+    case AttachmentEdge::Left:
+    case AttachmentEdge::Right:
+        attachmentOffset_ = qBound(0, attachmentOffset_,
+                                   qMax(0, hostBounds_.height() - height() + slideBottomMargin));
+        target = {attachment_ == AttachmentEdge::Left
+                      ? hostBounds_.left() - width() + sideEdgeOverlap
+                      : hostBounds_.right() - sideEdgeOverlap,
+                  hostBounds_.top() + attachmentOffset_};
+        break;
+    case AttachmentEdge::None:
+        return;
+    }
+    target.setX(qBound(area.left(), target.x(), qMax(area.left(), area.right() - width() + 1)));
+    target.setY(qBound(area.top(), target.y(), qMax(area.top(), area.bottom() - height() + 1)));
+    if (target != pos())
+        move(target);
+}
+
+void PetWindow::startSliding(bool announce) {
+    if (attachment_ == AttachmentEdge::None)
+        return;
+    if (attachment_ == AttachmentEdge::Top) {
+        const int center = x() + width() / 2;
+        const bool useLeft = center - hostBounds_.left() <= hostBounds_.right() - center;
+        attachment_ = useLeft ? AttachmentEdge::Left : AttachmentEdge::Right;
+        attachmentOffset_ = qMax(0, y() - hostBounds_.top());
+        positionAttachedWindow();
+    }
+    sliding_ = true;
+    slideVelocity_ = 2.0;
+    slideTimer_.start(slideIntervalMs);
+    if (announce)
+        setSpeech(tr("Sliding down the window frame…"));
+    update();
+}
+
+void PetWindow::advanceSliding() {
+    if (!sliding_ || attachment_ == AttachmentEdge::None) {
+        sliding_ = false;
+        slideTimer_.stop();
+        return;
+    }
+    slideVelocity_ = qMin(slideMaxSpeed, slideVelocity_ + slideAcceleration * gravityScale_);
+    attachmentOffset_ += qRound(slideVelocity_);
+    const int maxOffset = qMax(0, hostBounds_.height() - height() + slideBottomMargin);
+    if (attachmentOffset_ >= maxOffset) {
+        attachmentOffset_ = maxOffset;
+        sliding_ = false;
+        slideTimer_.stop();
+        positionAttachedWindow();
+        setSpeech(tr("Hanging on the window frame."));
+        return;
+    }
+    positionAttachedWindow();
+}
+
+void PetWindow::advanceEdgeWalk() {
+    if (attachment_ != AttachmentEdge::Top || !freeMovementEnabled_ || !isVisible() ||
+        gravityActive_ || dragging_ || doNotDisturb_) {
+        stopFreeMovement();
+        return;
+    }
+    if (!moving_) {
+        movementRemaining_ = QRandomGenerator::global()->bounded(14, 44);
+        movementDirection_ = QPoint(QRandomGenerator::global()->bounded(2) == 0 ? -1 : 1, 0);
+        moving_ = true;
+        updateMovementAnimation();
+    }
+    const int maxOffset = qMax(0, hostBounds_.width() - width());
+    attachmentOffset_ += movementDirection_.x() * 2;
+    if (attachmentOffset_ <= 0) {
+        attachmentOffset_ = 0;
+        movementDirection_.setX(1);
+    } else if (attachmentOffset_ >= maxOffset) {
+        attachmentOffset_ = maxOffset;
+        movementDirection_.setX(-1);
+    }
+    movementFacingLeft_ = movementDirection_.x() < 0;
+    positionAttachedWindow();
+    --movementRemaining_;
+    if (movementRemaining_ <= 0) {
+        stopFreeMovement();
+        scheduleFreeMovement(QRandomGenerator::global()->bounded(1200, 3401));
+        return;
+    }
+    movementTimer_.start(40);
 }
 
 void PetWindow::setFreeMovementEnabled(bool enabled) {
@@ -216,7 +776,8 @@ qreal PetWindow::gravityScale() const {
 }
 
 void PetWindow::startGravity(const QPointF &initialVelocity) {
-    if (!gravityEnabled_ || !isVisible() || dragging_)
+    if (!gravityEnabled_ || !isVisible() || dragging_ ||
+        attachment_ != AttachmentEdge::None || doNotDisturb_)
         return;
     stopFreeMovement();
 
@@ -303,7 +864,10 @@ void PetWindow::advanceGravity() {
 }
 
 void PetWindow::scheduleFreeMovement(int delayMs) {
-    if (!freeMovementEnabled_ || !isVisible() || dragging_ || gravityActive_ || movementTimer_.isActive())
+    if (!freeMovementEnabled_ || !isVisible() || dragging_ || gravityActive_ ||
+        doNotDisturb_ || movementTimer_.isActive())
+        return;
+    if (attachment_ != AttachmentEdge::None && attachment_ != AttachmentEdge::Top)
         return;
     movementTimer_.start(qMax(0, delayMs));
 }
@@ -372,6 +936,10 @@ void PetWindow::updateMovementAnimation() {
 }
 
 void PetWindow::advanceFreeMovement() {
+    if (attachment_ != AttachmentEdge::None) {
+        advanceEdgeWalk();
+        return;
+    }
     if (!freeMovementEnabled_ || !isVisible() || gravityActive_) {
         stopFreeMovement();
         return;
@@ -474,6 +1042,8 @@ void PetWindow::useVectorFallback() {
     spriteSheet_ = {};
     animation_ = QStringLiteral("idle");
     frame_ = 0;
+    baseSize_ = QSize(176, 176);
+    applyDisplaySize();
     watchConfiguration();
     update();
 }
@@ -538,7 +1108,10 @@ void PetWindow::reloadDefinition() {
     }
     const int displayWidth = qBound(80, qRound(frameWidth_ * scale_), 480);
     const int displayHeight = qBound(80, qRound(frameHeight_ * scale_), 480);
-    resize(displayWidth + 16, displayHeight + 56);
+    baseSize_ = QSize(displayWidth + 16, displayHeight + 56);
+    applyDisplaySize();
+    if (attachment_ != AttachmentEdge::None)
+        positionAttachedWindow();
     const QString defaultAnimation = definition_.value("defaultAnimation").toString();
     if (!defaultAnimation.isEmpty() && definition_.value("animations").toObject().contains(defaultAnimation))
         animation_ = defaultAnimation;
@@ -547,6 +1120,9 @@ void PetWindow::reloadDefinition() {
     const int fps = QSettings().value(animationFpsKey(petId(), animation_), defaultFps).toInt();
     animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
     watchConfiguration();
+    cancelRest();
+    if (animation_ == QStringLiteral("idle"))
+        scheduleRest();
     update();
 }
 
@@ -561,6 +1137,11 @@ void PetWindow::tick() {
 
 void PetWindow::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
+    if (attachment_ != AttachmentEdge::None)
+        attachTimer_.start(attachPollMs);
+    if (doNotDisturb_)
+        return;
+    scheduleRest();
     if (gravityEnabled_)
         startGravity();
     else if (freeMovementEnabled_)
@@ -570,17 +1151,83 @@ void PetWindow::showEvent(QShowEvent *event) {
 void PetWindow::hideEvent(QHideEvent *event) {
     stopFreeMovement();
     stopGravity();
+    cancelRest();
+    attachTimer_.stop();
+    slideTimer_.stop();
+    sliding_ = false;
     QWidget::hideEvent(event);
 }
 
 void PetWindow::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    if (doNotDisturb_) {
+        paintCompact(painter);
+        return;
+    }
+    paintPet(painter, size());
+    if (!speech_.isEmpty())
+        drawSpeechBubble(painter, QRect(2, 1, width() - 4, 43), speech_);
+}
+
+void PetWindow::paintCompact(QPainter &painter) {
+    const int bubbleHeight = qBound(30, height() / 2, 42);
+    const bool hasSpeech = !speech_.isEmpty();
+    const QRect bubble(1, 1, width() - 2, bubbleHeight);
+    const QRect petArea(2, hasSpeech ? bubble.bottom() + 2 : 2, width() - 4,
+                        height() - (hasSpeech ? bubble.bottom() + 4 : 4));
+
+    const QSize canvas = baseSize_.isEmpty() ? QSize(176, 176) : baseSize_;
+    const int spriteHeight = spriteSheet_.isNull()
+        ? canvas.height() - 24
+        : qMin(canvas.height() - 56, qRound(frameHeight_ * scale_));
+    const int spriteTop = spriteSheet_.isNull()
+        ? 20
+        : canvas.height() - spriteHeight - 8;
+
+    painter.save();
+    painter.setClipRect(petArea);
+    const qreal factor = qMin(qreal(petArea.width()) / qMax(1, canvas.width()),
+                              qreal(petArea.height()) / qMax(1, spriteHeight));
+    painter.translate(petArea.left(), petArea.top());
+    painter.scale(factor, factor);
+    painter.translate(0, -spriteTop);
+    paintPet(painter, canvas);
+    painter.restore();
+
+    if (hasSpeech)
+        drawSpeechBubble(painter, bubble, compactSpeech(), 7.0);
+}
+
+QString PetWindow::compactSpeech() const {
+    constexpr int limit = 26;
+    QString text = speech_.simplified();
+    if (text.size() > limit)
+        text = text.left(limit - 1) + QChar(0x2026);
+    return text;
+}
+
+void PetWindow::drawSpeechBubble(QPainter &painter, const QRect &bubble, const QString &text,
+                                 qreal fontPointSize) {
+    painter.setPen(QPen(QColor(75, 72, 82), 1.2));
+    painter.setBrush(QColor(255, 255, 255, 245));
+    painter.drawRoundedRect(bubble, 12, 12);
+    painter.setPen(QColor(42, 42, 49));
+    QFont font(QStringLiteral("Segoe UI"));
+    font.setPointSizeF(fontPointSize);
+    painter.setFont(font);
+    painter.drawText(bubble.adjusted(8, 4, -8, -4), Qt::AlignCenter | Qt::TextWordWrap, text);
+}
+
+void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
+    const int canvasWidth = canvasSize.width();
+    const int canvasHeight = canvasSize.height();
+    const int spriteRoom = qMax(1, canvasHeight - 56);
     const QRect bounds = spriteSheet_.isNull()
-        ? QRect(8, 20, width() - 16, height() - 24)
-        : QRect(8, height() - qMin(height() - 56, qRound(frameHeight_ * scale_)) - 8,
-                qMin(width() - 16, qRound(frameWidth_ * scale_)),
-                qMin(height() - 56, qRound(frameHeight_ * scale_)));
+        ? QRect(8, 20, canvasWidth - 16, canvasHeight - 24)
+        : QRect(8, canvasHeight - qMin(spriteRoom, qRound(frameHeight_ * scale_)) - 8,
+                qMin(canvasWidth - 16, qRound(frameWidth_ * scale_)),
+                qMin(spriteRoom, qRound(frameHeight_ * scale_)));
 
     const QJsonObject animations = definition_.value("animations").toObject();
     const QJsonObject animation = animations.value(animation_).toObject();
@@ -611,7 +1258,7 @@ void PetWindow::paintEvent(QPaintEvent *) {
                                frameWidth_, frameHeight_);
             if (source.right() <= spriteSheet_.width() && source.bottom() <= spriteSheet_.height()) {
                 painter.save();
-                const bool faceLeft = lookAtCopilot_ ? faceLeft_ :
+                const bool faceLeft = lookAtMouse_ ? faceLeft_ :
                     (movementAnimationActive_ && movementFacingLeft_);
                 if (faceLeft) {
                     painter.translate(bounds.left() + bounds.right(), 0);
@@ -627,16 +1274,6 @@ void PetWindow::paintEvent(QPaintEvent *) {
         }
     } else {
         drawFallbackPet(painter, bounds);
-    }
-
-    if (!speech_.isEmpty()) {
-        const QRect bubble(2, 1, width() - 4, 43);
-        painter.setPen(QPen(QColor(75, 72, 82), 1.2));
-        painter.setBrush(QColor(255, 255, 255, 245));
-        painter.drawRoundedRect(bubble, 12, 12);
-        painter.setPen(QColor(42, 42, 49));
-        painter.setFont(QFont(QStringLiteral("Segoe UI"), 9));
-        painter.drawText(bubble.adjusted(8, 4, -8, -4), Qt::AlignCenter | Qt::TextWordWrap, speech_);
     }
 }
 
@@ -662,8 +1299,8 @@ void PetWindow::drawFallbackPet(QPainter &painter, const QRect &bounds) {
     painter.drawPath(ears);
     painter.drawEllipse(body);
 
-    const qreal eyeY = body.top() + body.height() * 0.42;
-    qreal eyeOffset = lookAtCopilot_ ? (faceLeft_ ? -3.0 : 3.0) : 0.0;
+    const qreal eyeY = body.top() + body.height() * 0.42 + (lookAtMouse_ ? lookOffset_.y() * 2.0 : 0.0);
+    qreal eyeOffset = lookAtMouse_ ? lookOffset_.x() * 3.0 : 0.0;
     if (animation_ == "thinking") eyeOffset = -3.0;
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(52, 48, 50));
@@ -715,6 +1352,8 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event) {
         const QPoint globalPosition = event->globalPosition().toPoint();
         if ((globalPosition - pressPosition_).manhattanLength() > 4 && !dragging_) {
             dragging_ = true;
+            detachFromWindow();
+            cancelRest();
             stopFreeMovement();
             stopGravity();
             dragVelocityTimer_.restart();
@@ -787,10 +1426,20 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
     dragging_ = false;
     dragSamples_.clear();
     QWidget::mouseReleaseEvent(event);
-    if (wasDragging && gravityEnabled_)
+    if (!wasDragging)
+        return;
+    if (tryAttachToWindow(event->globalPosition().toPoint(), flingVelocity))
+        return;
+    if (doNotDisturb_) {
+        dockToNearestEdge();
+        return;
+    }
+    if (gravityEnabled_)
         startGravity(flingVelocity);
-    else if (wasDragging && freeMovementEnabled_)
+    else if (freeMovementEnabled_)
         scheduleFreeMovement(QRandomGenerator::global()->bounded(1500, 4201));
+    if (animation_ == QStringLiteral("idle"))
+        scheduleRest();
 }
 
 void PetWindow::mouseDoubleClickEvent(QMouseEvent *event) {
@@ -827,6 +1476,8 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
         connect(action, &QAction::triggered, this, [this, name] { setAnimation(name); });
     }
     menu.addAction(tr("Say something…"), this, &PetWindow::chatRequested);
+    if (!randomQuote().isEmpty())
+        menu.addAction(tr("Poke for a random line"), this, [this] { setSpeech(randomQuote()); });
     QMenu *libraryMenu = menu.addMenu(tr("Pet library"));
     const QString libraryPath = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
     QDir library(libraryPath);
@@ -855,10 +1506,18 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
     gravityAction->setCheckable(true);
     gravityAction->setChecked(gravityEnabled_);
     connect(gravityAction, &QAction::toggled, this, &PetWindow::gravityToggled);
-    QAction *lookAction = menu.addAction(tr("Look at Copilot"));
+    QAction *lookAction = menu.addAction(tr("Look at the mouse cursor"));
     lookAction->setCheckable(true);
-    lookAction->setChecked(lookAtCopilot_);
-    connect(lookAction, &QAction::toggled, this, &PetWindow::lookAtToggled);
+    lookAction->setChecked(lookAtMouse_);
+    connect(lookAction, &QAction::toggled, this, &PetWindow::lookAtMouseToggled);
+    if (attachedToWindow()) {
+        menu.addAction(tr("Slide down the window frame"), this, &PetWindow::slideDownBorder);
+        menu.addAction(tr("Let go of the window"), this, &PetWindow::releaseFromWindow);
+    }
+    QAction *quietAction = menu.addAction(tr("Do not disturb"));
+    quietAction->setCheckable(true);
+    quietAction->setChecked(doNotDisturb_);
+    connect(quietAction, &QAction::toggled, this, &PetWindow::doNotDisturbToggled);
     menu.addAction(tr("Hide pet"), this, &QWidget::hide);
     menu.exec(globalPosition);
 }
