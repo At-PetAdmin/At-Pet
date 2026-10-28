@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
-project(AtPet VERSION 1.2.0 LANGUAGES CXX)
+project(AtPet VERSION 1.3.0 LANGUAGES CXX)
+# Human-readable version string compiled into the binary (CMake's project VERSION
+# must stay numeric; pre-release suffixes live here). The Windows resource keeps
+# using PROJECT_VERSION_* for FILEVERSION/PRODUCTVERSION.
+set(AT_PET_VERSION_STRING "1.3.0-beta1" CACHE STRING "Human-readable At-Pet version string")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -52,7 +56,7 @@ qt_add_translations(at-pet
     TS_FILES translations/at-pet_zh_CN.ts
     RESOURCE_PREFIX "/i18n"
 )
-target_compile_definitions(at-pet PRIVATE AT_PET_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(at-pet PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
 
 install(TARGETS at-pet BUNDLE DESTINATION . RUNTIME DESTINATION bin)
 
@@ -79,7 +83,7 @@ if(AT_PET_BUILD_TESTS)
         assets/default/pet.qrc
     )
     target_include_directories(at-pet-tests PRIVATE app)
-    target_compile_definitions(at-pet-tests PRIVATE AT_PET_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(at-pet-tests PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
     target_link_libraries(at-pet-tests PRIVATE Qt6::Widgets Qt6::Test)
     # Keep the test a console program so QTest's PASS/FAIL output stays visible.
     set_target_properties(at-pet-tests PROPERTIES WIN32_EXECUTABLE FALSE)
