@@ -34,6 +34,7 @@
 #include <QSaveFile>
 #include <QScrollArea>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStandardPaths>
@@ -548,6 +549,7 @@ void SettingsDialog::setupUi() {
     uiForm->addWidget(autoDndCheck_, 3, 0, 1, 2);
 
     gravityCheck_ = new QCheckBox(tr("Enable gravity (pet falls after being dragged)"), uiGroup);
+    gravityCheck_->setObjectName(QStringLiteral("gravityCheck"));
     uiForm->addWidget(gravityCheck_, 4, 0, 1, 2);
     gravityScaleLabel_ = new QLabel(tr("Gravity strength:"), uiGroup);
     uiForm->addWidget(gravityScaleLabel_, 5, 0);
@@ -573,6 +575,7 @@ void SettingsDialog::setupUi() {
 
     btnSaveGeneral_ = new QPushButton(tr("Apply General Settings"), generalTab);
     btnSaveGeneral_->setObjectName("primaryBtn");
+    btnSaveGeneral_->setProperty("testId", QStringLiteral("saveGeneralButton"));
     connect(btnSaveGeneral_, &QPushButton::clicked, this, &SettingsDialog::onSaveGeneralSettings);
     generalLayout->addWidget(btnSaveGeneral_, 0, Qt::AlignRight);
 
@@ -603,12 +606,20 @@ void SettingsDialog::setupUi() {
 
 void SettingsDialog::loadSettings() {
     QSettings settings;
+    // Seeding widgets is not user intent. QCheckBox emits clicked()/toggled() for every
+    // programmatic setChecked(), so each write below is muted with a QSignalBlocker: a stray
+    // emission here would be read as "the user flipped this switch" by whoever listens.
+
     // Agent filters: default enabled
     for (auto it = agentCheckboxes_.begin(); it != agentCheckboxes_.end(); ++it) {
         const QString settingKey = QStringLiteral("agents/monitor_") + it.key();
+        const QSignalBlocker blocker(it.value());
         it.value()->setChecked(settings.value(settingKey, true).toBool());
     }
-    subagentPetCheck_->setChecked(settings.value("agents/showSubagentPets", false).toBool());
+    {
+        const QSignalBlocker blocker(subagentPetCheck_);
+        subagentPetCheck_->setChecked(settings.value("agents/showSubagentPets", false).toBool());
+    }
 
     // General settings
     const QString lang = settings.value("ui/language", "zh_CN").toString();
@@ -619,16 +630,41 @@ void SettingsDialog::loadSettings() {
     const int themeIdx = themeCombo_->findData(theme);
     if (themeIdx >= 0) themeCombo_->setCurrentIndex(themeIdx);
 
-    lookAtMouseCheck_->setChecked(lookAtMouseSetting());
-    autoDndCheck_->setChecked(settings.value("pet/autoDoNotDisturb", true).toBool());
-    gravityCheck_->setChecked(settings.value("pet/gravity", false).toBool());
-    gravityScaleSpin_->setValue(settings.value("pet/gravityScale", 1.0).toDouble());
-    completionSoundCheck_->setChecked(settings.value("feedback/completionSound", true).toBool());
+    {
+        const QSignalBlocker blocker(lookAtMouseCheck_);
+        lookAtMouseCheck_->setChecked(lookAtMouseSetting());
+    }
+    {
+        const QSignalBlocker blocker(autoDndCheck_);
+        autoDndCheck_->setChecked(settings.value("pet/autoDoNotDisturb", true).toBool());
+    }
+    {
+        const QSignalBlocker blocker(gravityCheck_);
+        gravityCheck_->setChecked(settings.value("pet/gravity", false).toBool());
+    }
+    {
+        const QSignalBlocker blocker(gravityScaleSpin_);
+        gravityScaleSpin_->setValue(settings.value("pet/gravityScale", 1.0).toDouble());
+    }
+    {
+        const QSignalBlocker blocker(completionSoundCheck_);
+        completionSoundCheck_->setChecked(settings.value("feedback/completionSound", true).toBool());
+    }
 
     QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
     quint16 defaultPort = 8765;
     if (!portText.isEmpty()) defaultPort = quint16(portText.toUInt());
+    const QSignalBlocker portBlocker(apiPortSpin_);
     apiPortSpin_->setValue(settings.value("api/port", defaultPort).toUInt());
+}
+
+void SettingsDialog::setGravityEnabled(bool enabled) {
+    if (!gravityCheck_)
+        return;
+    // QSignalBlocker keeps this push from re-emitting toggled()/gravityToggled() and
+    // bouncing the change straight back to the controller.
+    const QSignalBlocker blocker(gravityCheck_);
+    gravityCheck_->setChecked(enabled);
 }
 
 void SettingsDialog::saveSettings() {
@@ -646,22 +682,28 @@ void SettingsDialog::saveSettings() {
 void SettingsDialog::onSaveGeneralSettings() {
     QSettings settings;
     const QString newLang = languageCombo_->currentData().toString();
+    const bool lookAtMouse = lookAtMouseCheck_->isChecked();
+    const bool autoDoNotDisturb = autoDndCheck_->isChecked();
+    const bool gravity = gravityCheck_->isChecked();
+    const qreal gravityScale = gravityScaleSpin_->value();
+    const bool completionSound = completionSoundCheck_->isChecked();
+    const quint16 apiPort = quint16(apiPortSpin_->value());
     settings.setValue("ui/language", newLang);
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
-    settings.setValue("pet/lookAtMouse", lookAtMouseCheck_->isChecked());
-    settings.setValue("pet/autoDoNotDisturb", autoDndCheck_->isChecked());
-    settings.setValue("pet/gravity", gravityCheck_->isChecked());
-    settings.setValue("pet/gravityScale", gravityScaleSpin_->value());
-    settings.setValue("feedback/completionSound", completionSoundCheck_->isChecked());
-    settings.setValue("api/port", apiPortSpin_->value());
+    // pet/gravity, pet/gravityScale and feedback/completionSound are persisted by the
+    // controller (the single source of truth) when it handles the signals below; writing
+    // them here as well would desync the two the next time the dialog is constructed.
+    settings.setValue("pet/lookAtMouse", lookAtMouse);
+    settings.setValue("pet/autoDoNotDisturb", autoDoNotDisturb);
+    settings.setValue("api/port", apiPort);
 
     emit languageChanged(newLang);
-    emit lookAtMouseToggled(lookAtMouseCheck_->isChecked());
-    emit autoDoNotDisturbToggled(autoDndCheck_->isChecked());
-    emit gravityToggled(gravityCheck_->isChecked());
-    emit gravityScaleChanged(gravityScaleSpin_->value());
-    emit completionSoundToggled(completionSoundCheck_->isChecked());
-    emit apiPortChanged(quint16(apiPortSpin_->value()));
+    emit lookAtMouseToggled(lookAtMouse);
+    emit autoDoNotDisturbToggled(autoDoNotDisturb);
+    emit gravityToggled(gravity);
+    emit gravityScaleChanged(gravityScale);
+    emit completionSoundToggled(completionSound);
+    emit apiPortChanged(apiPort);
 
     applyStyle();
 

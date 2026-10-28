@@ -1,4 +1,6 @@
 /build/
 /out/
+/build-agent/
+/build-agent-default/
 CMakeUserPresets.json
 *.user

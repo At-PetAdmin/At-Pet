@@ -337,6 +337,10 @@ private:
     void showSettingsDialog() {
         if (!settingsDialog_) {
             settingsDialog_ = new SettingsDialog;
+            // The dialog seeds its widgets from QSettings while constructing. Mute it until
+            // the controller has pushed the authoritative state, so seeding can neither echo
+            // back into the controller nor leave a stale copy on screen.
+            const QSignalBlocker blocker(settingsDialog_);
             settingsDialog_->setAttribute(Qt::WA_DeleteOnClose);
             connect(settingsDialog_, &SettingsDialog::petSwitched, this, &PetController::switchPet);
             connect(settingsDialog_, &SettingsDialog::languageChanged, this, [this](const QString &language) {
@@ -374,10 +378,21 @@ private:
             });
             connect(settingsDialog_, &QObject::destroyed, this, [this] { settingsDialog_ = nullptr; });
         }
+        // Re-push on every show: the pet context menu may have changed the state while the
+        // dialog existed but was hidden.
+        updateSettingsCheckboxes();
         settingsDialog_->refreshPetsList();
         settingsDialog_->show();
         settingsDialog_->raise();
         settingsDialog_->activateWindow();
+    }
+
+    // Pushes controller-owned toggle state into the settings dialog. The controller (and the
+    // QSettings mirror it writes) is the single source of truth; the dialog only renders it.
+    void updateSettingsCheckboxes() {
+        if (!settingsDialog_)
+            return;
+        settingsDialog_->setGravityEnabled(gravityEnabled_);
     }
 
     void refreshAgentSessions() {
@@ -416,6 +431,8 @@ private:
         QSettings().setValue("pet/gravity", enabled);
         for (PetWindow *pet : visiblePets())
             pet->setGravityEnabled(enabled);
+        // Keep an already-open settings dialog in step with the pet context menu.
+        updateSettingsCheckboxes();
     }
 
     void setGravityScale(qreal scale) {

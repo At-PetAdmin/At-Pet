@@ -80,6 +80,9 @@ signals:
 
 public slots:
     void refreshPetsList();
+    // Adopts the authoritative gravity state owned by the window that created this
+    // dialog. Never emits gravityToggled(), so pushing state cannot loop back.
+    void setGravityEnabled(bool enabled);
 
 protected:
     void changeEvent(QEvent *event) override;
