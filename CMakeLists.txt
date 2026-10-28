@@ -30,6 +30,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/questiondialog.cpp
     app/questiondialog.h
     app/agentregistry.h
+    app/petsettings.cpp
+    app/petsettings.h
     app/settingsdialog.cpp
     app/settingsdialog.h
     app/theme.cpp
@@ -61,46 +63,57 @@ target_compile_definitions(at-pet PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRIN
 install(TARGETS at-pet BUNDLE DESTINATION . RUNTIME DESTINATION bin)
 
 # --- Tests -------------------------------------------------------------------
-# Regression test for user-visible UI state sync (Gravity toggle: pet context menu
-# <-> Settings dialog). Opt in with -DAT_PET_BUILD_TESTS=ON so normal builds and the
-# packaging flow are unaffected.
+# Regression tests for user-visible UI state sync (pet context menu <-> Settings dialog):
+# Gravity and "Look at the mouse cursor". Opt in with -DAT_PET_BUILD_TESTS=ON so normal
+# builds and the packaging flow are unaffected.
 option(AT_PET_BUILD_TESTS "Build the At-Pet QTest regression tests" OFF)
 
 if(AT_PET_BUILD_TESTS)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
     enable_testing()
 
-    qt_add_executable(at-pet-tests
-        tests/tst_gravitysync.cpp
+    # Production sources the SettingsDialog suites need. PetController lives in app/main.cpp
+    # and is not linkable on its own, so each suite drives a fake controller instead.
+    set(AT_PET_TEST_SOURCES
         app/settingsdialog.cpp
         app/settingsdialog.h
         app/petwindow.cpp
         app/petwindow.h
+        app/petsettings.cpp
+        app/petsettings.h
         app/theme.cpp
         app/theme.h
         app/agentregistry.h
         assets/branding/branding.qrc
         assets/default/pet.qrc
     )
-    target_include_directories(at-pet-tests PRIVATE app)
-    target_compile_definitions(at-pet-tests PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-    target_link_libraries(at-pet-tests PRIVATE Qt6::Widgets Qt6::Test)
-    # Keep the test a console program so QTest's PASS/FAIL output stays visible.
-    set_target_properties(at-pet-tests PROPERTIES WIN32_EXECUTABLE FALSE)
-    if(WIN32)
-        configure_file(
-            assets/branding/app-icon.rc.in
-            "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc"
-            @ONLY
-        )
-        configure_file(
-            assets/branding/app-icon.ico
-            "${CMAKE_CURRENT_BINARY_DIR}/app-icon.ico"
-            COPYONLY
-        )
-        target_sources(at-pet-tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc")
-    endif()
 
-    add_test(NAME gravity-sync COMMAND at-pet-tests)
-    set_tests_properties(gravity-sync PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    function(at_pet_add_test name source)
+        qt_add_executable(${name} tests/${source} ${AT_PET_TEST_SOURCES})
+        target_include_directories(${name} PRIVATE app)
+        target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test)
+        # Keep tests console programs so QTest's PASS/FAIL output stays visible.
+        set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(WIN32)
+            configure_file(
+                assets/branding/app-icon.rc.in
+                "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc"
+                @ONLY
+            )
+            configure_file(
+                assets/branding/app-icon.ico
+                "${CMAKE_CURRENT_BINARY_DIR}/app-icon.ico"
+                COPYONLY
+            )
+            target_sources(${name} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc")
+        endif()
+        add_test(NAME ${name} COMMAND ${name})
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endfunction()
+
+    # One executable per suite: QTEST_MAIN expands to main(), so two suites cannot share one
+    # binary.
+    at_pet_add_test(gravity-sync tst_gravitysync.cpp)
+    at_pet_add_test(lookat-sync tst_lookatsync.cpp)
 endif()

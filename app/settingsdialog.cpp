@@ -1,5 +1,6 @@
 #include "agentregistry.h"
 #include "settingsdialog.h"
+#include "petsettings.h"
 #include "petwindow.h"
 #include "theme.h"
 
@@ -49,15 +50,6 @@ QString petLibraryPath() {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
 }
 
-bool lookAtMouseSetting() {
-    QSettings settings;
-    if (settings.contains(QStringLiteral("pet/lookAtMouse")))
-        return settings.value(QStringLiteral("pet/lookAtMouse")).toBool();
-    const bool legacy = settings.value(QStringLiteral("pet/lookAtCopilot"), false).toBool();
-    settings.setValue(QStringLiteral("pet/lookAtMouse"), legacy);
-    settings.remove(QStringLiteral("pet/lookAtCopilot"));
-    return legacy;
-}
 
 QString animationFpsKey(const QString &petId, const QString &animation) {
     return QStringLiteral("animationFps/%1/%2")
@@ -632,7 +624,9 @@ void SettingsDialog::loadSettings() {
 
     {
         const QSignalBlocker blocker(lookAtMouseCheck_);
-        lookAtMouseCheck_->setChecked(lookAtMouseSetting());
+        // Render only: the legacy pet/lookAtCopilot migration belongs to the controller
+        // (petsettings::loadLookAtMouse), which pushes its authoritative value on show().
+        lookAtMouseCheck_->setChecked(petsettings::storedLookAtMouse());
     }
     {
         const QSignalBlocker blocker(autoDndCheck_);
@@ -656,6 +650,15 @@ void SettingsDialog::loadSettings() {
     if (!portText.isEmpty()) defaultPort = quint16(portText.toUInt());
     const QSignalBlocker portBlocker(apiPortSpin_);
     apiPortSpin_->setValue(settings.value("api/port", defaultPort).toUInt());
+}
+
+void SettingsDialog::setLookAtMouseEnabled(bool enabled) {
+    if (!lookAtMouseCheck_)
+        return;
+    // QSignalBlocker keeps this push from re-emitting toggled()/lookAtMouseToggled() and
+    // bouncing the change straight back to the controller.
+    const QSignalBlocker blocker(lookAtMouseCheck_);
+    lookAtMouseCheck_->setChecked(enabled);
 }
 
 void SettingsDialog::setGravityEnabled(bool enabled) {
@@ -690,10 +693,9 @@ void SettingsDialog::onSaveGeneralSettings() {
     const quint16 apiPort = quint16(apiPortSpin_->value());
     settings.setValue("ui/language", newLang);
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
-    // pet/gravity, pet/gravityScale and feedback/completionSound are persisted by the
-    // controller (the single source of truth) when it handles the signals below; writing
+    // pet/lookAtMouse, pet/gravity, pet/gravityScale and feedback/completionSound are persisted
+    // by the controller (the single source of truth) when it handles the signals below; writing
     // them here as well would desync the two the next time the dialog is constructed.
-    settings.setValue("pet/lookAtMouse", lookAtMouse);
     settings.setValue("pet/autoDoNotDisturb", autoDoNotDisturb);
     settings.setValue("api/port", apiPort);
 

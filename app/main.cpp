@@ -1,5 +1,6 @@
 #include "agentregistry.h"
 #include "httpapi.h"
+#include "petsettings.h"
 #include "permissiondialog.h"
 #include "questiondialog.h"
 #include "petwindow.h"
@@ -111,16 +112,6 @@ QIcon appIcon() {
     return QIcon(QStringLiteral(":/branding/logo.png"));
 }
 
-bool lookAtMouseSetting() {
-    QSettings settings;
-    if (settings.contains(QStringLiteral("pet/lookAtMouse")))
-        return settings.value(QStringLiteral("pet/lookAtMouse")).toBool();
-    const bool legacy = settings.value(QStringLiteral("pet/lookAtCopilot"), false).toBool();
-    settings.setValue(QStringLiteral("pet/lookAtMouse"), legacy);
-    settings.remove(QStringLiteral("pet/lookAtCopilot"));
-    return legacy;
-}
-
 #ifdef Q_OS_WIN
 QString windowClassName(HWND window) {
     wchar_t name[256]{};
@@ -174,6 +165,8 @@ public:
         QDir().mkpath(petLibraryPath());
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
+        // Migrates the legacy pet/lookAtCopilot key on first run, then the member owns it.
+        lookAtMouseEnabled_ = petsettings::loadLookAtMouse();
         gravityEnabled_ = QSettings().value("pet/gravity", false).toBool();
         gravityScale_ = qBound(0.1, QSettings().value("pet/gravityScale", 1.0).toDouble(), 3.0);
         completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
@@ -267,7 +260,7 @@ private:
     PetWindow *createPet(const QString &directory, const QPoint &position) {
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
-        pet->setLookAtMouse(lookAtMouseSetting());
+        pet->setLookAtMouse(lookAtMouseEnabled_);
         pet->setFreeMovementEnabled(freeMovementEnabled_);
         pet->setGravityScale(gravityScale_);
         pet->setGravityEnabled(gravityEnabled_);
@@ -304,10 +297,9 @@ private:
         connect(pet, &PetWindow::importFolderRequested, this, &PetController::importPetFolder);
         connect(pet, &PetWindow::summonAllRequested, this, &PetController::summonAll);
         connect(pet, &PetWindow::deleteRequested, this, &PetController::deletePet);
-        connect(pet, &PetWindow::lookAtMouseToggled, pet, [pet](bool enabled) {
-            QSettings().setValue(QStringLiteral("pet/lookAtMouse"), enabled);
-            pet->setLookAtMouse(enabled);
-        });
+        // Pet context menu entry: go through the controller instead of writing QSettings here,
+        // so the persisted value, every other pet window and the settings dialog all follow.
+        connect(pet, &PetWindow::lookAtMouseToggled, this, &PetController::setLookAtMouseEnabled);
         connect(pet, &PetWindow::doNotDisturbToggled, this, [this](bool enabled) {
             if (syncingDoNotDisturb_) return;
             setManualDoNotDisturb(enabled);
@@ -346,9 +338,8 @@ private:
             connect(settingsDialog_, &SettingsDialog::languageChanged, this, [this](const QString &language) {
                 setLanguage(language);
             });
-            connect(settingsDialog_, &SettingsDialog::lookAtMouseToggled, this, [this](bool enabled) {
-                for (PetWindow *pet : visiblePets()) pet->setLookAtMouse(enabled);
-            });
+            connect(settingsDialog_, &SettingsDialog::lookAtMouseToggled, this,
+                    &PetController::setLookAtMouseEnabled);
             connect(settingsDialog_, &SettingsDialog::autoDoNotDisturbToggled, this, [this](bool enabled) {
                 autoDoNotDisturbEnabled_ = enabled;
                 QSettings().setValue(QStringLiteral("pet/autoDoNotDisturb"), enabled);
@@ -393,6 +384,7 @@ private:
         if (!settingsDialog_)
             return;
         settingsDialog_->setGravityEnabled(gravityEnabled_);
+        settingsDialog_->setLookAtMouseEnabled(lookAtMouseEnabled_);
     }
 
     void refreshAgentSessions() {
@@ -422,6 +414,17 @@ private:
         QSettings().setValue("pet/freeMovement", enabled);
         for (PetWindow *pet : visiblePets())
             pet->setFreeMovementEnabled(enabled);
+    }
+
+    void setLookAtMouseEnabled(bool enabled) {
+        if (lookAtMouseEnabled_ == enabled)
+            return;
+        lookAtMouseEnabled_ = enabled;
+        petsettings::storeLookAtMouse(enabled);
+        for (PetWindow *pet : visiblePets())
+            pet->setLookAtMouse(enabled);
+        // Keep an already-open settings dialog in step with the pet context menu.
+        updateSettingsCheckboxes();
     }
 
     void setGravityEnabled(bool enabled) {
@@ -1093,6 +1096,7 @@ private:
     bool translatorInstalled_ = false;
     bool subagentPetsEnabled_ = false;
     bool freeMovementEnabled_ = true;
+    bool lookAtMouseEnabled_ = false;
     bool gravityEnabled_ = false;
     qreal gravityScale_ = 1.0;
     bool completionSoundEnabled_ = true;
