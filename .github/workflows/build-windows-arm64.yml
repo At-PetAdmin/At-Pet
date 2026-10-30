@@ -108,8 +108,27 @@ jobs:
             }
             if (-not $signed) { throw 'signtool could not sign at-pet.exe.' }
 
+            # A self-signed certificate is not in the runner's trust store, so the default
+            # Authenticode policy reports an untrusted root even for a good signature. Fall back
+            # to pinning the signer thumbprint and rejecting corrupted or invalid signatures.
             & $signtool verify /pa 'build-arm64\at-pet.exe'
-            if ($LASTEXITCODE -ne 0) { throw 'Signature verification failed.' }
+            $verified = $LASTEXITCODE -eq 0
+            # Do not let a failed default-policy check fail the step below.
+            $global:LASTEXITCODE = 0
+            if (-not $verified) {
+              $expected = [Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, $env:CERT_PASSWORD)
+              $signature = Get-AuthenticodeSignature 'build-arm64\at-pet.exe'
+              if (-not $signature.SignerCertificate) {
+                throw 'at-pet.exe is not signed.'
+              }
+              if ($signature.SignerCertificate.Thumbprint -ne $expected.Thumbprint) {
+                throw "at-pet.exe was signed by $($signature.SignerCertificate.Thumbprint), expected $($expected.Thumbprint)."
+              }
+              if ($signature.Status -notin @('Valid', 'UnknownError')) {
+                throw "Signature verification failed with status $($signature.Status)."
+              }
+              Write-Host "Signature uses a self-signed certificate; verified signer $($expected.Thumbprint)."
+            }
           } finally {
             Remove-Item $pfx -Force -ErrorAction SilentlyContinue
           }
