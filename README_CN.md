@@ -12,7 +12,7 @@
 ## 功能特性
 
 - 透明、无边框、始终置顶的宠物窗口。拖动可移动；单击触发问候；双击输入想让宠物说的话；右键打开控制菜单。桌宠默认会在屏幕范围内上下左右自由走动，可从右键菜单关闭或重新开启，选择会被记住。可选重力功能会使桌宠在拖动后下落，并在甩出时保留拖动的惯性；开启重力后桌宠只沿地面左右走动，被抬离地面时会自动落回。甩出的桌宠碰到屏幕边缘会反弹，而不会直接停住；落到底部时还会像篮球一样弹起，撞击瞬间挤压变形，每次弹起的高度逐渐降低直到静止；常规设置中的“重力系数”可调节下落速度（默认 1.00）。拖动、甩出和重力都不会让桌宠移出屏幕。
-- 内置 Codex Pets 精灵桌宠作为默认宠物，并支持自定义精灵表动画，覆盖 idle、walk、sleep、thinking、work、review、工具执行、权限请求、完成、取消和错误等状态。
+- 内置 Octocat 风格精灵桌宠作为默认宠物，并支持自定义精灵表动画，覆盖 idle、walk、sleep、thinking、work、review、工具执行、权限请求、完成、取消和错误等状态。
 - 导入、预览、切换、删除和召唤宠物库中的每一只有效宠物；也可选择为检测到的每个子代理会话显示独立桌宠。
 - 监视已导入的 `pet.json` 及其所在文件夹，修改后无需重启即可重新加载配置和精灵图。
 - 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和 Agent 事件。Claude Code HTTP hooks 与 OpenCode V2 插件提供原生适配器；兼容 MCP 的客户端可选择使用 stdio 桥接主动上报事件，其他来源也可使用通用 HTTP API。
@@ -92,7 +92,7 @@ cmake --build build
 ```
 
 支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。如需左右方向分别显示走路动画，可按需定义 `walkLeft` 和/或 `walkRight`（也接受 `walk_left`/`walk_right` 或 `walk-left`/`walk-right`）；移动时会选择对应方向的动画，未定义时回退到 `walk`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。
-`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。`animationGroups` 用于给一组动画命名；其中 `rest` 组（逗号分隔的字符串、数组或 `[{"name": ...}]`）会让空闲的桌宠每隔 8–20 秒切换到组内的某个动画并保持 3.5–9 秒，因此“休息”中的桌宠会在 `idle` 与 `sleep` 等动画之间轮换，而不是一直定格在同一个姿势。`animations` 中不存在的条目会被忽略。`quotes`（也可写作 `pokeQuotes`）用于配置随机语录，可以是字符串、字符串数组或带 `text` 字段的对象数组，戳一戳时随机显示。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
+`cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。`animationGroups` 用于给一组动画命名；其中 `rest` 组（逗号分隔的字符串、数组或 `[{"name": ...}]`）会让空闲的桌宠每隔 8–20 秒切换到组内的某个动画并保持 3.5–9 秒，因此“休息”中的桌宠会在 `idle` 与 `sleep` 等动画之间轮换，而不是一直定格在同一个姿势。`animations` 中不存在的条目会被忽略。`quotes`（也可写作 `pokeQuotes`）用于配置随机语录，可以是字符串、字符串数组或带 `text` 字段的对象数组，戳一戳时随机显示。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。内置默认形象是受 GitHub Octocat 启发的同人 Q 版形象，与 GitHub 无隶属关系。在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
 
 ## 本地 API
 
