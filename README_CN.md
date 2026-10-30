@@ -45,6 +45,16 @@ cmake --build build
 
 **Build Windows amd64 package** workflow 会在每个 Pull Request 和每次推送到 `main` 时构建免安装 Qt 的 Windows x86-64 压缩包，因此没有本地 Qt 环境的贡献者也能测试自己的改动。在运行记录的 **Artifacts** 区域下载 `At-Pet-windows-amd64`，解压后直接运行 `at-pet.exe`。推送 `v*` 标签时，压缩包和 `.sha256` 校验文件会一并附加到对应 GitHub Release。Windows ARM64 workflow 可手动运行用于测试，使用 `v*` 标签触发时会发布对应架构的包。正式版本的压缩包及 SHA-256 校验文件也会一并保存在 `dist/`。
 
+### 校验构建来源
+
+Windows workflow 构建的安装包都会附带[构建来源证明](https://docs.github.com/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)，记录文件由哪个仓库、哪个提交、哪个 workflow 产生。下载 `At-Pet-windows-amd64.zip` 或解压出的 `at-pet.exe` 后，可以用 GitHub CLI 校验：
+
+```bash
+gh attestation verify At-Pet-windows-amd64.zip --repo At-PetAdmin/At-Pet
+```
+
+推送到 `main` 和使用 `v*` 标签时会生成证明；Pull Request 构建会跳过，因为来自 fork 的 PR 无法申请 OIDC 令牌。来源证明回答的是"这个文件是否由本仓库的 workflow 构建"，这正是自签名证书无法证明的部分。
+
 ### Windows 版本信息与代码签名
 
 `assets/branding/app-icon.rc.in` 同时嵌入窗口图标和版本资源，因此 `at-pet.exe` 的 **属性 > 详细信息** 以及版本 API 会显示 `At-Pet`、`At-PetAdmin` 和 CMake 工程版本（`PROJECT_VERSION`）。Windows 对未签名的下载仍会提示 **未知发布者**，只有 Authenticode 签名才能消除该提示。两个 Windows workflow 在配置了以下仓库 Secret 时会对 `at-pet.exe` 签名，未配置时自动跳过：
