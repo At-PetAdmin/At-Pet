@@ -1,0 +1,7 @@
+/preview/
+/ref/
+/_sleep_fn.py
+/gen/*.png
+/gen/*.gif
+/gen/frames/
+__pycache__/
