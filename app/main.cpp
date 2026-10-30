@@ -4,6 +4,7 @@
 #include "permissiondialog.h"
 #include "questiondialog.h"
 #include "petwindow.h"
+#include "quotepack.h"
 #include "settingsdialog.h"
 
 #include <QActionGroup>
@@ -24,6 +25,7 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QPointer>
+#include <QRandomGenerator>
 #include <QQueue>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -163,6 +165,7 @@ public:
             ? QStringLiteral("zh_CN") : QStringLiteral("en");
         setLanguage(savedLanguage == "zh_CN" || savedLanguage == "en" ? savedLanguage : systemLanguage, false);
         QDir().mkpath(petLibraryPath());
+        quotePack_ = QuotePack::load(QuotePack::defaultPath());
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
         // Migrates the legacy pet/lookAtCopilot key on first run, then the member owns it.
@@ -209,6 +212,9 @@ public:
         housekeepingTimer_.setInterval(5000);
         connect(&housekeepingTimer_, &QTimer::timeout, this, &PetController::pruneStaleSessions);
         housekeepingTimer_.start();
+        idleQuoteTimer_.setSingleShot(true);
+        connect(&idleQuoteTimer_, &QTimer::timeout, this, &PetController::showIdleQuote);
+        scheduleIdleQuote();
     }
 
     ~PetController() override {
@@ -274,7 +280,10 @@ private:
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
             pet->setAnimation("interact");
-            const QString quote = pet->randomQuote();
+            // The shared pack wins, then the pet's own quotes, then the built-in prompt.
+            QString quote = quotePack_.randomQuote(QuotePack::Category::Poke, language_);
+            if (quote.isEmpty())
+                quote = pet->randomQuote();
             pet->setSpeech(quote.isEmpty() ? tr("Hi! Double-click to chat.") : quote);
             QTimer::singleShot(1200, pet, [this, pet] {
                 if (pet->animation() == "interact")
@@ -367,6 +376,8 @@ private:
                 for (PetWindow *pet : visiblePets())
                     if (pet->petId() == petId) pet->setAnimationFps(animation, fps);
             });
+            connect(settingsDialog_, &SettingsDialog::quotePackImported, this,
+                    [this](const QString &path) { quotePack_ = QuotePack::load(path); });
             connect(settingsDialog_, &QObject::destroyed, this, [this] { settingsDialog_ = nullptr; });
         }
         // Re-push on every show: the pet context menu or the tray menu may have changed the
@@ -661,6 +672,34 @@ private:
         publishState();
     }
 
+    void scheduleIdleQuote() {
+        // Single-shot, re-armed after every fire so the cadence drifts between 2 and 5 minutes.
+        idleQuoteTimer_.start(QRandomGenerator::global()->bounded(120000, 300001));
+    }
+
+    void showIdleQuote() {
+        scheduleIdleQuote();
+        if (!sessions_.isEmpty() || !quotePack_.hasCategory(QuotePack::Category::Idle))
+            return;
+        QVector<PetWindow *> candidates;
+        for (PetWindow *pet : visiblePets()) {
+            if (pet->isVisible() && pet->speech().isEmpty())
+                candidates.append(pet);
+        }
+        if (candidates.isEmpty())
+            return;
+        QString quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
+        if (quote.isEmpty())
+            return;
+        // Avoid repeating the previous line when the language offers more than one.
+        for (int attempt = 0; attempt < 4 && quote == lastIdleQuote_; ++attempt)
+            quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
+        lastIdleQuote_ = quote;
+        const int index = QRandomGenerator::global()->bounded(int(candidates.size()));
+        candidates.at(index)->setSpeech(quote);
+        publishState();
+    }
+
     void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
         questionQueue_.enqueue(qMakePair(requestId, request));
         showNextQuestionDialog();
@@ -803,6 +842,24 @@ private:
         state.terminal = terminal;
         sessions_.insert(key, state);
         applySessionAnimation();
+        // Termination speaks a pack line over the agent message that applySessionAnimation()
+        // just showed. An empty category keeps the original message-only behaviour.
+        QuotePack::Category terminalCategory = QuotePack::Category::Done;
+        bool terminalQuote = successfulCompletion;
+        if (!terminalQuote && terminal && animation == QLatin1String("error")) {
+            terminalCategory = QuotePack::Category::Error;
+            terminalQuote = true;
+        } else if (!terminalQuote && terminal && animation == QLatin1String("cancelled")) {
+            terminalCategory = QuotePack::Category::Cancel;
+            terminalQuote = true;
+        }
+        if (terminalQuote) {
+            const QString quote = quotePack_.randomQuote(terminalCategory, language_);
+            if (!quote.isEmpty()) {
+                for (PetWindow *pet : visiblePets()) pet->setSpeech(quote);
+                publishState();
+            }
+        }
         if (successfulCompletion && completionSoundEnabled_)
             QApplication::beep();
         if (terminal) {
@@ -1127,6 +1184,9 @@ private:
     QTimer lookTimer_;
     QTimer fullscreenTimer_;
     QTimer housekeepingTimer_;
+    QTimer idleQuoteTimer_;
+    QuotePack quotePack_;
+    QString lastIdleQuote_;
     QPointer<SettingsDialog> settingsDialog_;
 };
 

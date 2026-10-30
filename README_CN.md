@@ -94,6 +94,40 @@ cmake --build build
 支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。如需左右方向分别显示走路动画，可按需定义 `walkLeft` 和/或 `walkRight`（也接受 `walk_left`/`walk_right` 或 `walk-left`/`walk-right`）；移动时会选择对应方向的动画，未定义时回退到 `walk`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。
 `cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。`animationGroups` 用于给一组动画命名；其中 `rest` 组（逗号分隔的字符串、数组或 `[{"name": ...}]`）会让空闲的桌宠每隔 8–20 秒切换到组内的某个动画并保持 3.5–9 秒，因此“休息”中的桌宠会在 `idle` 与 `sleep` 等动画之间轮换，而不是一直定格在同一个姿势。`animations` 中不存在的条目会被忽略。`quotes`（也可写作 `pokeQuotes`）用于配置随机语录，可以是字符串、字符串数组或带 `text` 字段的对象数组，戳一戳时随机显示。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
 
+### 语录包
+
+所有桌宠可以共用一个语录包：独立的 JSON 文件，路径为 `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json`（即 `QStandardPaths::AppDataLocation/quotes.json`）。它不会被写进 `pet.json`，因此切换、更新或重新导入桌宠都不会影响它。
+
+完整 schema（五个类别、两种受支持的语言）：
+
+```json
+{
+  "zh_CN": {
+    "poke": ["别戳我啦～", "痒痒的！"],
+    "done": ["完工啦，检查一下？", "这单收工！"],
+    "error": ["出错了，我来看看日志。", "别慌，报错而已。"],
+    "cancel": ["已取消，随时再叫我。", "好，这次先不做。"],
+    "idle": ["要不要休息一下？", "我在这儿陪你。"]
+  },
+  "en": {
+    "poke": ["Hey, that tickles!"],
+    "done": ["All done! Want to review?"],
+    "error": ["Something broke — check the logs?"],
+    "cancel": ["Cancelled. Ping me anytime."],
+    "idle": ["Take a short break?", "Right here with you."]
+  }
+}
+```
+
+* **类别**：`poke`、`done`、`error`、`cancel`、`idle`。支持的别名：`poked`/`interact`/`click` → poke，`completed`/`completion`/`finished` → done，`failed`/`failure` → error，`cancelled`/`canceled`/`aborted` → cancel，`waiting`/`random` → idle。
+* **句子格式**：每个类别可以是单个字符串、字符串数组，或带 `text` 字段的对象数组。空行和非字符串项会被忽略；如果整个文件没有任何可用句子，则视为校验失败。
+* **语言**：语言键会做大小写和 `-`/`_` 归一化（`zh-CN` 与 `zh_CN` 等价）。匹配顺序为：界面语言精确匹配 → 基础语言（`zh_CN` → `zh`，`en_US` → `en`）→ `en` → 文件中第一个包含该类别的语言。
+* **导入**：**设置 → 常规设置 → 语录包 → 导入 quotes.json…**。候选文件会先校验；无效的语录包会给出具体错误，并且绝不会覆盖已安装的文件。校验通过的语录包会以原子方式复制到上述路径，所有正在运行的桌宠立即生效。
+* **触发时机**：戳一戳桌宠、Agent 终态事件（`done`、`error`、`cancelled`），以及没有活跃 Agent 会话、桌宠可见且当前没有说话时，每 2–5 分钟随机显示一句待机语录。语录包有多句时不会连续重复同一句，切换语言后下一句即使用新语言。
+* **缺少动画时**：如果桌宠的 `animations` 表里没有对应条目（例如没有 `done` 行），该动画会被跳过，但语录仍然显示，屏幕上保留上一帧而不会变成空白。
+
+双语示例见 `assets/default/quotes.example.json`，它不会被自动加载。没有安装语录包时，上述行为回退到 `pet.json` 里桌宠自带的 `quotes`，再回退到内置提示语。
+
 ## 本地 API
 
 服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。该 API 不进行身份验证，仅用于同一台机器上的可信程序；请勿将其暴露或转发到网络。

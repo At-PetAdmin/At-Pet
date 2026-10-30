@@ -94,7 +94,41 @@ Example `pet.json` in the reference project's format:
 `sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays.
  For distinct horizontal walking animations, optionally define `walkLeft` and/or `walkRight` (also accepted: `walk_left`/`walk_right` or `walk-left`/`walk-right`); At-Pet selects the direction-specific animation while moving and falls back to `walk` when it is missing. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order.  Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. `animationGroups` names reusable sets of animations; the `rest` group (a comma-separated string, an array, or `[{"name": ...}]`) makes an idle pet switch to one of those animations every 8–20 seconds and hold it for 3.5–9 seconds, so a "resting" pet alternates between e.g. `idle` and `sleep` instead of freezing on one pose. Entries that do not exist in `animations` are ignored. `quotes` (also `pokeQuotes`) adds random lines — a string, an array of strings, or objects with a `text` field — shown when the pet is poked. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
-## Local API
+ ### Quote pack
+
+ Every pet can share one quote pack: a standalone JSON file at `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json` (`QStandardPaths::AppDataLocation/quotes.json`). It is never written into `pet.json`, so switching, updating or re-importing pets keeps it intact.
+
+ Complete schema — all five categories, both supported languages:
+
+ ```json
+ {
+   "zh_CN": {
+     "poke": ["别戳我啦～", "痒痒的！"],
+     "done": ["完工啦，检查一下？", "这单收工！"],
+     "error": ["出错了，我来看看日志。", "别慌，报错而已。"],
+     "cancel": ["已取消，随时再叫我。", "好，这次先不做。"],
+     "idle": ["要不要休息一下？", "我在这儿陪你。"]
+   },
+   "en": {
+     "poke": ["Hey, that tickles!"],
+     "done": ["All done! Want to review?"],
+     "error": ["Something broke — check the logs?"],
+     "cancel": ["Cancelled. Ping me anytime."],
+     "idle": ["Take a short break?", "Right here with you."]
+   }
+ }
+ ```
+
+ * **Categories**: `poke`, `done`, `error`, `cancel`, `idle`. Accepted aliases: `poked`/`interact`/`click` → poke, `completed`/`completion`/`finished` → done, `failed`/`failure` → error, `cancelled`/`canceled`/`aborted` → cancel, `waiting`/`random` → idle.
+ * **Entry formats**: a category may be a single string, an array of strings, or an array of objects carrying a `text` field. Blank lines and non-string entries are ignored; a file with no usable line at all is rejected.
+ * **Languages**: keys are normalised for case and `-`/`_` (`zh-CN` and `zh_CN` are the same). Resolution order is exact interface language → base language (`zh_CN` → `zh`, `en_US` → `en`) → `en` → the first language in the file that has that category.
+ * **Importing**: **Settings → General Settings → Quote Pack → Import quotes.json…**. The candidate file is validated first; an invalid pack shows a specific error and never overwrites the installed one. A valid pack is copied atomically to the path above and every running pet picks it up immediately.
+ * **Triggers**: poking the pet, terminal agent events (`done`, `error`, `cancelled`), and one idle line every 2–5 minutes while no agent session is active, the pet is visible and it is not already speaking. The same idle line is not repeated back to back when the pack offers alternatives, and a language switch is honoured on the next line.
+ * **Missing animations**: a pet whose `animations` table lacks the requested entry (for example no `done` row) skips that animation and still speaks — the last frame stays on screen instead of turning blank.
+
+ A bilingual sample lives at `assets/default/quotes.example.json`; it is not loaded automatically. With no pack installed every behaviour above falls back to the pet's own `quotes` from `pet.json` and then to the built-in prompt.
+
+ ## Local API
 
 The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. The API is unauthenticated and intended only for trusted programs on the same machine; do not expose or forward this port to a network.
 

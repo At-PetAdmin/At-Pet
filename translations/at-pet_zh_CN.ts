@@ -1117,5 +1117,88 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
         <source>Remove %1 from your pet library? This cannot be undone.</source>
         <translation>确定从桌宠库中删除 %1 吗？此操作无法撤销。</translation>
     </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="569"/>
+        <location filename="../app/settingsdialog.cpp" line="1254"/>
+        <source>Quote Pack</source>
+        <translation>语录包</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="573"/>
+        <location filename="../app/settingsdialog.cpp" line="1255"/>
+        <source>One quote pack is shared by every pet. Lines are picked by the interface language.</source>
+        <translation>所有桌宠共用一个语录包，按界面语言挑选句子。</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="578"/>
+        <location filename="../app/settingsdialog.cpp" line="1256"/>
+        <source>Import quotes.json…</source>
+        <translation>导入 quotes.json…</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="717"/>
+        <source>No quote pack imported yet; each pet&apos;s own quotes are used.</source>
+        <translation>尚未导入语录包，当前使用每只桌宠自带的语录。</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="722"/>
+        <source>The installed quote pack has no usable quotes.</source>
+        <translation>已安装的语录包中没有可用的句子。</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="725"/>
+        <source>Installed: %1 quotes across %2 languages.</source>
+        <translation>已安装：%1 条语录，共 %2 种语言。</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="732"/>
+        <source>Import quote pack</source>
+        <translation>导入语录包</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="733"/>
+        <source>JSON files (*.json);;All files (*)</source>
+        <translation>JSON 文件 (*.json);;所有文件 (*)</translation>
+    </message>
+    <message>
+        <location filename="../app/settingsdialog.cpp" line="738"/>
+        <source>Quote pack import failed</source>
+        <translation>语录包导入失败</translation>
+    </message>
+</context>
+<context>
+    <name>QuotePack</name>
+    <message>
+        <location filename="../app/quotepack.cpp" line="167"/>
+        <location filename="../app/quotepack.cpp" line="258"/>
+        <source>Could not read %1.</source>
+        <translation>无法读取 %1。</translation>
+    </message>
+    <message>
+        <location filename="../app/quotepack.cpp" line="177"/>
+        <source>Invalid JSON at offset %1: %2</source>
+        <translation>JSON 格式无效（位置 %1）：%2</translation>
+    </message>
+    <message>
+        <location filename="../app/quotepack.cpp" line="184"/>
+        <source>The quote pack must be a JSON object.</source>
+        <translation>语录包必须是一个 JSON 对象。</translation>
+    </message>
+    <message>
+        <location filename="../app/quotepack.cpp" line="235"/>
+        <location filename="../app/quotepack.cpp" line="250"/>
+        <source>The quote pack contains no usable quotes.</source>
+        <translation>语录包中没有可用的句子。</translation>
+    </message>
+    <message>
+        <location filename="../app/quotepack.cpp" line="268"/>
+        <source>Could not create %1.</source>
+        <translation>无法创建 %1。</translation>
+    </message>
+    <message>
+        <location filename="../app/quotepack.cpp" line="277"/>
+        <source>Could not write %1.</source>
+        <translation>无法写入 %1。</translation>
+    </message>
 </context>
 </TS>

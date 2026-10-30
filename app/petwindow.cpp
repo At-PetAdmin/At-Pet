@@ -249,8 +249,22 @@ void PetWindow::setAnimationFps(const QString &name, int fps) {
         animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
 }
 
+bool PetWindow::hasAnimation(const QString &name) const {
+    if (name.isEmpty())
+        return false;
+    const QJsonObject animations = definition_.value("animations").toObject();
+    // A pet that ships an animation table can only play those entries; an empty table means the
+    // built-in vector pet (or a legacy sprite without named animations), which uses the builtin
+    // names.
+    if (animations.isEmpty())
+        return builtinAnimations.contains(name);
+    return animations.contains(name);
+}
+
 void PetWindow::setAnimation(const QString &name) {
-    if (!builtinAnimations.contains(name) && !definition_.value("animations").toObject().contains(name))
+    // Skipping an unconfigured animation keeps the current frame on screen instead of painting a
+    // blank cell. Callers (agent events, quotes) still go on to speak.
+    if (!hasAnimation(name))
         return;
 
     const bool externalAnimation = !settingMovementAnimation_;
@@ -1137,8 +1151,16 @@ void PetWindow::reloadDefinition() {
     if (attachment_ != AttachmentEdge::None)
         positionAttachedWindow();
     const QString defaultAnimation = definition_.value("defaultAnimation").toString();
-    if (!defaultAnimation.isEmpty() && definition_.value("animations").toObject().contains(defaultAnimation))
+    if (!defaultAnimation.isEmpty() && hasAnimation(defaultAnimation))
         animation_ = defaultAnimation;
+    // A hot reload can remove the animation that is currently on screen. Fall back to idle (or
+    // the first configured animation) so sprite pets never keep painting a cell that is gone.
+    if (!hasAnimation(animation_)) {
+        const QStringList configured = definition_.value("animations").toObject().keys();
+        animation_ = hasAnimation(QStringLiteral("idle"))
+            ? QStringLiteral("idle")
+            : configured.value(0, QStringLiteral("idle"));
+    }
     const QJsonObject currentAnimation = definition_.value("animations").toObject().value(animation_).toObject();
     const int defaultFps = qBound(1, currentAnimation.value("fps").toInt(framesPerSecond_), 30);
     const int fps = QSettings().value(animationFpsKey(petId(), animation_), defaultFps).toInt();
@@ -1492,10 +1514,9 @@ void PetWindow::contextMenuEvent(QContextMenuEvent *event) {
 void PetWindow::showContextMenu(const QPoint &globalPosition) {
     QMenu menu(this);
     QMenu *animationMenu = menu.addMenu(tr("Animation"));
-    QStringList animationNames = builtinAnimations;
-    for (const QString &name : definition_.value("animations").toObject().keys()) {
-        if (!animationNames.contains(name)) animationNames.append(name);
-    }
+    QStringList animationNames = definition_.value("animations").toObject().isEmpty()
+        ? builtinAnimations
+        : definition_.value("animations").toObject().keys();
     const QHash<QString, QString> translatedAnimations = {
         {QStringLiteral("idle"), tr("Idle")}, {QStringLiteral("walk"), tr("Walk")},
         {QStringLiteral("sleep"), tr("Sleep")}, {QStringLiteral("thinking"), tr("Thinking")},

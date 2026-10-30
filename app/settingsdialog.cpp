@@ -2,6 +2,7 @@
 #include "settingsdialog.h"
 #include "petsettings.h"
 #include "petwindow.h"
+#include "quotepack.h"
 #include "theme.h"
 
 #include <QApplication>
@@ -349,6 +350,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     applyStyle();
     loadSettings();
     refreshPetsList();
+    refreshQuotePackStatus();
 }
 
 void SettingsDialog::applyStyle() {
@@ -361,6 +363,7 @@ void SettingsDialog::applyStyle() {
     installedPetsLabel_->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px; color: %1;").arg(color(palette.text)));
     previewLabel_->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px; color: %1;").arg(color(palette.text)));
     importStatusLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 12px; padding: 2px 4px;").arg(color(palette.statusOk)));
+    quotePackStatusLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 12px;").arg(color(palette.textSecondary)));
     animationFpsNoteLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color(palette.textFaint)));
     agentHeaderLabel_->setStyleSheet(QStringLiteral("font-size: 13px; color: %1; margin-bottom: 8px;").arg(color(palette.textSecondary)));
     petInfoLabel_->setStyleSheet(QStringLiteral("background: %1; border: 1px solid %2; border-radius: 8px; padding: 10px; color: %3; font-size: 12px;")
@@ -563,6 +566,27 @@ void SettingsDialog::setupUi() {
     uiForm->addWidget(apiPortSpin_, 7, 1);
 
     generalLayout->addWidget(uiGroup);
+
+    quotePackGroupBox_ = new QGroupBox(tr("Quote Pack"), generalTab);
+    auto *quotePackLayout = new QVBoxLayout(quotePackGroupBox_);
+    quotePackLayout->setSpacing(8);
+    quotePackDescriptionLabel_ = new QLabel(
+        tr("One quote pack is shared by every pet. Lines are picked by the interface language."),
+        quotePackGroupBox_);
+    quotePackDescriptionLabel_->setWordWrap(true);
+    quotePackLayout->addWidget(quotePackDescriptionLabel_);
+    auto *quotePackActions = new QHBoxLayout;
+    btnImportQuotePack_ = new QPushButton(tr("Import quotes.json…"), quotePackGroupBox_);
+    btnImportQuotePack_->setObjectName(QStringLiteral("importQuotePackButton"));
+    connect(btnImportQuotePack_, &QPushButton::clicked, this, &SettingsDialog::onImportQuotePack);
+    quotePackActions->addWidget(btnImportQuotePack_);
+    quotePackActions->addStretch(1);
+    quotePackLayout->addLayout(quotePackActions);
+    quotePackStatusLabel_ = new QLabel(quotePackGroupBox_);
+    quotePackStatusLabel_->setWordWrap(true);
+    quotePackLayout->addWidget(quotePackStatusLabel_);
+    generalLayout->addWidget(quotePackGroupBox_);
+
     generalLayout->addStretch(1);
 
     btnSaveGeneral_ = new QPushButton(tr("Apply General Settings"), generalTab);
@@ -650,6 +674,8 @@ void SettingsDialog::loadSettings() {
     if (!portText.isEmpty()) defaultPort = quint16(portText.toUInt());
     const QSignalBlocker portBlocker(apiPortSpin_);
     apiPortSpin_->setValue(settings.value("api/port", defaultPort).toUInt());
+
+    refreshQuotePackStatus();
 }
 
 void SettingsDialog::setLookAtMouseEnabled(bool enabled) {
@@ -682,6 +708,39 @@ void SettingsDialog::setLanguage(const QString &language) {
     // selection; this slot must never read or write QSettings.
     const QSignalBlocker blocker(languageCombo_);
     languageCombo_->setCurrentIndex(index);
+}
+
+void SettingsDialog::refreshQuotePackStatus() {
+    if (!quotePackStatusLabel_)
+        return;
+    const QString path = QuotePack::defaultPath();
+    if (!QFileInfo::exists(path)) {
+        quotePackStatusLabel_->setText(tr("No quote pack imported yet; each pet's own quotes are used."));
+        return;
+    }
+    const QuotePack pack = QuotePack::load(path);
+    if (pack.isEmpty()) {
+        quotePackStatusLabel_->setText(tr("The installed quote pack has no usable quotes."));
+        return;
+    }
+    quotePackStatusLabel_->setText(tr("Installed: %1 quotes across %2 languages.")
+                                       .arg(pack.quoteCount())
+                                       .arg(pack.languageCount()));
+}
+
+void SettingsDialog::onImportQuotePack() {
+    const QString source = QFileDialog::getOpenFileName(
+        this, tr("Import quote pack"), QString(),
+        tr("JSON files (*.json);;All files (*)"));
+    if (source.isEmpty())
+        return;
+    QString error;
+    if (!QuotePack::install(source, &error)) {
+        QMessageBox::warning(this, tr("Quote pack import failed"), error);
+        return;
+    }
+    refreshQuotePackStatus();
+    emit quotePackImported(QuotePack::defaultPath());
 }
 
 void SettingsDialog::saveSettings() {
@@ -1193,6 +1252,9 @@ void SettingsDialog::retranslateUi() {
     gravityScaleLabel_->setText(tr("Gravity strength:"));
     gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
     apiPortLabel_->setText(tr("Local API Port:"));
+    quotePackGroupBox_->setTitle(tr("Quote Pack"));
+    quotePackDescriptionLabel_->setText(tr("One quote pack is shared by every pet. Lines are picked by the interface language."));
+    btnImportQuotePack_->setText(tr("Import quotes.json…"));
     btnSaveGeneral_->setText(tr("Apply General Settings"));
     btnClose_->setText(tr("Close"));
 
