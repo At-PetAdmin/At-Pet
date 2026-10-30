@@ -670,6 +670,20 @@ void SettingsDialog::setGravityEnabled(bool enabled) {
     gravityCheck_->setChecked(enabled);
 }
 
+void SettingsDialog::setLanguage(const QString &language) {
+    if (!languageCombo_)
+        return;
+    const int index = languageCombo_->findData(language);
+    if (index < 0)
+        return;
+    // QSignalBlocker keeps this push from re-emitting currentIndexChanged()/languageChanged()
+    // and bouncing the change straight back to the controller. retranslateUi() only rewrites
+    // item text, so the controller re-pushes after QEvent::LanguageChange to realign the
+    // selection; this slot must never read or write QSettings.
+    const QSignalBlocker blocker(languageCombo_);
+    languageCombo_->setCurrentIndex(index);
+}
+
 void SettingsDialog::saveSettings() {
     QSettings settings;
     for (auto it = agentCheckboxes_.begin(); it != agentCheckboxes_.end(); ++it) {
@@ -691,11 +705,11 @@ void SettingsDialog::onSaveGeneralSettings() {
     const qreal gravityScale = gravityScaleSpin_->value();
     const bool completionSound = completionSoundCheck_->isChecked();
     const quint16 apiPort = quint16(apiPortSpin_->value());
-    settings.setValue("ui/language", newLang);
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
-    // pet/lookAtMouse, pet/gravity, pet/gravityScale and feedback/completionSound are persisted
-    // by the controller (the single source of truth) when it handles the signals below; writing
-    // them here as well would desync the two the next time the dialog is constructed.
+    // ui/language, pet/lookAtMouse, pet/gravity, pet/gravityScale and feedback/completionSound
+    // are persisted by the controller (the single source of truth) when it handles the signals
+    // below; writing them here as well would desync the two the next time the dialog is
+    // constructed.
     settings.setValue("pet/autoDoNotDisturb", autoDoNotDisturb);
     settings.setValue("api/port", apiPort);
 
@@ -1165,6 +1179,8 @@ void SettingsDialog::retranslateUi() {
 
     preferencesGroupBox_->setTitle(tr("Preferences"));
     languageLabel_->setText(tr("Interface Language:"));
+    // Text only: the selection is owned by PetController, which pushes the authoritative
+    // language with setLanguage() right after installing/removing the translator.
     languageCombo_->setItemText(0, tr("Simplified Chinese"));
     languageCombo_->setItemText(1, tr("English"));
     themeLabel_->setText(tr("Interface Theme:"));

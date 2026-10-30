@@ -81,9 +81,10 @@ signals:
 public slots:
     void refreshPetsList();
     // Adopt the authoritative state owned by the window that created this dialog. These never
-    // emit the matching *Toggled() signal, so pushing state cannot loop back.
+    // emit the matching signal, so pushing state cannot loop back.
     void setGravityEnabled(bool enabled);
     void setLookAtMouseEnabled(bool enabled);
+    void setLanguage(const QString &language);
 
 protected:
     void changeEvent(QEvent *event) override;

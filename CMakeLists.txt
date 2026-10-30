@@ -63,9 +63,9 @@ target_compile_definitions(at-pet PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRIN
 install(TARGETS at-pet BUNDLE DESTINATION . RUNTIME DESTINATION bin)
 
 # --- Tests -------------------------------------------------------------------
-# Regression tests for user-visible UI state sync (pet context menu <-> Settings dialog):
-# Gravity and "Look at the mouse cursor". Opt in with -DAT_PET_BUILD_TESTS=ON so normal
-# builds and the packaging flow are unaffected.
+# Regression tests for user-visible UI state sync (pet context menu / tray <-> Settings dialog):
+# Gravity, "Look at the mouse cursor" and interface language. Opt in with
+# -DAT_PET_BUILD_TESTS=ON so normal builds and the packaging flow are unaffected.
 option(AT_PET_BUILD_TESTS "Build the At-Pet QTest regression tests" OFF)
 
 if(AT_PET_BUILD_TESTS)
@@ -116,4 +116,5 @@ if(AT_PET_BUILD_TESTS)
     # binary.
     at_pet_add_test(gravity-sync tst_gravitysync.cpp)
     at_pet_add_test(lookat-sync tst_lookatsync.cpp)
+    at_pet_add_test(language-sync tst_languagesync.cpp)
 endif()
