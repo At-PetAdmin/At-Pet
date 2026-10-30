@@ -56,6 +56,14 @@ The **Build Windows amd64 package** workflow builds a self-contained Windows x86
 
 Local builds and pull requests from forks without the secrets stay unsigned, so they keep working for contributors.
 
+A publicly trusted certificate is what removes the warning for end users, but a self-signed certificate is enough to sign the binary and keeps the signing path exercised. `scripts/new-signing-cert.ps1` creates one (RSA 3072, SHA-256, 3 years by default) and prints the two secret values plus the `gh secret set` commands:
+
+```powershell
+pwsh -File scripts/new-signing-cert.ps1
+```
+
+A self-signed signature still shows **Unknown publisher** on machines that have not installed the provided `.cer` in **Trusted Root Certification Authorities**, so use it for internal or pre-release builds rather than public releases. The runner does not trust the certificate either, so when `signtool verify /pa` reports the untrusted root the workflows fall back to pinning the signer thumbprint and rejecting corrupted signatures.
+
 ## Pet library and format
 
 Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once. **Edit pet.json…** opens the selected library entry's configuration in a text editor; saving validates the JSON and hot-reloads the pet without restarting.

@@ -4,3 +4,8 @@
 /build-agent-default/
 CMakeUserPresets.json
 *.user
+
+# Code-signing material must never be committed; see scripts/new-signing-cert.ps1
+*.pfx
+*.pfx.base64
+*.cer
