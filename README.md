@@ -45,6 +45,16 @@ Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt
 
 The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag. Release archives and SHA-256 checksum files are also checked in under `dist/` for tagged releases.
 
+### Verifying build provenance
+
+Packages built by the Windows workflows carry a [build provenance attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds) that records which repository, commit, and workflow produced the file. After downloading `At-Pet-windows-amd64.zip`, or an `at-pet.exe` extracted from it, verify it with the GitHub CLI:
+
+```bash
+gh attestation verify At-Pet-windows-amd64.zip --repo At-PetAdmin/At-Pet
+```
+
+Attestations are created for pushes to `main` and for `v*` tags; pull request builds skip them because fork PRs cannot mint the OIDC token. Provenance answers “was this file built by this repository's workflow”, which is exactly what a self-signed certificate cannot prove.
+
 ### Windows version metadata and code signing
 
 `assets/branding/app-icon.rc.in` embeds the window icon and a version resource, so `at-pet.exe` reports `At-Pet`, `At-PetAdmin`, and the CMake project version (`PROJECT_VERSION`) under **Properties > Details** and through the version API. Windows still labels unsigned downloads as **Unknown publisher**; only an Authenticode signature changes that. Both Windows workflows sign `at-pet.exe` when these repository secrets are configured and skip the step when they are not:
