@@ -369,8 +369,8 @@ private:
             });
             connect(settingsDialog_, &QObject::destroyed, this, [this] { settingsDialog_ = nullptr; });
         }
-        // Re-push on every show: the pet context menu may have changed the state while the
-        // dialog existed but was hidden.
+        // Re-push on every show: the pet context menu or the tray menu may have changed the
+        // state (including the language) while the dialog existed but was hidden.
         updateSettingsCheckboxes();
         settingsDialog_->refreshPetsList();
         settingsDialog_->show();
@@ -378,13 +378,14 @@ private:
         settingsDialog_->activateWindow();
     }
 
-    // Pushes controller-owned toggle state into the settings dialog. The controller (and the
+    // Pushes controller-owned state into the settings dialog. The controller (and the
     // QSettings mirror it writes) is the single source of truth; the dialog only renders it.
     void updateSettingsCheckboxes() {
         if (!settingsDialog_)
             return;
         settingsDialog_->setGravityEnabled(gravityEnabled_);
         settingsDialog_->setLookAtMouseEnabled(lookAtMouseEnabled_);
+        settingsDialog_->setLanguage(language_);
     }
 
     void refreshAgentSessions() {
@@ -1038,6 +1039,11 @@ private:
             }
         }
         if (persist) QSettings().setValue("ui/language", language_);
+        // Push only after the translator is installed/removed and language_ is final: installing
+        // a translator emits QEvent::LanguageChange synchronously, and retranslateUi() rewrites
+        // the combo item text without touching the selection. The controller owns the value, so
+        // the dialog is realigned here (and again on every show via updateSettingsCheckboxes()).
+        if (settingsDialog_) settingsDialog_->setLanguage(language_);
         for (PetWindow *pet : visiblePets()) {
             if (!pet->windowTitle().isEmpty())
                 pet->setWindowTitle(tr("Preview: %1").arg(pet->petName()));
