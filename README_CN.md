@@ -109,7 +109,7 @@ pwsh -File scripts/new-signing-cert.ps1
 }
 ```
 
-支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。如需左右方向分别显示走路动画，可按需定义 `walkLeft` 和/或 `walkRight`（也接受 `walk_left`/`walk_right` 或 `walk-left`/`walk-right`）；移动时会选择对应方向的动画，未定义时回退到 `walk`。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。
+支持 `sprite`（也接受 `spriteSheet`）、`frameWidth`/`frameHeight` 或 `cell`、`scale`、全局默认 `fps` 和 `defaultAnimation`。如需左右方向分别显示走路动画，可按需定义 `walkLeft` 和/或 `walkRight`（也接受 `walk_left`/`walk_right` 或 `walk-left`/`walk-right`）；移动时会选择对应方向的动画，未定义时回退到 `walk`。方向专用的走路动画按原图绘制，不会再被额外镜像；只有共用的 `walk` 在向左移动时才会水平镜像，因此 `walk` 应画成朝右。播放移动动画时，行走方向优先于鼠标注视带来的翻转。每个 `animations` 条目也可单独设置 `fps`（1–30），未设置时继承全局 `fps`。设置窗口的桌宠预览中可为每个宠物的每个动画分别调速；该偏好保存在应用设置中，不会修改导入的 `pet.json`。如果对应动画正在播放，修改后会立即应用到现有桌宠；否则会在该动画下次播放时生效。
 `cell` 可以是 `[width, height]` 数组，也可以是包含 `width` 和 `height` 的对象。对于参考风格的动画，`row` 从 0 开始，`frames` 表示该行上连续帧的数量。旧式包含首尾的 `start`/`end` 范围和显式帧索引数组也受支持；索引按行优先顺序从 0 开始。使用 `row_counts` 而不是 `animations` 的配置同样受支持：各行按顺序映射到 idle、walk、sleep、thinking、work、review、error、done、cancelled、tool 和 interact。`animationGroups` 用于给一组动画命名；其中 `rest` 组（逗号分隔的字符串、数组或 `[{"name": ...}]`）会让空闲的桌宠每隔 8–20 秒切换到组内的某个动画并保持 3.5–9 秒，因此“休息”中的桌宠会在 `idle` 与 `sleep` 等动画之间轮换，而不是一直定格在同一个姿势。`animations` 中不存在的条目会被忽略。`quotes`（也可写作 `pokeQuotes`）用于配置随机语录，可以是字符串、字符串数组或带 `text` 字段的对象数组，戳一戳时随机显示。JSON 文件、精灵表和宠物文件夹都会被监视是否有改动。内置默认宠物通过 `assets/default` 嵌入程序，无需导入；如果该配置或精灵表不可用，则使用内置矢量宠物作为后备。在 Windows 上，宠物库位于 `%APPDATA%\Ni-ShuWu\At-Pet\pets`。
 
 ### 语录包

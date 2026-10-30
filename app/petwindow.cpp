@@ -275,6 +275,7 @@ void PetWindow::setAnimation(const QString &name) {
         movementRemaining_ = 0;
         movementDirection_ = {};
         movementAnimationActive_ = false;
+        movementAnimationDirectional_ = false;
         movementAnimationName_.clear();
         movementRestoreAnimation_.clear();
     }
@@ -920,13 +921,16 @@ void PetWindow::stopFreeMovement() {
     movementRemaining_ = 0;
     movementDirection_ = {};
     movementAnimationActive_ = false;
+    movementAnimationDirectional_ = false;
     movementAnimationName_.clear();
     movementRestoreAnimation_.clear();
     if (restoreAnimation && animation_ != animationToRestore)
         setAnimation(animationToRestore);
 }
 
-QString PetWindow::movementAnimationForDirection(const QPoint &direction) const {
+QString PetWindow::movementAnimationForDirection(const QPoint &direction, bool *directional) const {
+    if (directional)
+        *directional = false;
     const QJsonObject animations = definition_.value("animations").toObject();
     if (spriteSheet_.isNull())
         return QStringLiteral("walk");
@@ -938,8 +942,11 @@ QString PetWindow::movementAnimationForDirection(const QPoint &direction) const 
         ? QStringList{QStringLiteral("walkLeft"), QStringLiteral("walk_left"), QStringLiteral("walk-left")}
         : QStringList{QStringLiteral("walkRight"), QStringLiteral("walk_right"), QStringLiteral("walk-right")};
     for (const QString &name : names) {
-        if (animations.contains(name))
+        if (animations.contains(name)) {
+            if (directional)
+                *directional = true;
             return name;
+        }
     }
     return animations.contains(QStringLiteral("walk")) ? QStringLiteral("walk") : QString();
 }
@@ -950,7 +957,8 @@ void PetWindow::updateMovementAnimation() {
     if (movementDirection_.x() != 0)
         movementFacingLeft_ = movementDirection_.x() < 0;
 
-    const QString desiredAnimation = movementAnimationForDirection(movementDirection_);
+    bool directional = false;
+    const QString desiredAnimation = movementAnimationForDirection(movementDirection_, &directional);
     if (desiredAnimation.isEmpty()) {
         if (movementAnimationActive_ && animation_ == movementAnimationName_ &&
             !movementRestoreAnimation_.isEmpty()) {
@@ -959,6 +967,7 @@ void PetWindow::updateMovementAnimation() {
             settingMovementAnimation_ = false;
         }
         movementAnimationActive_ = false;
+        movementAnimationDirectional_ = false;
         movementAnimationName_.clear();
         movementRestoreAnimation_.clear();
         return;
@@ -967,6 +976,7 @@ void PetWindow::updateMovementAnimation() {
     if (!movementAnimationActive_)
         movementRestoreAnimation_ = animation_;
     movementAnimationActive_ = true;
+    movementAnimationDirectional_ = directional;
     movementAnimationName_ = desiredAnimation;
     settingMovementAnimation_ = true;
     setAnimation(desiredAnimation);
@@ -1265,6 +1275,14 @@ void PetWindow::drawSpeechBubble(QPainter &painter, const QRect &bubble, const Q
     painter.drawText(bubble.adjusted(8, 4, -8, -4), Qt::AlignCenter | Qt::TextWordWrap, text);
 }
 
+bool PetWindow::spriteShouldMirror(bool movementAnimationActive, bool movementFacingLeft,
+                                   bool movementAnimationDirectional, bool lookAtMouse,
+                                   bool faceLeft) {
+    if (movementAnimationActive)
+        return movementFacingLeft && !movementAnimationDirectional;
+    return lookAtMouse && faceLeft;
+}
+
 void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
     const int canvasWidth = canvasSize.width();
     const int canvasHeight = canvasSize.height();
@@ -1312,8 +1330,9 @@ void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
                                frameWidth_, frameHeight_);
             if (source.right() <= spriteSheet_.width() && source.bottom() <= spriteSheet_.height()) {
                 painter.save();
-                const bool faceLeft = lookAtMouse_ ? faceLeft_ :
-                    (movementAnimationActive_ && movementFacingLeft_);
+                const bool faceLeft = spriteShouldMirror(movementAnimationActive_, movementFacingLeft_,
+                                                         movementAnimationDirectional_, lookAtMouse_,
+                                                         faceLeft_);
                 if (faceLeft) {
                     painter.translate(bounds.left() + bounds.right(), 0);
                     painter.scale(-1, 1);
