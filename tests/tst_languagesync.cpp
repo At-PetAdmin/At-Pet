@@ -30,6 +30,7 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QTimer>
+#include <QTranslator>
 
 namespace {
 
@@ -132,6 +133,20 @@ void sendLanguageChange(SettingsDialog *dialog) {
     QCoreApplication::sendEvent(dialog, &event);
 }
 
+// Rewrites every string, so retranslateUi() performs genuine text updates instead of no-op
+// assignments. This is what a real translator swap looks like, without shipping compiled .qm
+// resources into the test binary.
+class PrefixTranslator final : public QTranslator {
+public:
+    QString translate(const char *context, const char *sourceText,
+                      const char *disambiguation = nullptr, int n = -1) const override {
+        Q_UNUSED(context);
+        Q_UNUSED(disambiguation);
+        Q_UNUSED(n);
+        return QStringLiteral("x-") + QString::fromUtf8(sourceText);
+    }
+};
+
 } // namespace
 
 class LanguageSyncTest final : public QObject {
@@ -151,6 +166,7 @@ private slots:
     void openDialogFollowsControllerChange();
     void hiddenDialogFollowsControllerChange();
     void retranslateKeepsSelection();
+    void retranslateWithTranslatorKeepsSelection();
     void traySwitchRetranslateThenPushAligns();
     void applyReachesControllerExactlyOnce();
     void applyDoesNotReboundOnDialog();
@@ -302,6 +318,23 @@ void LanguageSyncTest::retranslateKeepsSelection() {
     sendLanguageChange(&dialog);
 
     QCOMPARE(selectedLanguage(&dialog), QStringLiteral("en"));
+}
+
+// Same contract with a translator actually installed: installTranslator()/removeTranslator()
+// deliver QEvent::LanguageChange themselves, exactly like PetController does on a tray switch.
+void LanguageSyncTest::retranslateWithTranslatorKeepsSelection() {
+    QSettings().setValue(languageKey, QStringLiteral("en"));
+    SettingsDialog dialog;
+    dialog.show();
+    QCOMPARE(selectedLanguage(&dialog), QStringLiteral("en"));
+
+    QSettings().setValue(languageKey, QStringLiteral("zh_CN")); // stale value from another writer
+    PrefixTranslator translator;
+    QCoreApplication::installTranslator(&translator);
+    QCOMPARE(selectedLanguage(&dialog), QStringLiteral("en"));
+    dialog.setLanguage(QStringLiteral("zh_CN")); // controller push after the swap
+    QCOMPARE(selectedLanguage(&dialog), QStringLiteral("zh_CN"));
+    QCoreApplication::removeTranslator(&translator);
 }
 
 // The production order in PetController::setLanguage(): installing/removing the translator emits

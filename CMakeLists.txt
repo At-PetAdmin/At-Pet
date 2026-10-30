@@ -32,6 +32,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/agentregistry.h
     app/petsettings.cpp
     app/petsettings.h
+    app/quotepack.cpp
+    app/quotepack.h
     app/settingsdialog.cpp
     app/settingsdialog.h
     app/theme.cpp
@@ -81,6 +83,8 @@ if(AT_PET_BUILD_TESTS)
         app/petwindow.h
         app/petsettings.cpp
         app/petsettings.h
+        app/quotepack.cpp
+        app/quotepack.h
         app/theme.cpp
         app/theme.h
         app/agentregistry.h
@@ -117,4 +121,6 @@ if(AT_PET_BUILD_TESTS)
     at_pet_add_test(gravity-sync tst_gravitysync.cpp)
     at_pet_add_test(lookat-sync tst_lookatsync.cpp)
     at_pet_add_test(language-sync tst_languagesync.cpp)
+    at_pet_add_test(quote-pack tst_quotepack.cpp)
+    at_pet_add_test(animation-fallback tst_animationfallback.cpp)
 endif()

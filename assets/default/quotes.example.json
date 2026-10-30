@@ -1,0 +1,16 @@
+{
+  "zh_CN": {
+    "poke": ["别戳我啦～", "痒痒的！"],
+    "done": ["完工啦，检查一下？", "这单收工！"],
+    "error": ["出错了，我来看看日志。", "别慌，报错而已。"],
+    "cancel": ["已取消，随时再叫我。", "好，这次先不做。"],
+    "idle": ["要不要休息一下？", "我在这儿陪你。"]
+  },
+  "en": {
+    "poke": ["Hey, that tickles!", "Poke me again and see what happens."],
+    "done": ["All done! Want to review?", "That one is in the books."],
+    "error": ["Something broke — check the logs?", "Do not panic, it is just an error."],
+    "cancel": ["Cancelled. Ping me anytime.", "Fine, we skip it this time."],
+    "idle": ["Take a short break?", "Right here with you."]
+  }
+}

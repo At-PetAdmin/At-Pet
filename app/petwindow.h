@@ -30,6 +30,7 @@ public:
     QString petId() const;
     QString petName() const;
     QString animation() const;
+    bool hasAnimation(const QString &name) const;
     QString speech() const;
     QString petDirectory() const;
     void setAnimation(const QString &name);
