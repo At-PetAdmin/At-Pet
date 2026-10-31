@@ -1,6 +1,8 @@
 #include "agentregistry.h"
 #include "settingsdialog.h"
+#include "petsettings.h"
 #include "petwindow.h"
+#include "quotepack.h"
 #include "theme.h"
 
 #include <QApplication>
@@ -34,6 +36,7 @@
 #include <QSaveFile>
 #include <QScrollArea>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStandardPaths>
@@ -48,15 +51,6 @@ QString petLibraryPath() {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
 }
 
-bool lookAtMouseSetting() {
-    QSettings settings;
-    if (settings.contains(QStringLiteral("pet/lookAtMouse")))
-        return settings.value(QStringLiteral("pet/lookAtMouse")).toBool();
-    const bool legacy = settings.value(QStringLiteral("pet/lookAtCopilot"), false).toBool();
-    settings.setValue(QStringLiteral("pet/lookAtMouse"), legacy);
-    settings.remove(QStringLiteral("pet/lookAtCopilot"));
-    return legacy;
-}
 
 QString animationFpsKey(const QString &petId, const QString &animation) {
     return QStringLiteral("animationFps/%1/%2")
@@ -356,6 +350,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     applyStyle();
     loadSettings();
     refreshPetsList();
+    refreshQuotePackStatus();
 }
 
 void SettingsDialog::applyStyle() {
@@ -368,6 +363,7 @@ void SettingsDialog::applyStyle() {
     installedPetsLabel_->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px; color: %1;").arg(color(palette.text)));
     previewLabel_->setStyleSheet(QStringLiteral("font-weight: 600; font-size: 14px; color: %1;").arg(color(palette.text)));
     importStatusLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 12px; padding: 2px 4px;").arg(color(palette.statusOk)));
+    quotePackStatusLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 12px;").arg(color(palette.textSecondary)));
     animationFpsNoteLabel_->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color(palette.textFaint)));
     agentHeaderLabel_->setStyleSheet(QStringLiteral("font-size: 13px; color: %1; margin-bottom: 8px;").arg(color(palette.textSecondary)));
     petInfoLabel_->setStyleSheet(QStringLiteral("background: %1; border: 1px solid %2; border-radius: 8px; padding: 10px; color: %3; font-size: 12px;")
@@ -548,6 +544,7 @@ void SettingsDialog::setupUi() {
     uiForm->addWidget(autoDndCheck_, 3, 0, 1, 2);
 
     gravityCheck_ = new QCheckBox(tr("Enable gravity (pet falls after being dragged)"), uiGroup);
+    gravityCheck_->setObjectName(QStringLiteral("gravityCheck"));
     uiForm->addWidget(gravityCheck_, 4, 0, 1, 2);
     gravityScaleLabel_ = new QLabel(tr("Gravity strength:"), uiGroup);
     uiForm->addWidget(gravityScaleLabel_, 5, 0);
@@ -569,10 +566,32 @@ void SettingsDialog::setupUi() {
     uiForm->addWidget(apiPortSpin_, 7, 1);
 
     generalLayout->addWidget(uiGroup);
+
+    quotePackGroupBox_ = new QGroupBox(tr("Quote Pack"), generalTab);
+    auto *quotePackLayout = new QVBoxLayout(quotePackGroupBox_);
+    quotePackLayout->setSpacing(8);
+    quotePackDescriptionLabel_ = new QLabel(
+        tr("One quote pack is shared by every pet. Lines are picked by the interface language."),
+        quotePackGroupBox_);
+    quotePackDescriptionLabel_->setWordWrap(true);
+    quotePackLayout->addWidget(quotePackDescriptionLabel_);
+    auto *quotePackActions = new QHBoxLayout;
+    btnImportQuotePack_ = new QPushButton(tr("Import quotes.json…"), quotePackGroupBox_);
+    btnImportQuotePack_->setObjectName(QStringLiteral("importQuotePackButton"));
+    connect(btnImportQuotePack_, &QPushButton::clicked, this, &SettingsDialog::onImportQuotePack);
+    quotePackActions->addWidget(btnImportQuotePack_);
+    quotePackActions->addStretch(1);
+    quotePackLayout->addLayout(quotePackActions);
+    quotePackStatusLabel_ = new QLabel(quotePackGroupBox_);
+    quotePackStatusLabel_->setWordWrap(true);
+    quotePackLayout->addWidget(quotePackStatusLabel_);
+    generalLayout->addWidget(quotePackGroupBox_);
+
     generalLayout->addStretch(1);
 
     btnSaveGeneral_ = new QPushButton(tr("Apply General Settings"), generalTab);
     btnSaveGeneral_->setObjectName("primaryBtn");
+    btnSaveGeneral_->setProperty("testId", QStringLiteral("saveGeneralButton"));
     connect(btnSaveGeneral_, &QPushButton::clicked, this, &SettingsDialog::onSaveGeneralSettings);
     generalLayout->addWidget(btnSaveGeneral_, 0, Qt::AlignRight);
 
@@ -603,12 +622,20 @@ void SettingsDialog::setupUi() {
 
 void SettingsDialog::loadSettings() {
     QSettings settings;
+    // Seeding widgets is not user intent. QCheckBox emits clicked()/toggled() for every
+    // programmatic setChecked(), so each write below is muted with a QSignalBlocker: a stray
+    // emission here would be read as "the user flipped this switch" by whoever listens.
+
     // Agent filters: default enabled
     for (auto it = agentCheckboxes_.begin(); it != agentCheckboxes_.end(); ++it) {
         const QString settingKey = QStringLiteral("agents/monitor_") + it.key();
+        const QSignalBlocker blocker(it.value());
         it.value()->setChecked(settings.value(settingKey, true).toBool());
     }
-    subagentPetCheck_->setChecked(settings.value("agents/showSubagentPets", false).toBool());
+    {
+        const QSignalBlocker blocker(subagentPetCheck_);
+        subagentPetCheck_->setChecked(settings.value("agents/showSubagentPets", false).toBool());
+    }
 
     // General settings
     const QString lang = settings.value("ui/language", "zh_CN").toString();
@@ -619,16 +646,101 @@ void SettingsDialog::loadSettings() {
     const int themeIdx = themeCombo_->findData(theme);
     if (themeIdx >= 0) themeCombo_->setCurrentIndex(themeIdx);
 
-    lookAtMouseCheck_->setChecked(lookAtMouseSetting());
-    autoDndCheck_->setChecked(settings.value("pet/autoDoNotDisturb", true).toBool());
-    gravityCheck_->setChecked(settings.value("pet/gravity", false).toBool());
-    gravityScaleSpin_->setValue(settings.value("pet/gravityScale", 1.0).toDouble());
-    completionSoundCheck_->setChecked(settings.value("feedback/completionSound", true).toBool());
+    {
+        const QSignalBlocker blocker(lookAtMouseCheck_);
+        // Render only: the legacy pet/lookAtCopilot migration belongs to the controller
+        // (petsettings::loadLookAtMouse), which pushes its authoritative value on show().
+        lookAtMouseCheck_->setChecked(petsettings::storedLookAtMouse());
+    }
+    {
+        const QSignalBlocker blocker(autoDndCheck_);
+        autoDndCheck_->setChecked(settings.value("pet/autoDoNotDisturb", true).toBool());
+    }
+    {
+        const QSignalBlocker blocker(gravityCheck_);
+        gravityCheck_->setChecked(settings.value("pet/gravity", false).toBool());
+    }
+    {
+        const QSignalBlocker blocker(gravityScaleSpin_);
+        gravityScaleSpin_->setValue(settings.value("pet/gravityScale", 1.0).toDouble());
+    }
+    {
+        const QSignalBlocker blocker(completionSoundCheck_);
+        completionSoundCheck_->setChecked(settings.value("feedback/completionSound", true).toBool());
+    }
 
     QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
     quint16 defaultPort = 8765;
     if (!portText.isEmpty()) defaultPort = quint16(portText.toUInt());
+    const QSignalBlocker portBlocker(apiPortSpin_);
     apiPortSpin_->setValue(settings.value("api/port", defaultPort).toUInt());
+
+    refreshQuotePackStatus();
+}
+
+void SettingsDialog::setLookAtMouseEnabled(bool enabled) {
+    if (!lookAtMouseCheck_)
+        return;
+    // QSignalBlocker keeps this push from re-emitting toggled()/lookAtMouseToggled() and
+    // bouncing the change straight back to the controller.
+    const QSignalBlocker blocker(lookAtMouseCheck_);
+    lookAtMouseCheck_->setChecked(enabled);
+}
+
+void SettingsDialog::setGravityEnabled(bool enabled) {
+    if (!gravityCheck_)
+        return;
+    // QSignalBlocker keeps this push from re-emitting toggled()/gravityToggled() and
+    // bouncing the change straight back to the controller.
+    const QSignalBlocker blocker(gravityCheck_);
+    gravityCheck_->setChecked(enabled);
+}
+
+void SettingsDialog::setLanguage(const QString &language) {
+    if (!languageCombo_)
+        return;
+    const int index = languageCombo_->findData(language);
+    if (index < 0)
+        return;
+    // QSignalBlocker keeps this push from re-emitting currentIndexChanged()/languageChanged()
+    // and bouncing the change straight back to the controller. retranslateUi() only rewrites
+    // item text, so the controller re-pushes after QEvent::LanguageChange to realign the
+    // selection; this slot must never read or write QSettings.
+    const QSignalBlocker blocker(languageCombo_);
+    languageCombo_->setCurrentIndex(index);
+}
+
+void SettingsDialog::refreshQuotePackStatus() {
+    if (!quotePackStatusLabel_)
+        return;
+    const QString path = QuotePack::defaultPath();
+    if (!QFileInfo::exists(path)) {
+        quotePackStatusLabel_->setText(tr("No quote pack imported yet; each pet's own quotes are used."));
+        return;
+    }
+    const QuotePack pack = QuotePack::load(path);
+    if (pack.isEmpty()) {
+        quotePackStatusLabel_->setText(tr("The installed quote pack has no usable quotes."));
+        return;
+    }
+    quotePackStatusLabel_->setText(tr("Installed: %1 quotes across %2 languages.")
+                                       .arg(pack.quoteCount())
+                                       .arg(pack.languageCount()));
+}
+
+void SettingsDialog::onImportQuotePack() {
+    const QString source = QFileDialog::getOpenFileName(
+        this, tr("Import quote pack"), QString(),
+        tr("JSON files (*.json);;All files (*)"));
+    if (source.isEmpty())
+        return;
+    QString error;
+    if (!QuotePack::install(source, &error)) {
+        QMessageBox::warning(this, tr("Quote pack import failed"), error);
+        return;
+    }
+    refreshQuotePackStatus();
+    emit quotePackImported(QuotePack::defaultPath());
 }
 
 void SettingsDialog::saveSettings() {
@@ -646,22 +758,27 @@ void SettingsDialog::saveSettings() {
 void SettingsDialog::onSaveGeneralSettings() {
     QSettings settings;
     const QString newLang = languageCombo_->currentData().toString();
-    settings.setValue("ui/language", newLang);
+    const bool lookAtMouse = lookAtMouseCheck_->isChecked();
+    const bool autoDoNotDisturb = autoDndCheck_->isChecked();
+    const bool gravity = gravityCheck_->isChecked();
+    const qreal gravityScale = gravityScaleSpin_->value();
+    const bool completionSound = completionSoundCheck_->isChecked();
+    const quint16 apiPort = quint16(apiPortSpin_->value());
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
-    settings.setValue("pet/lookAtMouse", lookAtMouseCheck_->isChecked());
-    settings.setValue("pet/autoDoNotDisturb", autoDndCheck_->isChecked());
-    settings.setValue("pet/gravity", gravityCheck_->isChecked());
-    settings.setValue("pet/gravityScale", gravityScaleSpin_->value());
-    settings.setValue("feedback/completionSound", completionSoundCheck_->isChecked());
-    settings.setValue("api/port", apiPortSpin_->value());
+    // ui/language, pet/lookAtMouse, pet/gravity, pet/gravityScale and feedback/completionSound
+    // are persisted by the controller (the single source of truth) when it handles the signals
+    // below; writing them here as well would desync the two the next time the dialog is
+    // constructed.
+    settings.setValue("pet/autoDoNotDisturb", autoDoNotDisturb);
+    settings.setValue("api/port", apiPort);
 
     emit languageChanged(newLang);
-    emit lookAtMouseToggled(lookAtMouseCheck_->isChecked());
-    emit autoDoNotDisturbToggled(autoDndCheck_->isChecked());
-    emit gravityToggled(gravityCheck_->isChecked());
-    emit gravityScaleChanged(gravityScaleSpin_->value());
-    emit completionSoundToggled(completionSoundCheck_->isChecked());
-    emit apiPortChanged(quint16(apiPortSpin_->value()));
+    emit lookAtMouseToggled(lookAtMouse);
+    emit autoDoNotDisturbToggled(autoDoNotDisturb);
+    emit gravityToggled(gravity);
+    emit gravityScaleChanged(gravityScale);
+    emit completionSoundToggled(completionSound);
+    emit apiPortChanged(apiPort);
 
     applyStyle();
 
@@ -1121,6 +1238,8 @@ void SettingsDialog::retranslateUi() {
 
     preferencesGroupBox_->setTitle(tr("Preferences"));
     languageLabel_->setText(tr("Interface Language:"));
+    // Text only: the selection is owned by PetController, which pushes the authoritative
+    // language with setLanguage() right after installing/removing the translator.
     languageCombo_->setItemText(0, tr("Simplified Chinese"));
     languageCombo_->setItemText(1, tr("English"));
     themeLabel_->setText(tr("Interface Theme:"));
@@ -1133,6 +1252,9 @@ void SettingsDialog::retranslateUi() {
     gravityScaleLabel_->setText(tr("Gravity strength:"));
     gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
     apiPortLabel_->setText(tr("Local API Port:"));
+    quotePackGroupBox_->setTitle(tr("Quote Pack"));
+    quotePackDescriptionLabel_->setText(tr("One quote pack is shared by every pet. Lines are picked by the interface language."));
+    btnImportQuotePack_->setText(tr("Import quotes.json…"));
     btnSaveGeneral_->setText(tr("Apply General Settings"));
     btnClose_->setText(tr("Close"));
 

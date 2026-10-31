@@ -12,7 +12,7 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 ## Features
 
 - Transparent, frameless, always-on-top pet windows. Drag to move; click for a greeting; double-click to enter text for the pet to say; right-click for controls. Pets can freely wander up, down, left, and right within the screen; toggle this behavior from the context menu (enabled by default and remembered). Optional gravity makes a pet fall after being dragged, carrying the momentum of the drag when it is flung; with gravity on, a pet only wanders along the floor and falls back down whenever it is lifted. A flung pet bounces off the screen edges instead of stopping dead, and it springs back up off the floor like a basketball, squashing on impact and losing height with each bounce until it settles; **Gravity strength** in General Settings scales how fast it falls (1.00 by default). Dragging, flinging, and gravity all keep the pet fully on screen.
-- Bundled Codex Pets sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
+- Bundled Octocat-inspired sprite pet as the built-in default, plus custom sprite-sheet animations for idle, walk, sleep, thinking, work, review, tool execution, permission requests, completion, cancellation, and errors.
 - Import, preview, switch, delete, and summon every valid pet in the library; optionally show a separate pet for each detected subagent session.
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
 - Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; MCP-compatible clients can use the optional stdio bridge for explicit event reporting, and other sources can use the generic HTTP API.
@@ -45,6 +45,16 @@ Run `build\at-pet.exe` with the Qt kit's `bin` directory on `PATH`, or deploy Qt
 
 The **Build Windows amd64 package** workflow builds a self-contained Windows x86-64 package on every pull request and every push to `main`, so contributors without a Qt installation can still test their changes. Download `At-Pet-windows-amd64` from the run's **Artifacts** section, unzip it, and start `at-pet.exe`. Pushing a `v*` tag attaches the package and its `.sha256` checksum to that GitHub release. The Windows ARM64 workflow can be run manually for testing and publishes a package when triggered by a `v*` tag. Release archives and SHA-256 checksum files are also checked in under `dist/` for tagged releases.
 
+### Verifying build provenance
+
+Packages built by the Windows workflows carry a [build provenance attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds) that records which repository, commit, and workflow produced the file. After downloading `At-Pet-windows-amd64.zip`, or an `at-pet.exe` extracted from it, verify it with the GitHub CLI:
+
+```bash
+gh attestation verify At-Pet-windows-amd64.zip --repo At-PetAdmin/At-Pet
+```
+
+Attestations are created for pushes to `main` and for `v*` tags; pull request builds skip them because fork PRs cannot mint the OIDC token. Provenance answers “was this file built by this repository's workflow”, which is exactly what a self-signed certificate cannot prove.
+
 ### Windows version metadata and code signing
 
 `assets/branding/app-icon.rc.in` embeds the window icon and a version resource, so `at-pet.exe` reports `At-Pet`, `At-PetAdmin`, and the CMake project version (`PROJECT_VERSION`) under **Properties > Details** and through the version API. Windows still labels unsigned downloads as **Unknown publisher**; only an Authenticode signature changes that. Both Windows workflows sign `at-pet.exe` when these repository secrets are configured and skip the step when they are not:
@@ -55,6 +65,14 @@ The **Build Windows amd64 package** workflow builds a self-contained Windows x86
 | `WINDOWS_CERT_PASSWORD` | Password for the `.pfx` file |
 
 Local builds and pull requests from forks without the secrets stay unsigned, so they keep working for contributors.
+
+A publicly trusted certificate is what removes the warning for end users, but a self-signed certificate is enough to sign the binary and keeps the signing path exercised. `scripts/new-signing-cert.ps1` creates one (RSA 3072, SHA-256, 3 years by default) and prints the two secret values plus the `gh secret set` commands:
+
+```powershell
+pwsh -File scripts/new-signing-cert.ps1
+```
+
+A self-signed signature still shows **Unknown publisher** on machines that have not installed the provided `.cer` in **Trusted Root Certification Authorities**, so use it for internal or pre-release builds rather than public releases. The runner does not trust the certificate either, so when `signtool verify /pa` reports the untrusted root the workflows fall back to pinning the signer thumbprint and rejecting corrupted signatures.
 
 ## Pet library and format
 
@@ -91,10 +109,44 @@ Example `pet.json` in the reference project's format:
 }
 ```
 
-`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays.
- For distinct horizontal walking animations, optionally define `walkLeft` and/or `walkRight` (also accepted: `walk_left`/`walk_right` or `walk-left`/`walk-right`); At-Pet selects the direction-specific animation while moving and falls back to `walk` when it is missing. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order.  Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. `animationGroups` names reusable sets of animations; the `rest` group (a comma-separated string, an array, or `[{"name": ...}]`) makes an idle pet switch to one of those animations every 8–20 seconds and hold it for 3.5–9 seconds, so a "resting" pet alternates between e.g. `idle` and `sleep` instead of freezing on one pose. Entries that do not exist in `animations` are ignored. `quotes` (also `pokeQuotes`) adds random lines — a string, an array of strings, or objects with a `text` field — shown when the pet is poked. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
+`sprite` (also `spriteSheet`), `frameWidth`/`frameHeight` or `cell`, `scale`, global default `fps`, and `defaultAnimation` are supported. Each `animations` entry may also define its own `fps` (1–30), falling back to the global `fps` when omitted. The Settings window lets you tune each animation for each pet in its preview; these preferences are saved in application settings without modifying imported `pet.json` files. Changing the rate updates matching pets immediately when that animation is playing; otherwise, the new rate takes effect the next time it plays. The built-in default is a fan-made chibi Octocat inspired by GitHub's mascot; it is not affiliated with GitHub.
+ For distinct horizontal walking animations, optionally define `walkLeft` and/or `walkRight` (also accepted: `walk_left`/`walk_right` or `walk-left`/`walk-right`); At-Pet selects the direction-specific animation while moving and falls back to `walk` when it is missing. Direction-specific animations are drawn exactly as authored; only the shared `walk` fallback is mirrored when the pet moves left, so `walk` art should face right. While a movement animation plays, the walking direction takes precedence over the mouse-gaze flip. `cell` may be a `[width, height]` pair or an object with `width` and `height`. For reference-style animations, `row` is zero-based and `frames` is the number of consecutive frames on that row. Legacy inclusive `start`/`end` ranges and explicit frame-index arrays are also accepted; indices are zero-based in row-major order.  Configurations that provide `row_counts` instead of `animations` are supported too: rows map in order to idle, walk, sleep, thinking, work, review, error, done, cancelled, tool, and interact. `animationGroups` names reusable sets of animations; the `rest` group (a comma-separated string, an array, or `[{"name": ...}]`) makes an idle pet switch to one of those animations every 8–20 seconds and hold it for 3.5–9 seconds, so a "resting" pet alternates between e.g. `idle` and `sleep` instead of freezing on one pose. Entries that do not exist in `animations` are ignored. `quotes` (also `pokeQuotes`) adds random lines — a string, an array of strings, or objects with a `text` field — shown when the pet is poked. The JSON file, sprite sheet, and pet folder are watched for edits. The built-in default is embedded from `assets/default`, so it needs no import; if that config or sheet is unavailable, the built-in vector pet is used as a fallback.On Windows, the library is stored under `%APPDATA%\Ni-ShuWu\At-Pet\pets`.
 
-## Local API
+ ### Quote pack
+
+ Every pet can share one quote pack: a standalone JSON file at `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json` (`QStandardPaths::AppDataLocation/quotes.json`). It is never written into `pet.json`, so switching, updating or re-importing pets keeps it intact.
+
+ Complete schema — all five categories, both supported languages:
+
+ ```json
+ {
+   "zh_CN": {
+     "poke": ["别戳我啦～", "痒痒的！"],
+     "done": ["完工啦，检查一下？", "这单收工！"],
+     "error": ["出错了，我来看看日志。", "别慌，报错而已。"],
+     "cancel": ["已取消，随时再叫我。", "好，这次先不做。"],
+     "idle": ["要不要休息一下？", "我在这儿陪你。"]
+   },
+   "en": {
+     "poke": ["Hey, that tickles!"],
+     "done": ["All done! Want to review?"],
+     "error": ["Something broke — check the logs?"],
+     "cancel": ["Cancelled. Ping me anytime."],
+     "idle": ["Take a short break?", "Right here with you."]
+   }
+ }
+ ```
+
+ * **Categories**: `poke`, `done`, `error`, `cancel`, `idle`. Accepted aliases: `poked`/`interact`/`click` → poke, `completed`/`completion`/`finished` → done, `failed`/`failure` → error, `cancelled`/`canceled`/`aborted` → cancel, `waiting`/`random` → idle.
+ * **Entry formats**: a category may be a single string, an array of strings, or an array of objects carrying a `text` field. Blank lines and non-string entries are ignored; a file with no usable line at all is rejected.
+ * **Languages**: keys are normalised for case and `-`/`_` (`zh-CN` and `zh_CN` are the same). Resolution order is exact interface language → base language (`zh_CN` → `zh`, `en_US` → `en`) → `en` → the first language in the file that has that category.
+ * **Importing**: **Settings → General Settings → Quote Pack → Import quotes.json…**. The candidate file is validated first; an invalid pack shows a specific error and never overwrites the installed one. A valid pack is copied atomically to the path above and every running pet picks it up immediately.
+ * **Triggers**: poking the pet, terminal agent events (`done`, `error`, `cancelled`), and one idle line every 2–5 minutes while no agent session is active, the pet is visible and it is not already speaking. The same idle line is not repeated back to back when the pack offers alternatives, and a language switch is honoured on the next line.
+ * **Missing animations**: a pet whose `animations` table lacks the requested entry (for example no `done` row) skips that animation and still speaks — the last frame stays on screen instead of turning blank.
+
+ A bilingual sample lives at `assets/default/quotes.example.json`; it is not loaded automatically. With no pack installed every behaviour above falls back to the pet's own `quotes` from `pet.json` and then to the built-in prompt.
+
+ ## Local API
 
 The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. The API is unauthenticated and intended only for trusted programs on the same machine; do not expose or forward this port to a network.
 

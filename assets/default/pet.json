@@ -1,23 +1,23 @@
 {
-  "name": "Codex Pets",
+  "name": "Octocat",
   "sprite": "spritesheet.png",
   "cell": [160, 192],
   "scale": 1.25,
   "fps": 10,
   "defaultAnimation": "idle",
   "animations": {
-    "idle": { "row": 0, "frames": 12 },
-    "walk": { "row": 1, "frames": 12 },
-    "sleep": { "frames": [66, 67, 68] },
-    "thinking": { "frames": [75] },
-    "work": { "frames": [60, 61, 62, 63, 64] },
-    "review": { "frames": [60, 61, 62, 63, 64] },
-    "error": { "frames": [76, 77] },
-    "done": { "row": 4, "frames": 12 },
-    "cancelled": { "frames": [80, 81] },
-    "tool": { "row": 3, "frames": 12 },
-    "interact": { "frames": [72, 73, 74] },
-    "permission": { "frames": [78, 79] }
+    "idle": { "row": 0, "frames": 8, "fps": 8 },
+    "walk": { "frames": [12, 13, 14, 15, 16, 17], "fps": 10 },
+    "sleep": { "frames": [24, 25, 26, 27], "fps": 4 },
+    "interact": { "frames": [28, 29, 30, 31], "fps": 8 },
+    "tool": { "frames": [36, 37, 38, 39, 40, 41], "fps": 8 },
+    "done": { "frames": [48, 49, 50, 51, 52, 53], "fps": 8 },
+    "work": { "frames": [60, 61, 62, 63], "fps": 6 },
+    "review": { "frames": [64, 65, 66, 67], "fps": 6 },
+    "thinking": { "frames": [72, 73, 74], "fps": 6 },
+    "error": { "frames": [75, 76, 77], "fps": 6 },
+    "cancelled": { "frames": [78, 79, 80], "fps": 6 },
+    "permission": { "frames": [81, 82, 83], "fps": 6 }
   },
   "animationGroups": {
     "rest": ["idle", "sleep"]

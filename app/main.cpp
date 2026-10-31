@@ -1,8 +1,10 @@
 #include "agentregistry.h"
 #include "httpapi.h"
+#include "petsettings.h"
 #include "permissiondialog.h"
 #include "questiondialog.h"
 #include "petwindow.h"
+#include "quotepack.h"
 #include "settingsdialog.h"
 
 #include <QActionGroup>
@@ -23,6 +25,7 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QPointer>
+#include <QRandomGenerator>
 #include <QQueue>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -111,16 +114,6 @@ QIcon appIcon() {
     return QIcon(QStringLiteral(":/branding/logo.png"));
 }
 
-bool lookAtMouseSetting() {
-    QSettings settings;
-    if (settings.contains(QStringLiteral("pet/lookAtMouse")))
-        return settings.value(QStringLiteral("pet/lookAtMouse")).toBool();
-    const bool legacy = settings.value(QStringLiteral("pet/lookAtCopilot"), false).toBool();
-    settings.setValue(QStringLiteral("pet/lookAtMouse"), legacy);
-    settings.remove(QStringLiteral("pet/lookAtCopilot"));
-    return legacy;
-}
-
 #ifdef Q_OS_WIN
 QString windowClassName(HWND window) {
     wchar_t name[256]{};
@@ -172,8 +165,11 @@ public:
             ? QStringLiteral("zh_CN") : QStringLiteral("en");
         setLanguage(savedLanguage == "zh_CN" || savedLanguage == "en" ? savedLanguage : systemLanguage, false);
         QDir().mkpath(petLibraryPath());
+        quotePack_ = QuotePack::load(QuotePack::defaultPath());
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
+        // Migrates the legacy pet/lookAtCopilot key on first run, then the member owns it.
+        lookAtMouseEnabled_ = petsettings::loadLookAtMouse();
         gravityEnabled_ = QSettings().value("pet/gravity", false).toBool();
         gravityScale_ = qBound(0.1, QSettings().value("pet/gravityScale", 1.0).toDouble(), 3.0);
         completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
@@ -216,6 +212,9 @@ public:
         housekeepingTimer_.setInterval(5000);
         connect(&housekeepingTimer_, &QTimer::timeout, this, &PetController::pruneStaleSessions);
         housekeepingTimer_.start();
+        idleQuoteTimer_.setSingleShot(true);
+        connect(&idleQuoteTimer_, &QTimer::timeout, this, &PetController::showIdleQuote);
+        scheduleIdleQuote();
     }
 
     ~PetController() override {
@@ -267,7 +266,7 @@ private:
     PetWindow *createPet(const QString &directory, const QPoint &position) {
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
-        pet->setLookAtMouse(lookAtMouseSetting());
+        pet->setLookAtMouse(lookAtMouseEnabled_);
         pet->setFreeMovementEnabled(freeMovementEnabled_);
         pet->setGravityScale(gravityScale_);
         pet->setGravityEnabled(gravityEnabled_);
@@ -281,7 +280,10 @@ private:
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
             pet->setAnimation("interact");
-            const QString quote = pet->randomQuote();
+            // The shared pack wins, then the pet's own quotes, then the built-in prompt.
+            QString quote = quotePack_.randomQuote(QuotePack::Category::Poke, language_);
+            if (quote.isEmpty())
+                quote = pet->randomQuote();
             pet->setSpeech(quote.isEmpty() ? tr("Hi! Double-click to chat.") : quote);
             QTimer::singleShot(1200, pet, [this, pet] {
                 if (pet->animation() == "interact")
@@ -304,10 +306,9 @@ private:
         connect(pet, &PetWindow::importFolderRequested, this, &PetController::importPetFolder);
         connect(pet, &PetWindow::summonAllRequested, this, &PetController::summonAll);
         connect(pet, &PetWindow::deleteRequested, this, &PetController::deletePet);
-        connect(pet, &PetWindow::lookAtMouseToggled, pet, [pet](bool enabled) {
-            QSettings().setValue(QStringLiteral("pet/lookAtMouse"), enabled);
-            pet->setLookAtMouse(enabled);
-        });
+        // Pet context menu entry: go through the controller instead of writing QSettings here,
+        // so the persisted value, every other pet window and the settings dialog all follow.
+        connect(pet, &PetWindow::lookAtMouseToggled, this, &PetController::setLookAtMouseEnabled);
         connect(pet, &PetWindow::doNotDisturbToggled, this, [this](bool enabled) {
             if (syncingDoNotDisturb_) return;
             setManualDoNotDisturb(enabled);
@@ -337,14 +338,17 @@ private:
     void showSettingsDialog() {
         if (!settingsDialog_) {
             settingsDialog_ = new SettingsDialog;
+            // The dialog seeds its widgets from QSettings while constructing. Mute it until
+            // the controller has pushed the authoritative state, so seeding can neither echo
+            // back into the controller nor leave a stale copy on screen.
+            const QSignalBlocker blocker(settingsDialog_);
             settingsDialog_->setAttribute(Qt::WA_DeleteOnClose);
             connect(settingsDialog_, &SettingsDialog::petSwitched, this, &PetController::switchPet);
             connect(settingsDialog_, &SettingsDialog::languageChanged, this, [this](const QString &language) {
                 setLanguage(language);
             });
-            connect(settingsDialog_, &SettingsDialog::lookAtMouseToggled, this, [this](bool enabled) {
-                for (PetWindow *pet : visiblePets()) pet->setLookAtMouse(enabled);
-            });
+            connect(settingsDialog_, &SettingsDialog::lookAtMouseToggled, this,
+                    &PetController::setLookAtMouseEnabled);
             connect(settingsDialog_, &SettingsDialog::autoDoNotDisturbToggled, this, [this](bool enabled) {
                 autoDoNotDisturbEnabled_ = enabled;
                 QSettings().setValue(QStringLiteral("pet/autoDoNotDisturb"), enabled);
@@ -372,12 +376,27 @@ private:
                 for (PetWindow *pet : visiblePets())
                     if (pet->petId() == petId) pet->setAnimationFps(animation, fps);
             });
+            connect(settingsDialog_, &SettingsDialog::quotePackImported, this,
+                    [this](const QString &path) { quotePack_ = QuotePack::load(path); });
             connect(settingsDialog_, &QObject::destroyed, this, [this] { settingsDialog_ = nullptr; });
         }
+        // Re-push on every show: the pet context menu or the tray menu may have changed the
+        // state (including the language) while the dialog existed but was hidden.
+        updateSettingsCheckboxes();
         settingsDialog_->refreshPetsList();
         settingsDialog_->show();
         settingsDialog_->raise();
         settingsDialog_->activateWindow();
+    }
+
+    // Pushes controller-owned state into the settings dialog. The controller (and the
+    // QSettings mirror it writes) is the single source of truth; the dialog only renders it.
+    void updateSettingsCheckboxes() {
+        if (!settingsDialog_)
+            return;
+        settingsDialog_->setGravityEnabled(gravityEnabled_);
+        settingsDialog_->setLookAtMouseEnabled(lookAtMouseEnabled_);
+        settingsDialog_->setLanguage(language_);
     }
 
     void refreshAgentSessions() {
@@ -409,6 +428,17 @@ private:
             pet->setFreeMovementEnabled(enabled);
     }
 
+    void setLookAtMouseEnabled(bool enabled) {
+        if (lookAtMouseEnabled_ == enabled)
+            return;
+        lookAtMouseEnabled_ = enabled;
+        petsettings::storeLookAtMouse(enabled);
+        for (PetWindow *pet : visiblePets())
+            pet->setLookAtMouse(enabled);
+        // Keep an already-open settings dialog in step with the pet context menu.
+        updateSettingsCheckboxes();
+    }
+
     void setGravityEnabled(bool enabled) {
         if (gravityEnabled_ == enabled)
             return;
@@ -416,6 +446,8 @@ private:
         QSettings().setValue("pet/gravity", enabled);
         for (PetWindow *pet : visiblePets())
             pet->setGravityEnabled(enabled);
+        // Keep an already-open settings dialog in step with the pet context menu.
+        updateSettingsCheckboxes();
     }
 
     void setGravityScale(qreal scale) {
@@ -640,6 +672,34 @@ private:
         publishState();
     }
 
+    void scheduleIdleQuote() {
+        // Single-shot, re-armed after every fire so the cadence drifts between 2 and 5 minutes.
+        idleQuoteTimer_.start(QRandomGenerator::global()->bounded(120000, 300001));
+    }
+
+    void showIdleQuote() {
+        scheduleIdleQuote();
+        if (!sessions_.isEmpty() || !quotePack_.hasCategory(QuotePack::Category::Idle))
+            return;
+        QVector<PetWindow *> candidates;
+        for (PetWindow *pet : visiblePets()) {
+            if (pet->isVisible() && pet->speech().isEmpty())
+                candidates.append(pet);
+        }
+        if (candidates.isEmpty())
+            return;
+        QString quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
+        if (quote.isEmpty())
+            return;
+        // Avoid repeating the previous line when the language offers more than one.
+        for (int attempt = 0; attempt < 4 && quote == lastIdleQuote_; ++attempt)
+            quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
+        lastIdleQuote_ = quote;
+        const int index = QRandomGenerator::global()->bounded(int(candidates.size()));
+        candidates.at(index)->setSpeech(quote);
+        publishState();
+    }
+
     void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
         questionQueue_.enqueue(qMakePair(requestId, request));
         showNextQuestionDialog();
@@ -782,6 +842,24 @@ private:
         state.terminal = terminal;
         sessions_.insert(key, state);
         applySessionAnimation();
+        // Termination speaks a pack line over the agent message that applySessionAnimation()
+        // just showed. An empty category keeps the original message-only behaviour.
+        QuotePack::Category terminalCategory = QuotePack::Category::Done;
+        bool terminalQuote = successfulCompletion;
+        if (!terminalQuote && terminal && animation == QLatin1String("error")) {
+            terminalCategory = QuotePack::Category::Error;
+            terminalQuote = true;
+        } else if (!terminalQuote && terminal && animation == QLatin1String("cancelled")) {
+            terminalCategory = QuotePack::Category::Cancel;
+            terminalQuote = true;
+        }
+        if (terminalQuote) {
+            const QString quote = quotePack_.randomQuote(terminalCategory, language_);
+            if (!quote.isEmpty()) {
+                for (PetWindow *pet : visiblePets()) pet->setSpeech(quote);
+                publishState();
+            }
+        }
         if (successfulCompletion && completionSoundEnabled_)
             QApplication::beep();
         if (terminal) {
@@ -1018,6 +1096,11 @@ private:
             }
         }
         if (persist) QSettings().setValue("ui/language", language_);
+        // Push only after the translator is installed/removed and language_ is final: installing
+        // a translator emits QEvent::LanguageChange synchronously, and retranslateUi() rewrites
+        // the combo item text without touching the selection. The controller owns the value, so
+        // the dialog is realigned here (and again on every show via updateSettingsCheckboxes()).
+        if (settingsDialog_) settingsDialog_->setLanguage(language_);
         for (PetWindow *pet : visiblePets()) {
             if (!pet->windowTitle().isEmpty())
                 pet->setWindowTitle(tr("Preview: %1").arg(pet->petName()));
@@ -1076,6 +1159,7 @@ private:
     bool translatorInstalled_ = false;
     bool subagentPetsEnabled_ = false;
     bool freeMovementEnabled_ = true;
+    bool lookAtMouseEnabled_ = false;
     bool gravityEnabled_ = false;
     qreal gravityScale_ = 1.0;
     bool completionSoundEnabled_ = true;
@@ -1100,6 +1184,9 @@ private:
     QTimer lookTimer_;
     QTimer fullscreenTimer_;
     QTimer housekeepingTimer_;
+    QTimer idleQuoteTimer_;
+    QuotePack quotePack_;
+    QString lastIdleQuote_;
     QPointer<SettingsDialog> settingsDialog_;
 };
 

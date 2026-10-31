@@ -249,8 +249,22 @@ void PetWindow::setAnimationFps(const QString &name, int fps) {
         animationTimer_.setInterval(qMax(30, 1000 / qBound(1, fps, 30)));
 }
 
+bool PetWindow::hasAnimation(const QString &name) const {
+    if (name.isEmpty())
+        return false;
+    const QJsonObject animations = definition_.value("animations").toObject();
+    // A pet that ships an animation table can only play those entries; an empty table means the
+    // built-in vector pet (or a legacy sprite without named animations), which uses the builtin
+    // names.
+    if (animations.isEmpty())
+        return builtinAnimations.contains(name);
+    return animations.contains(name);
+}
+
 void PetWindow::setAnimation(const QString &name) {
-    if (!builtinAnimations.contains(name) && !definition_.value("animations").toObject().contains(name))
+    // Skipping an unconfigured animation keeps the current frame on screen instead of painting a
+    // blank cell. Callers (agent events, quotes) still go on to speak.
+    if (!hasAnimation(name))
         return;
 
     const bool externalAnimation = !settingMovementAnimation_;
@@ -261,6 +275,7 @@ void PetWindow::setAnimation(const QString &name) {
         movementRemaining_ = 0;
         movementDirection_ = {};
         movementAnimationActive_ = false;
+        movementAnimationDirectional_ = false;
         movementAnimationName_.clear();
         movementRestoreAnimation_.clear();
     }
@@ -906,13 +921,16 @@ void PetWindow::stopFreeMovement() {
     movementRemaining_ = 0;
     movementDirection_ = {};
     movementAnimationActive_ = false;
+    movementAnimationDirectional_ = false;
     movementAnimationName_.clear();
     movementRestoreAnimation_.clear();
     if (restoreAnimation && animation_ != animationToRestore)
         setAnimation(animationToRestore);
 }
 
-QString PetWindow::movementAnimationForDirection(const QPoint &direction) const {
+QString PetWindow::movementAnimationForDirection(const QPoint &direction, bool *directional) const {
+    if (directional)
+        *directional = false;
     const QJsonObject animations = definition_.value("animations").toObject();
     if (spriteSheet_.isNull())
         return QStringLiteral("walk");
@@ -924,8 +942,11 @@ QString PetWindow::movementAnimationForDirection(const QPoint &direction) const 
         ? QStringList{QStringLiteral("walkLeft"), QStringLiteral("walk_left"), QStringLiteral("walk-left")}
         : QStringList{QStringLiteral("walkRight"), QStringLiteral("walk_right"), QStringLiteral("walk-right")};
     for (const QString &name : names) {
-        if (animations.contains(name))
+        if (animations.contains(name)) {
+            if (directional)
+                *directional = true;
             return name;
+        }
     }
     return animations.contains(QStringLiteral("walk")) ? QStringLiteral("walk") : QString();
 }
@@ -936,7 +957,8 @@ void PetWindow::updateMovementAnimation() {
     if (movementDirection_.x() != 0)
         movementFacingLeft_ = movementDirection_.x() < 0;
 
-    const QString desiredAnimation = movementAnimationForDirection(movementDirection_);
+    bool directional = false;
+    const QString desiredAnimation = movementAnimationForDirection(movementDirection_, &directional);
     if (desiredAnimation.isEmpty()) {
         if (movementAnimationActive_ && animation_ == movementAnimationName_ &&
             !movementRestoreAnimation_.isEmpty()) {
@@ -945,6 +967,7 @@ void PetWindow::updateMovementAnimation() {
             settingMovementAnimation_ = false;
         }
         movementAnimationActive_ = false;
+        movementAnimationDirectional_ = false;
         movementAnimationName_.clear();
         movementRestoreAnimation_.clear();
         return;
@@ -953,6 +976,7 @@ void PetWindow::updateMovementAnimation() {
     if (!movementAnimationActive_)
         movementRestoreAnimation_ = animation_;
     movementAnimationActive_ = true;
+    movementAnimationDirectional_ = directional;
     movementAnimationName_ = desiredAnimation;
     settingMovementAnimation_ = true;
     setAnimation(desiredAnimation);
@@ -1137,8 +1161,16 @@ void PetWindow::reloadDefinition() {
     if (attachment_ != AttachmentEdge::None)
         positionAttachedWindow();
     const QString defaultAnimation = definition_.value("defaultAnimation").toString();
-    if (!defaultAnimation.isEmpty() && definition_.value("animations").toObject().contains(defaultAnimation))
+    if (!defaultAnimation.isEmpty() && hasAnimation(defaultAnimation))
         animation_ = defaultAnimation;
+    // A hot reload can remove the animation that is currently on screen. Fall back to idle (or
+    // the first configured animation) so sprite pets never keep painting a cell that is gone.
+    if (!hasAnimation(animation_)) {
+        const QStringList configured = definition_.value("animations").toObject().keys();
+        animation_ = hasAnimation(QStringLiteral("idle"))
+            ? QStringLiteral("idle")
+            : configured.value(0, QStringLiteral("idle"));
+    }
     const QJsonObject currentAnimation = definition_.value("animations").toObject().value(animation_).toObject();
     const int defaultFps = qBound(1, currentAnimation.value("fps").toInt(framesPerSecond_), 30);
     const int fps = QSettings().value(animationFpsKey(petId(), animation_), defaultFps).toInt();
@@ -1243,6 +1275,14 @@ void PetWindow::drawSpeechBubble(QPainter &painter, const QRect &bubble, const Q
     painter.drawText(bubble.adjusted(8, 4, -8, -4), Qt::AlignCenter | Qt::TextWordWrap, text);
 }
 
+bool PetWindow::spriteShouldMirror(bool movementAnimationActive, bool movementFacingLeft,
+                                   bool movementAnimationDirectional, bool lookAtMouse,
+                                   bool faceLeft) {
+    if (movementAnimationActive)
+        return movementFacingLeft && !movementAnimationDirectional;
+    return lookAtMouse && faceLeft;
+}
+
 void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
     const int canvasWidth = canvasSize.width();
     const int canvasHeight = canvasSize.height();
@@ -1290,8 +1330,9 @@ void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
                                frameWidth_, frameHeight_);
             if (source.right() <= spriteSheet_.width() && source.bottom() <= spriteSheet_.height()) {
                 painter.save();
-                const bool faceLeft = lookAtMouse_ ? faceLeft_ :
-                    (movementAnimationActive_ && movementFacingLeft_);
+                const bool faceLeft = spriteShouldMirror(movementAnimationActive_, movementFacingLeft_,
+                                                         movementAnimationDirectional_, lookAtMouse_,
+                                                         faceLeft_);
                 if (faceLeft) {
                     painter.translate(bounds.left() + bounds.right(), 0);
                     painter.scale(-1, 1);
@@ -1492,10 +1533,9 @@ void PetWindow::contextMenuEvent(QContextMenuEvent *event) {
 void PetWindow::showContextMenu(const QPoint &globalPosition) {
     QMenu menu(this);
     QMenu *animationMenu = menu.addMenu(tr("Animation"));
-    QStringList animationNames = builtinAnimations;
-    for (const QString &name : definition_.value("animations").toObject().keys()) {
-        if (!animationNames.contains(name)) animationNames.append(name);
-    }
+    QStringList animationNames = definition_.value("animations").toObject().isEmpty()
+        ? builtinAnimations
+        : definition_.value("animations").toObject().keys();
     const QHash<QString, QString> translatedAnimations = {
         {QStringLiteral("idle"), tr("Idle")}, {QStringLiteral("walk"), tr("Walk")},
         {QStringLiteral("sleep"), tr("Sleep")}, {QStringLiteral("thinking"), tr("Thinking")},

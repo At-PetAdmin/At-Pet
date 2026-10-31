@@ -77,9 +77,15 @@ signals:
     void agentFilterChanged();
     void subagentPetSettingChanged(bool enabled);
     void animationFpsChanged(const QString &petId, const QString &animation, int fps);
+    void quotePackImported(const QString &path);
 
 public slots:
     void refreshPetsList();
+    // Adopt the authoritative state owned by the window that created this dialog. These never
+    // emit the matching signal, so pushing state cannot loop back.
+    void setGravityEnabled(bool enabled);
+    void setLookAtMouseEnabled(bool enabled);
+    void setLanguage(const QString &language);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -95,6 +101,7 @@ private slots:
     void onAnimationFpsChanged(int fps);
     void onSaveGeneralSettings();
     void onLanguageComboChanged(int index);
+    void onImportQuotePack();
 
 private:
     void setupUi();
@@ -102,6 +109,7 @@ private:
     void saveSettings();
     void applyStyle();
     void retranslateUi();
+    void refreshQuotePackStatus();
     void updateAgentDescriptions();
     void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
@@ -150,6 +158,10 @@ private:
     QDoubleSpinBox *gravityScaleSpin_ = nullptr;
     QCheckBox *completionSoundCheck_ = nullptr;
     QSpinBox *apiPortSpin_ = nullptr;
+    QGroupBox *quotePackGroupBox_ = nullptr;
+    QLabel *quotePackDescriptionLabel_ = nullptr;
+    QLabel *quotePackStatusLabel_ = nullptr;
+    QPushButton *btnImportQuotePack_ = nullptr;
     QPushButton *btnSaveGeneral_ = nullptr;
     QPushButton *btnClose_ = nullptr;
 };

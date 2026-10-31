@@ -27,9 +27,16 @@ public:
 
     static QJsonObject withInferredAnimations(const QJsonObject &definition);
     static QString builtinPetDirectory();
+    // Direction-specific walk art already faces the walking direction, so it is painted as
+    // authored; only the shared "walk" fallback is mirrored for leftward movement. While a
+    // movement animation plays, the walking direction beats the mouse-gaze flip.
+    static bool spriteShouldMirror(bool movementAnimationActive, bool movementFacingLeft,
+                                   bool movementAnimationDirectional, bool lookAtMouse,
+                                   bool faceLeft);
     QString petId() const;
     QString petName() const;
     QString animation() const;
+    bool hasAnimation(const QString &name) const;
     QString speech() const;
     QString petDirectory() const;
     void setAnimation(const QString &name);
@@ -102,7 +109,7 @@ private:
     void scheduleFreeMovement(int delayMs);
     void stopFreeMovement();
     void updateMovementAnimation();
-    QString movementAnimationForDirection(const QPoint &direction) const;
+    QString movementAnimationForDirection(const QPoint &direction, bool *directional = nullptr) const;
     void startGravity(const QPointF &initialVelocity = QPointF());
     void stopGravity();
     void advanceGravity();
@@ -176,6 +183,7 @@ private:
     bool movementFacingLeft_ = false;
     bool moving_ = false;
     bool movementAnimationActive_ = false;
+    bool movementAnimationDirectional_ = false;
     bool settingMovementAnimation_ = false;
     bool resting_ = false;
     bool settingRestAnimation_ = false;
