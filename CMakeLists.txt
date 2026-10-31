@@ -3,7 +3,7 @@ project(AtPet VERSION 1.3.0 LANGUAGES CXX)
 # Human-readable version string compiled into the binary (CMake's project VERSION
 # must stay numeric; pre-release suffixes live here). The Windows resource keeps
 # using PROJECT_VERSION_* for FILEVERSION/PRODUCTVERSION.
-set(AT_PET_VERSION_STRING "1.3.0-beta1" CACHE STRING "Human-readable At-Pet version string")
+set(AT_PET_VERSION_STRING "1.3.0" CACHE STRING "Human-readable At-Pet version string")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
