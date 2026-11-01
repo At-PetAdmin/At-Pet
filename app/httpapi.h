@@ -34,6 +34,8 @@ private slots:
 
 private:
     void readRequest(QTcpSocket *socket);
+    bool requestIsTrusted(QTcpSocket *socket, const QByteArray &method,
+                          const QHash<QByteArray, QByteArray> &headers, bool ambiguousHeaders);
     void routeRequest(QTcpSocket *socket, const QByteArray &method, const QByteArray &path,
                       const QByteArray &body);
     void sendJson(QTcpSocket *socket, int status, const QJsonObject &json);

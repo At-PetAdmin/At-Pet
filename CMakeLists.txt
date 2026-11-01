@@ -30,6 +30,7 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/questiondialog.cpp
     app/questiondialog.h
     app/agentregistry.h
+    app/petid.h
     app/petsettings.cpp
     app/petsettings.h
     app/quotepack.cpp
@@ -124,4 +125,32 @@ if(AT_PET_BUILD_TESTS)
     at_pet_add_test(quote-pack tst_quotepack.cpp)
     at_pet_add_test(animation-fallback tst_animationfallback.cpp)
     at_pet_add_test(walk-mirror tst_walkmirror.cpp)
+
+    # The local HTTP API owns its own trust boundary (Host/Origin checks, no CORS headers,
+    # petId validation). Those network sources stay out of AT_PET_TEST_SOURCES so the UI
+    # suites above do not compile them.
+    set(AT_PET_HTTP_TEST_SOURCES
+        app/httpapi.cpp
+        app/httpapi.h
+        app/agentmonitor.cpp
+        app/agentmonitor.h
+        app/agentadapters/claude-code/adapter.cpp
+        app/agentadapters/claude-code/adapter.h
+        app/agentadapters/opencode-v2/adapter.cpp
+        app/agentadapters/opencode-v2/adapter.h
+        app/agentregistry.h
+        app/petid.h
+    )
+
+    function(at_pet_add_http_test name source)
+        qt_add_executable(${name} tests/${source} ${AT_PET_HTTP_TEST_SOURCES})
+        target_include_directories(${name} PRIVATE app)
+        target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+        target_link_libraries(${name} PRIVATE Qt6::Network Qt6::Test)
+        # QTEST_GUILESS_MAIN runs without a platform plugin, so no QT_QPA_PLATFORM is needed.
+        set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
+        add_test(NAME ${name} COMMAND ${name})
+    endfunction()
+
+    at_pet_add_http_test(http-api-guard tst_httpapiguard.cpp)
 endif()

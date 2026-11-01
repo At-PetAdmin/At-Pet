@@ -1,5 +1,6 @@
 #include "agentregistry.h"
 #include "httpapi.h"
+#include "petid.h"
 #include "petsettings.h"
 #include "permissiondialog.h"
 #include "questiondialog.h"
@@ -514,6 +515,10 @@ private:
     }
 
     void switchPet(const QString &id) {
+        // The local HTTP API forwards untrusted /summon petId values here. Refuse anything
+        // that could leave the pet library before QDir::filePath() turns it into a path.
+        if (!petid::isSafe(id))
+            return;
         const QString directory = id.isEmpty() || id == "default" ? QString() : QDir(petLibraryPath()).filePath(id);
         if (!directory.isEmpty() && !QFileInfo::exists(QDir(directory).filePath("pet.json")))
             return;

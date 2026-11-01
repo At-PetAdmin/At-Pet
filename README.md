@@ -150,12 +150,14 @@ Example `pet.json` in the reference project's format:
 
 The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. The API is unauthenticated and intended only for trusted programs on the same machine; do not expose or forward this port to a network.
 
+Requests must carry a loopback `Host` (`127.0.0.1:<port>`, `localhost:<port>`, or `[::1]:<port>`) and must not carry an `Origin` header, so browser pages, DNS-rebinding host names, and null origins from a sandboxed iframe are rejected with `403`. A `POST` body must use `Content-Type: application/json` when that header is present. Responses never include `Access-Control-Allow-Origin`, so no browser origin can read them.
+
 - `GET /health` — health check.
 - `GET /state` — current pets and known agent sessions; `agentSources` lists each Agent key, monitor type, and native endpoint when available.
 - `GET /events` — SSE stream; sends a JSON state snapshot on connect and whenever state changes.
 - `POST /animation` — `{"name":"sleep"}`.
 - `POST /say` — `{"text":"Hello!"}`.
-- `POST /summon` — `{"all":true}` or `{"petId":"sample-cat"}`.
+- `POST /summon` — `{"all":true}` or `{"petId":"sample-cat"}`. `petId` must be a plain pet-library folder name; values containing `/`, `\`, `:`, or control characters, and the values `.` and `..`, are rejected with `400`.
 - `POST /event` — `{"sessionId":"session-1","agentApp":"github-copilot","event":"thinking","model":"...","message":"...","isSubagent":false,"parentSessionId":"parent-1"}`. Recognized `agentApp` labels are `github-copilot`, `zcode`, `deepseek-harness`, `opencode`, `antigravity`, `command-code`, `claude-code`, `openai-codex`, `gemini-cli`, `cursor`, `windsurf`, `workbuddy`, and `penguin-harness`; unknown labels are also accepted for generic sources. Agent events are not collected automatically: an integration must POST them to this local API.
 - `POST /permission` — `{"sessionId":"session-1","agentApp":"claude-code","toolName":"Bash","description":"Run tests"}` to show a permission prompt. The response includes a `requestId`.
 - `GET /permission/{requestId}` — poll for `pending`, `allowed_once`, or `denied`. The first poll after a decision consumes that result; later polls return 404.
