@@ -150,12 +150,14 @@ pwsh -File scripts/new-signing-cert.ps1
 
 服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。该 API 不进行身份验证，仅用于同一台机器上的可信程序；请勿将其暴露或转发到网络。
 
+请求必须携带回环 `Host`（`127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`），且不得携带 `Origin` 请求头；因此网页、DNS rebinding 主机名以及 `<iframe sandbox>` 的 null origin 都会被 `403` 拒绝。`POST` 请求若带有 `Content-Type`，则必须是 `application/json`。响应不包含 `Access-Control-Allow-Origin`，浏览器源无法读取。
+
 - `GET /health` — 健康检查。
 - `GET /state` — 当前宠物和已知 Agent 会话；`agentSources` 列出各 Agent 的 key、监控类型以及可用时的原生端点。
 - `GET /events` — SSE 流；连接时发送一次 JSON 状态快照，状态变化时再次发送。
 - `POST /animation` — `{"name":"sleep"}`。
 - `POST /say` — `{"text":"Hello!"}`。
-- `POST /summon` — `{"all":true}` 或 `{"petId":"sample-cat"}`。
+- `POST /summon` — `{"all":true}` 或 `{"petId":"sample-cat"}`。`petId` 必须是宠物库中的纯目录名；包含 `/`、`\`、`:` 或控制字符，以及等于 `.` 或 `..` 的值会返回 `400`。
 - `POST /event` — `{"sessionId":"session-1","agentApp":"github-copilot","event":"thinking","model":"...","message":"...","isSubagent":false,"parentSessionId":"parent-1"}`。可识别的 `agentApp` 标签：`github-copilot`、`zcode`、`deepseek-harness`、`opencode`、`antigravity`、`command-code`、`claude-code`、`openai-codex`、`gemini-cli`、`cursor`、`windsurf`、`workbuddy` 和 `penguin-harness`；通用事件源也可以使用其他标签。Agent 事件不会自动采集，需由集成程序 POST 到本地 API。
 - `POST /permission` — 例如 `{"sessionId":"session-1","agentApp":"claude-code","toolName":"Bash","description":"Run tests"}`，用于显示权限请求弹窗。响应中包含 `requestId`。
 - `GET /permission/{requestId}` — 轮询 `pending`、`allowed_once` 或 `denied`。决策后的首次轮询会消费该结果，后续请求返回 404。

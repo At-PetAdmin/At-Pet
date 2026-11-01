@@ -2,11 +2,68 @@
 
 #include "agentmonitor.h"
 #include "agentregistry.h"
+#include "petid.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QUuid>
+
+namespace {
+
+// The API is unauthenticated by design, so the only thing separating a web page from this
+// process is what the request itself proves about its origin. Browsers cannot forge either
+// of these headers:
+//   * Host is the URL the page was loaded from. During a DNS-rebinding attack that is the
+//     attacker's domain, never a loopback name.
+//   * Origin is attached to every cross-origin (and form) POST, including the "simple"
+//     text/plain requests that skip the CORS preflight.
+// Trusted local clients (hooks, bridges, curl, PowerShell, Node fetch) send neither a
+// browser Origin nor a foreign Host.
+bool isLoopbackHostValue(const QByteArray &rawValue, quint16 serverPort) {
+    const QByteArray value = rawValue.trimmed().toLower();
+    if (value.isEmpty())
+        return false;
+
+    QByteArray name;
+    QByteArray portText;
+    bool hasPort = false;
+    if (value.startsWith('[')) {
+        const qsizetype end = value.indexOf(']');
+        if (end < 0)
+            return false;
+        name = value.left(end + 1);
+        if (end + 1 < value.size()) {
+            if (value.at(end + 1) != ':')
+                return false;
+            hasPort = true;
+            portText = value.mid(end + 2);
+        }
+    } else {
+        const qsizetype colon = value.indexOf(':');
+        hasPort = colon >= 0;
+        name = hasPort ? value.left(colon) : value;
+        if (hasPort)
+            portText = value.mid(colon + 1);
+    }
+
+    if (name != "127.0.0.1" && name != "localhost" && name != "[::1]")
+        return false;
+    if (!hasPort)
+        return true; // Port 80 omits it; every other loopback port is explicit.
+    bool ok = false;
+    const uint port = portText.toUInt(&ok);
+    return ok && port == static_cast<uint>(serverPort);
+}
+
+bool isJsonContentType(const QByteArray &rawValue) {
+    const QByteArray value = rawValue.trimmed().toLower();
+    if (value.isEmpty())
+        return true; // Older local clients omit it; browsers always send one.
+    return value.startsWith("application/json");
+}
+
+} // namespace
 
 HttpApi::HttpApi(std::function<QJsonObject()> stateProvider, QObject *parent)
     : QObject(parent), stateProvider_(std::move(stateProvider)) {
@@ -79,8 +136,8 @@ void HttpApi::readRequest(QTcpSocket *socket) {
     const qsizetype headerEnd = buffer.indexOf("\r\n\r\n");
     if (headerEnd < 0)
         return;
-    const QByteArray headers = buffer.left(headerEnd);
-    const QList<QByteArray> lines = headers.split('\n');
+    const QByteArray headerBlock = buffer.left(headerEnd);
+    const QList<QByteArray> lines = headerBlock.split('\n');
     if (lines.isEmpty()) {
         sendJson(socket, 400, {{"error", "invalid request"}});
         return;
@@ -92,16 +149,30 @@ void HttpApi::readRequest(QTcpSocket *socket) {
     }
 
     qsizetype contentLength = 0;
+    QHash<QByteArray, QByteArray> headers;
+    bool ambiguousHeaders = false;
     for (int i = 1; i < lines.size(); ++i) {
         const QByteArray line = lines.at(i).trimmed();
-        if (line.toLower().startsWith("content-length:")) {
+        if (line.isEmpty())
+            continue;
+        const qsizetype colon = line.indexOf(':');
+        if (colon <= 0)
+            continue;
+        const QByteArray name = line.left(colon).trimmed().toLower();
+        const QByteArray value = line.mid(colon + 1).trimmed();
+        if (name == "content-length") {
             bool ok = false;
-            contentLength = line.mid(line.indexOf(':') + 1).trimmed().toLongLong(&ok);
+            contentLength = value.toLongLong(&ok);
             if (!ok || contentLength < 0 || contentLength > 1024 * 1024) {
                 sendJson(socket, 400, {{"error", "invalid content length"}});
                 return;
             }
         }
+        // A smuggled second copy must not be able to decide the checks below.
+        if (headers.contains(name) &&
+            (name == "host" || name == "origin" || name == "content-type"))
+            ambiguousHeaders = true;
+        headers.insert(name, value);
     }
     const qsizetype bodyStart = headerEnd + 4;
     if (buffer.size() - bodyStart < contentLength)
@@ -111,7 +182,36 @@ void HttpApi::readRequest(QTcpSocket *socket) {
     const QByteArray method = requestLine.at(0).toUpper();
     const QByteArray path = requestLine.at(1).split('?').first();
     requestBuffers_.remove(socket);
+    if (!requestIsTrusted(socket, method, headers, ambiguousHeaders))
+        return;
     routeRequest(socket, method, path, body);
+}
+
+bool HttpApi::requestIsTrusted(QTcpSocket *socket, const QByteArray &method,
+                               const QHash<QByteArray, QByteArray> &headers,
+                               bool ambiguousHeaders) {
+    if (ambiguousHeaders) {
+        sendJson(socket, 403, {{"error", "duplicate Host, Origin, or Content-Type header"}});
+        return false;
+    }
+    // Browsers attach this to every cross-site (and form) POST, so rejecting any Origin
+    // closes CSRF without touching the raw clients that integrate with the API.
+    if (headers.contains("origin")) {
+        sendJson(socket, 403, {{"error", "requests with an Origin header are not allowed"}});
+        return false;
+    }
+    if (!isLoopbackHostValue(headers.value("host"), server_.serverPort())) {
+        sendJson(socket, 403, {{"error", "Host must be 127.0.0.1, localhost, or [::1]"}});
+        return false;
+    }
+    // A browser cannot send a JSON Content-Type without a CORS preflight, and Origin above
+    // already rejects that preflight. This keeps "simple" text/plain and form posts out even
+    // if a client someday omits Origin.
+    if (method == "POST" && !isJsonContentType(headers.value("content-type"))) {
+        sendJson(socket, 415, {{"error", "Content-Type must be application/json"}});
+        return false;
+    }
+    return true;
 }
 
 void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const QByteArray &path,
@@ -189,7 +289,9 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         return;
     }
     if (method == "GET" && path == "/events") {
-        socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\nAccess-Control-Allow-Origin: null\r\n\r\n");
+        // No Access-Control-Allow-Origin: a cross-origin page (including a sandboxed
+        // iframe with a null origin) must not be able to read this stream.
+        socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n");
         eventClients_.append(socket);
         const QByteArray payload = QJsonDocument(stateProvider_()).toJson(QJsonDocument::Compact);
         socket->write("data: " + payload + "\n\n");
@@ -197,7 +299,9 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         return;
     }
     if (method == "OPTIONS") {
-        socket->write("HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: null\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n");
+        // Deliberately no CORS headers: browser preflights must never succeed. The Origin
+        // check in requestIsTrusted() rejects the preflight that browsers send anyway.
+        socket->write("HTTP/1.1 204 No Content\r\nAllow: GET, POST, OPTIONS\r\nConnection: close\r\n\r\n");
         socket->disconnectFromHost();
         return;
     }
@@ -341,6 +445,12 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         return;
     }
     if (path == "/summon") {
+        // petId names a directory in the pet library; it must never become a path
+        // (see petid.h and PetController::switchPet()).
+        if (!object.value("all").toBool() && !petid::isSafe(object.value("petId").toString())) {
+            sendJson(socket, 400, {{"error", "petId must be a plain pet library id"}});
+            return;
+        }
         emit summonRequested(object);
         sendJson(socket, 202, {{"accepted", true}});
         return;
@@ -353,12 +463,16 @@ void HttpApi::sendJson(QTcpSocket *socket, int status, const QJsonObject &json) 
     QByteArray reason = "OK";
     if (status == 202) reason = "Accepted";
     if (status == 400) reason = "Bad Request";
+    if (status == 403) reason = "Forbidden";
     if (status == 404) reason = "Not Found";
     if (status == 405) reason = "Method Not Allowed";
     if (status == 409) reason = "Conflict";
     if (status == 413) reason = "Payload Too Large";
+    if (status == 415) reason = "Unsupported Media Type";
+    // Deliberately no Access-Control-Allow-Origin. Emitting one (even "null") lets an
+    // iframe-sandboxed page read these responses.
     const QByteArray response = "HTTP/1.1 " + QByteArray::number(status) + " " + reason +
-        "\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: null\r\nContent-Length: " +
+        "\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: " +
         QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body;
     socket->write(response);
     socket->disconnectFromHost();
