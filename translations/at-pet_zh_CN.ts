@@ -469,8 +469,8 @@
     </message>
     <message>
         <location filename="../app/petwindow.cpp" line="1458"/>
-        <source>Summon all pets</source>
-        <translation>召唤全部桌宠</translation>
+        <source>All pets on duty</source>
+        <translation>全员上班</translation>
     </message>
     <message>
         <location filename="../app/petwindow.cpp" line="1460"/>

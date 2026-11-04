@@ -1565,7 +1565,7 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
     libraryMenu->addSeparator();
     libraryMenu->addAction(tr("Import config + spritesheet…"), this, &PetWindow::importRequested);
     libraryMenu->addAction(tr("Import pet folder…"), this, &PetWindow::importFolderRequested);
-    libraryMenu->addAction(tr("Summon all pets"), this, &PetWindow::summonAllRequested);
+    menu.addAction(tr("All pets on duty"), this, &PetWindow::summonAllRequested);
     if (petId() != "default") {
         menu.addAction(tr("Delete this pet…"), this, [this] { emit deleteRequested(petId()); });
     }

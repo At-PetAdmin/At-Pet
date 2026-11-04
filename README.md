@@ -76,7 +76,7 @@ A self-signed signature still shows **Unknown publisher** on machines that have 
 
 ## Pet library and format
 
-Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once. **Edit pet.json…** opens the selected library entry's configuration in a text editor; saving validates the JSON and hot-reloads the pet without restarting.
+Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. **All pets on duty** in the pet’s top-level right-click menu opens every valid imported library entry at once and arranges them on screen; clicking it again recreates the group without accumulating duplicates. The tray menu also offers “Summon all pets”. **Edit pet.json…** opens the selected library entry's configuration in a text editor; saving validates the JSON and hot-reloads the pet without restarting.
 Example `pet.json` in the reference project's format:
 
 ```json
