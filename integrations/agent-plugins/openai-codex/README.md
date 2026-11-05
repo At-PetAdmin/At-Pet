@@ -30,7 +30,7 @@ node "D:\code\At-Pet_Agent-plugin\Agent-plugin\openai-codex\bridge.mjs" openai-c
 
 | Codex hook | At-Pet 行为 |
 | --- | --- |
-| `SessionStart` | 无（首次提交时才显示会话） |
+| `SessionStart` | `connected`（更新连通状态并播报连接成功） |
 | `UserPromptSubmit` | `thinking` |
 | `PreToolUse` | `tool_start`（消息为工具名） |
 | `PostToolUse` | `tool_end` |

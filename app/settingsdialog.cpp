@@ -370,6 +370,7 @@ void SettingsDialog::applyStyle() {
                                      .arg(color(palette.surfaceAlt), color(palette.border), color(palette.textSecondary)));
     for (QLabel *label : agentDescriptionLabels_)
         label->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color(palette.textFaint)));
+    updateAgentConnectionLabels();
 }
 
 void SettingsDialog::setupUi() {
@@ -503,16 +504,26 @@ void SettingsDialog::setupUi() {
         chk->setChecked(true);
         agentCheckboxes_.insert(agent.key, chk);
 
+        auto *connectionLabel = new QLabel(itemWidget);
+        connectionLabel->setObjectName(QStringLiteral("agentConnection_") + agent.key);
+        connectionLabel->setTextFormat(Qt::PlainText);
+        auto *nameLayout = new QVBoxLayout;
+        nameLayout->setSpacing(4);
+        nameLayout->addWidget(chk);
+        nameLayout->addWidget(connectionLabel);
+        agentConnectionLabels_.insert(agent.key, connectionLabel);
+
         auto *descLabel = new QLabel(itemWidget);
         descLabel->setWordWrap(true);
         agentDescriptionLabels_.insert(agent.key, descLabel);
 
-        itemLayout->addWidget(chk);
+        itemLayout->addLayout(nameLayout);
         itemLayout->addSpacing(16);
         itemLayout->addWidget(descLabel, 1);
         groupLayout->addWidget(itemWidget);
     }
     updateAgentDescriptions();
+    updateAgentConnectionLabels();
     groupLayout->addStretch(1);
     agentScrollArea->setWidget(agentGroupBox_);
     agentsLayout->addWidget(agentScrollArea, 1);
@@ -1258,6 +1269,38 @@ void SettingsDialog::onEditPetJson() {
     onPetSelected(petList_->currentItem(), nullptr);
 }
 
+void SettingsDialog::setAgentConnections(const QJsonObject &connections) {
+    agentConnections_ = connections;
+    updateAgentConnectionLabels();
+}
+
+void SettingsDialog::updateAgentConnectionLabels() {
+    const uitheme::Palette palette = uitheme::resolvePalette(uitheme::modeFromSettings());
+    for (auto it = agentConnectionLabels_.cbegin(); it != agentConnectionLabels_.cend(); ++it) {
+        const QJsonObject connection = agentConnections_.value(it.key()).toObject();
+        const QString status = connection.value("status").toString();
+        QString text = tr("Not connected");
+        QColor color = palette.textFaint;
+        if (status == "connected") {
+            text = tr("Connected");
+            color = palette.statusOk;
+        } else if (status == "disconnected") {
+            text = tr("Disconnected");
+            color = palette.statusError;
+        } else if (status == "inactive") {
+            text = tr("No recent events");
+            color = palette.statusWarn;
+        }
+        it.value()->setText(QStringLiteral("● ") + text);
+        it.value()->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color.name()));
+        QString tooltip = tr("Connectivity is based on incoming events, independently of the event filter. After 30 minutes without events, the status changes to No recent events.");
+        const QDateTime lastSeen = QDateTime::fromString(connection.value("lastSeen").toString(), Qt::ISODateWithMs);
+        if (lastSeen.isValid())
+            tooltip += QLatin1Char('\n') + tr("Last event: %1").arg(lastSeen.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
+        it.value()->setToolTip(tooltip);
+    }
+}
+
 void SettingsDialog::updateAgentDescriptions() {
     for (const AgentDefinition &agent : agentDefinitions()) {
         QLabel *label = agentDescriptionLabels_.value(agent.key, nullptr);
@@ -1300,6 +1343,7 @@ void SettingsDialog::retranslateUi() {
 
     agentHeaderLabel_->setText(tr("Only Claude Code and OpenCode have built-in adapters. Other sources need an external integration to send events to At-Pet."));
     agentGroupBox_->setTitle(tr("Agent Event Source Filters"));
+    updateAgentConnectionLabels();
     subagentPetCheck_->setText(tr("Show a separate pet for each subagent session reported by incoming events"));
     btnSaveAgents_->setText(tr("Save Event Filters"));
 

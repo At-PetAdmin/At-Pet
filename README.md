@@ -17,6 +17,7 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
 - Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; MCP-compatible clients can use the optional stdio bridge for explicit event reporting, and other sources can use the generic HTTP API.
 - Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
+- Agent settings show live connectivity and the last event time for each source. On first contact or reconnection, pets announce “xxx connected successfully” in a speech bubble without repeating it for every event. Task completion and `idle` keep the connection active; ending all sessions marks it disconnected, while 30 minutes without events marks it as having no recent events. Connectivity is inferred from incoming events, independently of animation filters.
 - Optional completion chime (muted via **Play a sound when an Agent task completes** in General Settings). Permission prompts visually highlight potentially dangerous actions as a heuristic; the warning does not change the Allow once / Deny choices. Agents can also ask the user a question through the local HTTP API.
 - Windows-only option to make the pet's eyes follow the mouse pointer (**Look at the mouse cursor** in the right-click menu, or **Eyes follow the mouse cursor (Windows)** in General Settings). This only changes the pet's gaze; it does not detect or synchronize Copilot session status.
 - Perch (widget) mode: drop a pet on the title bar of another window — VS Code, the Copilot app, Explorer, and similar framed windows — and it walks onto the edge and sits there. A perched pet rides along when you move or resize the host window, can slide down the frame on its own or via **Slide down the window frame**, and hops off when you drag it away.
@@ -183,6 +184,7 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 ```json
 {
   "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],

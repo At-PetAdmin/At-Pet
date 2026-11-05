@@ -31,7 +31,9 @@ public:
                 normalizedName = QStringLiteral("thinking");
             else
                 return true;
-        } else if (sourceEvent == "session.idle" || sourceEvent == "session.deleted")
+        } else if (sourceEvent == "session.deleted")
+            normalizedName = QStringLiteral("session_end");
+        else if (sourceEvent == "session.idle")
             normalizedName = QStringLiteral("idle");
         else if (sourceEvent == "tool.execute.before")
             normalizedName = QStringLiteral("tool_start");

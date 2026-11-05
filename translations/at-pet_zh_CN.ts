@@ -128,6 +128,10 @@
 <context>
     <name>PetController</name>
     <message>
+        <source>%1 connected successfully</source>
+        <translation>%1连接成功</translation>
+    </message>
+    <message>
         <location filename="../app/main.cpp" line="285"/>
         <source>Hi! Double-click to chat.</source>
         <translation>嗨！双击和我聊天。</translation>
@@ -557,6 +561,30 @@
 </context>
 <context>
     <name>SettingsDialog</name>
+    <message>
+        <source>Not connected</source>
+        <translation>未连接</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>已连接</translation>
+    </message>
+    <message>
+        <source>Disconnected</source>
+        <translation>已断开</translation>
+    </message>
+    <message>
+        <source>No recent events</source>
+        <translation>近期无事件</translation>
+    </message>
+    <message>
+        <source>Last event: %1</source>
+        <translation>最近事件：%1</translation>
+    </message>
+    <message>
+        <source>Connectivity is based on incoming events, independently of the event filter. After 30 minutes without events, the status changes to No recent events.</source>
+        <translation>连通状态根据收到的事件判断，与事件过滤开关独立。30 分钟未收到事件后，状态变为“近期无事件”。</translation>
+    </message>
     <message>
         <source>Generic HTTP API</source>
         <translation type="vanished">通用 HTTP API</translation>

@@ -1,4 +1,5 @@
 #include "agentregistry.h"
+#include "agentconnectivity.h"
 #include "httpapi.h"
 #include "petid.h"
 #include "petsettings.h"
@@ -191,6 +192,21 @@ public:
         connect(api_, &HttpApi::summonRequested, this, [this](const QJsonObject &request) {
             if (request.value("all").toBool()) summonAll();
             else switchPet(request.value("petId").toString());
+        });
+
+        connectionAnnouncementTimer_.setSingleShot(true);
+        connect(&connectionAnnouncementTimer_, &QTimer::timeout,
+                this, &PetController::showNextConnectionAnnouncement);
+        connect(&agentConnectivity_, &AgentConnectivity::changed, this, [this] {
+            if (settingsDialog_)
+                settingsDialog_->setAgentConnections(agentConnectivity_.snapshot());
+            publishState();
+        });
+        connect(&agentConnectivity_, &AgentConnectivity::agentConnected, this,
+                [this](const QString &name) {
+            connectionAnnouncements_.enqueue(name);
+            if (!connectionAnnouncementTimer_.isActive())
+                QTimer::singleShot(0, this, &PetController::showNextConnectionAnnouncement);
         });
 
         const QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
@@ -395,6 +411,7 @@ private:
         settingsDialog_->setGravityEnabled(gravityEnabled_);
         settingsDialog_->setLookAtMouseEnabled(lookAtMouseEnabled_);
         settingsDialog_->setLanguage(language_);
+        settingsDialog_->setAgentConnections(agentConnectivity_.snapshot());
     }
 
     void refreshAgentSessions() {
@@ -479,7 +496,7 @@ private:
                     subagentPetWindows_.insert(it.key(), pet);
                 }
                 pet->setAnimation(it->animation);
-                if (!it->message.isEmpty())
+                if (!it->message.isEmpty() && !connectionAnnouncementPending())
                     pet->setSpeech(it->message);
                 ++index;
             }
@@ -706,6 +723,8 @@ private:
     }
 
     void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
+        agentConnectivity_.recordContact(request.value("agentApp").toString(),
+                                         request.value("sessionId").toString());
         questionQueue_.enqueue(qMakePair(requestId, request));
         showNextQuestionDialog();
     }
@@ -762,7 +781,22 @@ private:
         dialog->activateWindow();
     }
 
+    bool connectionAnnouncementPending() const {
+        return connectionAnnouncementTimer_.isActive() || !connectionAnnouncements_.isEmpty();
+    }
+
+    void showNextConnectionAnnouncement() {
+        if (connectionAnnouncementTimer_.isActive() || connectionAnnouncements_.isEmpty())
+            return;
+        const QString text = tr("%1 connected successfully").arg(connectionAnnouncements_.dequeue());
+        for (PetWindow *pet : visiblePets())
+            pet->setSpeech(text);
+        connectionAnnouncementTimer_.start(3500);
+        publishState();
+    }
+
     void onAgentEvent(const QJsonObject &event) {
+        agentConnectivity_.recordEvent(event);
         const QString sessionId = event.value("sessionId").toString().trimmed();
         if (sessionId.isEmpty())
             return;
@@ -815,7 +849,8 @@ private:
                    eventName == "apierror") {
             animation = "error";
             terminal = true;
-        } else if (eventName == "idle" || eventName == "sessionend" || eventName == "sessionended") {
+        } else if (eventName == "idle" || eventName == "sessionend" || eventName == "sessionended" ||
+                   eventName == "disconnected" || eventName == "disconnect") {
             sessions_.remove(key);
             applySessionAnimation();
             return;
@@ -858,7 +893,7 @@ private:
             terminalCategory = QuotePack::Category::Cancel;
             terminalQuote = true;
         }
-        if (terminalQuote) {
+        if (terminalQuote && !connectionAnnouncementPending()) {
             for (PetWindow *pet : visiblePets()) {
                 const QString quote = pet->randomQuote(terminalCategory, language_, quotePack_);
                 if (!quote.isEmpty())
@@ -954,7 +989,7 @@ private:
             }
         }
         setAllAnimations(latest == sessions_.cend() ? QStringLiteral("idle") : latest->animation);
-        if (latest != sessions_.cend() && !latest->message.isEmpty()) {
+        if (latest != sessions_.cend() && !latest->message.isEmpty() && !connectionAnnouncementPending()) {
             for (PetWindow *pet : visiblePets()) pet->setSpeech(latest->message);
         }
         updateSubagentPets();
@@ -980,11 +1015,14 @@ private:
         }
         QJsonArray supportedAgentApps;
         QJsonArray agentSources;
+        const QJsonObject connections = agentConnectivity_.snapshot();
         for (const AgentDefinition &agent : agentDefinitions()) {
             supportedAgentApps.append(agent.displayName);
             QJsonObject source{{"key", agent.key}, {"displayName", agent.displayName},
                                {"monitorType", agentMonitorTypeId(agent.monitorType)}};
             source.insert("integration", agentIntegrationId(agent.integration));
+            source.insert("connection", connections.value(agent.key).toObject(
+                QJsonObject{{"status", "not_connected"}, {"connected", false}, {"sessionCount", 0}}));
             if (agent.monitorType != AgentMonitorType::ExternalHttpApi)
                 source.insert("nativeEndpoint", QStringLiteral("/agent-event/%1").arg(agent.key));
             agentSources.append(source);
@@ -1007,6 +1045,7 @@ private:
     }
 
     void pruneStaleSessions() {
+        agentConnectivity_.expire();
         const QDateTime cutoff = QDateTime::currentDateTimeUtc().addSecs(-1800);
         bool removedStaleSession = false;
         for (auto it = sessions_.begin(); it != sessions_.end();) {
@@ -1158,6 +1197,9 @@ private:
     }
 
     HttpApi *api_ = nullptr;
+    AgentConnectivity agentConnectivity_;
+    QQueue<QString> connectionAnnouncements_;
+    QTimer connectionAnnouncementTimer_;
     QSystemTrayIcon *tray_ = nullptr;
     QMenu *trayMenu_ = nullptr;
     QTranslator translator_;

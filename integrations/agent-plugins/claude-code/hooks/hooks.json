@@ -1,5 +1,6 @@
 {
   "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],

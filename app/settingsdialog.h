@@ -86,6 +86,7 @@ public slots:
     void setGravityEnabled(bool enabled);
     void setLookAtMouseEnabled(bool enabled);
     void setLanguage(const QString &language);
+    void setAgentConnections(const QJsonObject &connections);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -114,6 +115,7 @@ private:
     void refreshQuotePackStatus();
     void refreshPetQuotePackStatus();
     void updateAgentDescriptions();
+    void updateAgentConnectionLabels();
     void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
 
@@ -148,6 +150,8 @@ private:
     QGroupBox *agentGroupBox_ = nullptr;
     QHash<QString, QCheckBox *> agentCheckboxes_;
     QHash<QString, QLabel *> agentDescriptionLabels_;
+    QHash<QString, QLabel *> agentConnectionLabels_;
+    QJsonObject agentConnections_;
     QCheckBox *subagentPetCheck_ = nullptr;
     QPushButton *btnSaveAgents_ = nullptr;
 

@@ -30,6 +30,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/questiondialog.cpp
     app/questiondialog.h
     app/agentregistry.h
+    app/agentconnectivity.cpp
+    app/agentconnectivity.h
     app/petid.h
     app/petsettings.cpp
     app/petsettings.h
@@ -125,6 +127,13 @@ if(AT_PET_BUILD_TESTS)
     at_pet_add_test(quote-pack tst_quotepack.cpp)
     at_pet_add_test(animation-fallback tst_animationfallback.cpp)
     at_pet_add_test(walk-mirror tst_walkmirror.cpp)
+    at_pet_add_test(agent-connectivity tst_agentconnectivity.cpp)
+    target_sources(agent-connectivity PRIVATE
+        app/agentconnectivity.cpp app/agentconnectivity.h
+        app/agentmonitor.cpp app/agentmonitor.h
+        app/agentadapters/claude-code/adapter.cpp
+        app/agentadapters/opencode-v2/adapter.cpp
+    )
 
     # The local HTTP API owns its own trust boundary (Host/Origin checks, no CORS headers,
     # petId validation). Those network sources stay out of AT_PET_TEST_SOURCES so the UI

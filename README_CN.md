@@ -17,6 +17,7 @@
 - 监视已导入的 `pet.json` 及其所在文件夹，修改后无需重启即可重新加载配置和精灵图。
 - 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和 Agent 事件。Claude Code HTTP hooks 与 OpenCode V2 插件提供原生适配器；兼容 MCP 的客户端可选择使用 stdio 桥接主动上报事件，其他来源也可使用通用 HTTP API。
 - Agent Monitoring 设置会显示每个来源的接入策略，并可过滤用于控制动画的事件。At-Pet 不会扫描 Agent 进程或读取与机器相关的日志路径；原生集成需在对应 Agent 应用中安装。
+- 设置中的 Agent 事件接入会动态显示各来源的连通状态和最近事件时间。首次收到某个 Agent 的事件或断开后重新接入时，桌宠会通过气泡播报“xxx连接成功”；连续事件不会重复播报。任务完成或 `idle` 不会断开连接；同一 Agent 的所有会话结束后显示“已断开”，30 分钟没有事件则显示“近期无事件”。连通状态根据事件判断，与动画过滤开关独立。
 - 可选的任务完成提示音（在常规设置中取消勾选“Agent 任务完成时播放声音”即可静音）。权限弹窗会通过启发式规则对潜在危险操作进行视觉高亮；此警告不会改变“仅本次允许/拒绝”选项。Agent 也可以通过本地 HTTP API 向用户提问。
 - Windows 专属选项：让桌宠的眼睛跟随鼠标指针（右键菜单中的“看向鼠标指针”，或常规设置中的“眼睛跟随鼠标指针（Windows）”）。这只会改变桌宠的视线，不会检测或同步 Copilot 会话状态。
 - 挂件模式：把桌宠拖到其他窗口（VS Code、Copilot 应用、资源管理器等带边框窗口）的标题栏上，它会走到窗口边缘并“坐”在那里。被挂载的桌宠会随宿主窗口移动或缩放一起移动，可以自行或通过右键菜单“沿窗口边框下滑”顺着边框往下滑，被拖走时则会离开窗口。
@@ -183,6 +184,7 @@ Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool
 ```json
 {
   "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],

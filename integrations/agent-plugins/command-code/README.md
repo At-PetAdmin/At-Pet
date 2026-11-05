@@ -21,7 +21,7 @@ Command Code 没有独立的插件清单，接入方式是在 `settings.json` �
 
 | Hook | At-Pet 事件 |
 | --- | --- |
-| `SessionStart` | 无 |
+| `SessionStart` | `connected`（更新连通状态并播报连接成功） |
 | `PreToolUse` | `tool_start`（消息为工具名） |
 | `PostToolUse` | `tool_end` |
 | `Stop` | `done` |
