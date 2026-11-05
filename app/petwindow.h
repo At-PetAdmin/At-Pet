@@ -1,5 +1,7 @@
 #pragma once
 
+#include "quotepack.h"
+
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
 #include <QImage>
@@ -43,6 +45,8 @@ public:
     void setAnimationFps(const QString &name, int fps);
     void setSpeech(const QString &text);
     QString randomQuote() const;
+    QString randomQuote(QuotePack::Category category, const QString &language,
+                        const QuotePack &globalPack) const;
     QStringList animationGroup(const QString &groupName) const;
     void setLookAtMouse(bool enabled);
     bool lookAtMouse() const;

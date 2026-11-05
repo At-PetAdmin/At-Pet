@@ -370,6 +370,7 @@ void SettingsDialog::applyStyle() {
                                      .arg(color(palette.surfaceAlt), color(palette.border), color(palette.textSecondary)));
     for (QLabel *label : agentDescriptionLabels_)
         label->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color(palette.textFaint)));
+    updateAgentConnectionLabels();
 }
 
 void SettingsDialog::setupUi() {
@@ -450,6 +451,24 @@ void SettingsDialog::setupUi() {
     petInfoLabel_->setWordWrap(true);
     rightCol->addWidget(petInfoLabel_);
 
+    petQuotePackGroupBox_ = new QGroupBox(tr("Pet Quotes"), petLibraryTab);
+    auto *petQuoteLayout = new QVBoxLayout(petQuotePackGroupBox_);
+    petQuotePackStatusLabel_ = new QLabel(petQuotePackGroupBox_);
+    petQuotePackStatusLabel_->setObjectName(QStringLiteral("petQuotePackStatusLabel"));
+    petQuotePackStatusLabel_->setWordWrap(true);
+    petQuoteLayout->addWidget(petQuotePackStatusLabel_);
+    auto *petQuoteActions = new QHBoxLayout;
+    btnImportPetQuotePack_ = new QPushButton(tr("Import pet quotes…"), petQuotePackGroupBox_);
+    btnImportPetQuotePack_->setObjectName(QStringLiteral("importPetQuotePackButton"));
+    btnResetPetQuotePack_ = new QPushButton(tr("Use global quotes"), petQuotePackGroupBox_);
+    btnResetPetQuotePack_->setObjectName(QStringLiteral("resetPetQuotePackButton"));
+    petQuoteActions->addWidget(btnImportPetQuotePack_);
+    petQuoteActions->addWidget(btnResetPetQuotePack_);
+    petQuoteLayout->addLayout(petQuoteActions);
+    rightCol->addWidget(petQuotePackGroupBox_);
+    connect(btnImportPetQuotePack_, &QPushButton::clicked, this, &SettingsDialog::onImportPetQuotePack);
+    connect(btnResetPetQuotePack_, &QPushButton::clicked, this, &SettingsDialog::onResetPetQuotePack);
+
     btnApplyPet_ = new QPushButton(tr("Set as Current Pet"), petLibraryTab);
     btnApplyPet_->setObjectName("primaryBtn");
     rightCol->addWidget(btnApplyPet_);
@@ -485,16 +504,26 @@ void SettingsDialog::setupUi() {
         chk->setChecked(true);
         agentCheckboxes_.insert(agent.key, chk);
 
+        auto *connectionLabel = new QLabel(itemWidget);
+        connectionLabel->setObjectName(QStringLiteral("agentConnection_") + agent.key);
+        connectionLabel->setTextFormat(Qt::PlainText);
+        auto *nameLayout = new QVBoxLayout;
+        nameLayout->setSpacing(4);
+        nameLayout->addWidget(chk);
+        nameLayout->addWidget(connectionLabel);
+        agentConnectionLabels_.insert(agent.key, connectionLabel);
+
         auto *descLabel = new QLabel(itemWidget);
         descLabel->setWordWrap(true);
         agentDescriptionLabels_.insert(agent.key, descLabel);
 
-        itemLayout->addWidget(chk);
+        itemLayout->addLayout(nameLayout);
         itemLayout->addSpacing(16);
         itemLayout->addWidget(descLabel, 1);
         groupLayout->addWidget(itemWidget);
     }
     updateAgentDescriptions();
+    updateAgentConnectionLabels();
     groupLayout->addStretch(1);
     agentScrollArea->setWidget(agentGroupBox_);
     agentsLayout->addWidget(agentScrollArea, 1);
@@ -571,7 +600,7 @@ void SettingsDialog::setupUi() {
     auto *quotePackLayout = new QVBoxLayout(quotePackGroupBox_);
     quotePackLayout->setSpacing(8);
     quotePackDescriptionLabel_ = new QLabel(
-        tr("One quote pack is shared by every pet. Lines are picked by the interface language."),
+        tr("Global quotes are used when a pet has no quotes for a category. Lines are picked by the interface language."),
         quotePackGroupBox_);
     quotePackDescriptionLabel_->setWordWrap(true);
     quotePackLayout->addWidget(quotePackDescriptionLabel_);
@@ -743,6 +772,48 @@ void SettingsDialog::onImportQuotePack() {
     emit quotePackImported(QuotePack::defaultPath());
 }
 
+void SettingsDialog::refreshPetQuotePackStatus() {
+    const QString id = currentSelectedPetId();
+    btnImportPetQuotePack_->setEnabled(!id.isEmpty());
+    const bool installed = !id.isEmpty() && QFileInfo::exists(QuotePack::petPath(id));
+    btnResetPetQuotePack_->setEnabled(installed);
+    const QuotePack pack = installed ? QuotePack::load(QuotePack::petPath(id)) : QuotePack();
+    if (pack.isEmpty()) {
+        petQuotePackStatusLabel_->setText(tr("No usable pet quotes configured; global quotes are used."));
+    } else {
+        petQuotePackStatusLabel_->setText(tr("Pet quotes: %1 lines across %2 languages. Missing categories use global quotes.")
+                                             .arg(pack.quoteCount()).arg(pack.languageCount()));
+    }
+}
+
+void SettingsDialog::onImportPetQuotePack() {
+    const QString id = currentSelectedPetId();
+    if (id.isEmpty())
+        return;
+    const QString source = QFileDialog::getOpenFileName(
+        this, tr("Import pet quotes"), QString(), tr("JSON files (*.json);;All files (*)"));
+    if (source.isEmpty())
+        return;
+    QString error;
+    if (!QuotePack::installForPet(source, id, &error)) {
+        QMessageBox::warning(this, tr("Quote pack import failed"), error);
+        return;
+    }
+    refreshPetQuotePackStatus();
+}
+
+void SettingsDialog::onResetPetQuotePack() {
+    const QString id = currentSelectedPetId();
+    if (id.isEmpty())
+        return;
+    QString error;
+    if (!QuotePack::removeForPet(id, &error)) {
+        QMessageBox::warning(this, tr("Could not reset pet quotes"), error);
+        return;
+    }
+    refreshPetQuotePackStatus();
+}
+
 void SettingsDialog::saveSettings() {
     QSettings settings;
     for (auto it = agentCheckboxes_.begin(); it != agentCheckboxes_.end(); ++it) {
@@ -791,6 +862,7 @@ void SettingsDialog::onLanguageComboChanged(int) {
 
 void SettingsDialog::refreshPetsList() {
     petList_->clear();
+    refreshPetQuotePackStatus();
 
     // Built-in default pet
     auto *defaultItem = new QListWidgetItem(tr("At-Pet (Built-in Default)"), petList_);
@@ -830,6 +902,7 @@ QString SettingsDialog::currentSelectedPetId() const {
 }
 
 void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) {
+    refreshPetQuotePackStatus();
     if (!current) return;
     const QString id = current->data(Qt::UserRole).toString();
     btnDeletePet_->setEnabled(id != "default");
@@ -1135,6 +1208,7 @@ void SettingsDialog::onDeletePet() {
         emit petSwitched(QStringLiteral("default"));
     }
     QDir(QDir(petLibraryPath()).filePath(id)).removeRecursively();
+    QuotePack::removeForPet(id);
     refreshPetsList();
 }
 
@@ -1195,6 +1269,38 @@ void SettingsDialog::onEditPetJson() {
     onPetSelected(petList_->currentItem(), nullptr);
 }
 
+void SettingsDialog::setAgentConnections(const QJsonObject &connections) {
+    agentConnections_ = connections;
+    updateAgentConnectionLabels();
+}
+
+void SettingsDialog::updateAgentConnectionLabels() {
+    const uitheme::Palette palette = uitheme::resolvePalette(uitheme::modeFromSettings());
+    for (auto it = agentConnectionLabels_.cbegin(); it != agentConnectionLabels_.cend(); ++it) {
+        const QJsonObject connection = agentConnections_.value(it.key()).toObject();
+        const QString status = connection.value("status").toString();
+        QString text = tr("Not connected");
+        QColor color = palette.textFaint;
+        if (status == "connected") {
+            text = tr("Connected");
+            color = palette.statusOk;
+        } else if (status == "disconnected") {
+            text = tr("Disconnected");
+            color = palette.statusError;
+        } else if (status == "inactive") {
+            text = tr("No recent events");
+            color = palette.statusWarn;
+        }
+        it.value()->setText(QStringLiteral("● ") + text);
+        it.value()->setStyleSheet(QStringLiteral("color: %1; font-size: 11px;").arg(color.name()));
+        QString tooltip = tr("Connectivity is based on incoming events, independently of the event filter. After 30 minutes without events, the status changes to No recent events.");
+        const QDateTime lastSeen = QDateTime::fromString(connection.value("lastSeen").toString(), Qt::ISODateWithMs);
+        if (lastSeen.isValid())
+            tooltip += QLatin1Char('\n') + tr("Last event: %1").arg(lastSeen.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")));
+        it.value()->setToolTip(tooltip);
+    }
+}
+
 void SettingsDialog::updateAgentDescriptions() {
     for (const AgentDefinition &agent : agentDefinitions()) {
         QLabel *label = agentDescriptionLabels_.value(agent.key, nullptr);
@@ -1227,12 +1333,17 @@ void SettingsDialog::retranslateUi() {
     animFpsSpin_->setToolTip(tr("Playback speed for this animation"));
     animationFpsNoteLabel_->setText(tr("The matching live animation updates immediately; other animations use this rate when they next play."));
     btnApplyPet_->setText(tr("Set as Current Pet"));
+    petQuotePackGroupBox_->setTitle(tr("Pet Quotes"));
+    btnImportPetQuotePack_->setText(tr("Import pet quotes…"));
+    btnResetPetQuotePack_->setText(tr("Use global quotes"));
+    refreshPetQuotePackStatus();
 
     for (int i = 0; i < animCombo_->count(); ++i)
         animCombo_->setItemText(i, translatedAnimationName(animCombo_->itemData(i).toString()));
 
     agentHeaderLabel_->setText(tr("Only Claude Code and OpenCode have built-in adapters. Other sources need an external integration to send events to At-Pet."));
     agentGroupBox_->setTitle(tr("Agent Event Source Filters"));
+    updateAgentConnectionLabels();
     subagentPetCheck_->setText(tr("Show a separate pet for each subagent session reported by incoming events"));
     btnSaveAgents_->setText(tr("Save Event Filters"));
 
@@ -1253,7 +1364,7 @@ void SettingsDialog::retranslateUi() {
     gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
     apiPortLabel_->setText(tr("Local API Port:"));
     quotePackGroupBox_->setTitle(tr("Quote Pack"));
-    quotePackDescriptionLabel_->setText(tr("One quote pack is shared by every pet. Lines are picked by the interface language."));
+    quotePackDescriptionLabel_->setText(tr("Global quotes are used when a pet has no quotes for a category. Lines are picked by the interface language."));
     btnImportQuotePack_->setText(tr("Import quotes.json…"));
     btnSaveGeneral_->setText(tr("Apply General Settings"));
     btnClose_->setText(tr("Close"));

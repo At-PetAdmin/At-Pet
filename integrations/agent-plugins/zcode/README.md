@@ -20,7 +20,7 @@ ZCode 的插件支持个人来源（Git、URL、本地目录）。
 
 | Hook | At-Pet 事件 |
 | --- | --- |
-| `SessionStart` | 无 |
+| `SessionStart` | `connected`（更新连通状态并播报连接成功） |
 | `UserPromptSubmit` | `thinking` |
 | `PreToolUse` | `tool_start`（消息为工具名） |
 | `PostToolUse` | `tool_end` |

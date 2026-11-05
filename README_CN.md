@@ -17,6 +17,7 @@
 - 监视已导入的 `pet.json` 及其所在文件夹，修改后无需重启即可重新加载配置和精灵图。
 - 本地 HTTP API 与 Server-Sent Events（SSE），用于状态更新和 Agent 事件。Claude Code HTTP hooks 与 OpenCode V2 插件提供原生适配器；兼容 MCP 的客户端可选择使用 stdio 桥接主动上报事件，其他来源也可使用通用 HTTP API。
 - Agent Monitoring 设置会显示每个来源的接入策略，并可过滤用于控制动画的事件。At-Pet 不会扫描 Agent 进程或读取与机器相关的日志路径；原生集成需在对应 Agent 应用中安装。
+- 设置中的 Agent 事件接入会动态显示各来源的连通状态和最近事件时间。首次收到某个 Agent 的事件或断开后重新接入时，桌宠会通过气泡播报“xxx连接成功”；连续事件不会重复播报。任务完成或 `idle` 不会断开连接；同一 Agent 的所有会话结束后显示“已断开”，30 分钟没有事件则显示“近期无事件”。连通状态根据事件判断，与动画过滤开关独立。
 - 可选的任务完成提示音（在常规设置中取消勾选“Agent 任务完成时播放声音”即可静音）。权限弹窗会通过启发式规则对潜在危险操作进行视觉高亮；此警告不会改变“仅本次允许/拒绝”选项。Agent 也可以通过本地 HTTP API 向用户提问。
 - Windows 专属选项：让桌宠的眼睛跟随鼠标指针（右键菜单中的“看向鼠标指针”，或常规设置中的“眼睛跟随鼠标指针（Windows）”）。这只会改变桌宠的视线，不会检测或同步 Copilot 会话状态。
 - 挂件模式：把桌宠拖到其他窗口（VS Code、Copilot 应用、资源管理器等带边框窗口）的标题栏上，它会走到窗口边缘并“坐”在那里。被挂载的桌宠会随宿主窗口移动或缩放一起移动，可以自行或通过右键菜单“沿窗口边框下滑”顺着边框往下滑，被拖走时则会离开窗口。
@@ -76,7 +77,7 @@ pwsh -File scripts/new-signing-cert.ps1
 
 ## 宠物库与格式
 
-通过宠物右键菜单或托盘菜单中的 **导入配置与精灵表…**，可以分别选择 `pet.json` 和图片。应用会把两者复制为新的宠物库条目，重写精灵图文件名，并在名称重复时追加数字后缀。对于包含 `pet.json` 及其引用资源的完整文件夹，仍可使用 **导入宠物文件夹…**。导入的宠物可以预览 12 秒，或切换为主位置。“召唤全部宠物”会同时打开库中所有有效条目。“编辑 pet.json…”会在文本编辑器中打开所选库条目的配置，保存时校验 JSON 并立即热加载，无需重启。
+通过宠物右键菜单或托盘菜单中的 **导入配置与精灵表…**，可以分别选择 `pet.json` 和图片。应用会把两者复制为新的宠物库条目，重写精灵图文件名，并在名称重复时追加数字后缀。对于包含 `pet.json` 及其引用资源的完整文件夹，仍可使用 **导入宠物文件夹…**。导入的宠物可以预览 12 秒，或切换为主位置。桌宠右键菜单第一层的 **全员上班** 会同时打开库中所有已导入的有效桌宠，并在屏幕上排列；重复点击会重新召集，不会累积重复实例。托盘菜单中也可使用“召唤全部桌宠”。“编辑 pet.json…”会在文本编辑器中打开所选库条目的配置，保存时校验 JSON 并立即热加载，无需重启。
 参考项目格式的 `pet.json` 示例：
 
 ```json
@@ -114,7 +115,11 @@ pwsh -File scripts/new-signing-cert.ps1
 
 ### 语录包
 
-所有桌宠可以共用一个语录包：独立的 JSON 文件，路径为 `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json`（即 `QStandardPaths::AppDataLocation/quotes.json`）。它不会被写进 `pet.json`，因此切换、更新或重新导入桌宠都不会影响它。
+每只桌宠都可以配置独立语录，未配置或缺少某一分类时回退到全局语录。独立语录和全局语录采用下方相同的 JSON 格式。
+
+在 **设置 → 桌宠库与预览** 中选中桌宠（包括内置默认桌宠），点击 **导入独立语录…**；点击 **使用全局语录** 可移除该桌宠的独立配置。配置按桌宠库 ID 保存到 `%APPDATA%\Ni-ShuWu\At-Pet\pet-quotes\<ID>.json`（ID 经 URL 编码），对该桌宠的所有运行实例立即生效，不影响其他桌宠。
+
+全局语录包是独立的 JSON 文件，路径为 `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json`（即 `QStandardPaths::AppDataLocation/quotes.json`）。它不会被写进 `pet.json`，因此切换、更新或重新导入桌宠都不会影响它。
 
 完整 schema（五个类别、两种受支持的语言）：
 
@@ -144,7 +149,7 @@ pwsh -File scripts/new-signing-cert.ps1
 * **触发时机**：戳一戳桌宠、Agent 终态事件（`done`、`error`、`cancelled`），以及没有活跃 Agent 会话、桌宠可见且当前没有说话时，每 2–5 分钟随机显示一句待机语录。语录包有多句时不会连续重复同一句，切换语言后下一句即使用新语言。
 * **缺少动画时**：如果桌宠的 `animations` 表里没有对应条目（例如没有 `done` 行），该动画会被跳过，但语录仍然显示，屏幕上保留上一帧而不会变成空白。
 
-双语示例见 `assets/default/quotes.example.json`，它不会被自动加载。没有安装语录包时，上述行为回退到 `pet.json` 里桌宠自带的 `quotes`，再回退到内置提示语。
+双语示例见 `assets/default/quotes.example.json`，它不会被自动加载。各分类按“独立语录 → 全局语录”顺序读取，并保留各自的语言回退规则。戳一戳在两者都没有可用语录时，继续使用 `pet.json` 的 `quotes`/`pokeQuotes`，最后显示内置问候语；其他事件保留原有消息。
 
 ## 本地 API
 
@@ -179,6 +184,7 @@ Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool
 ```json
 {
   "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],

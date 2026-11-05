@@ -17,6 +17,7 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 - Watches imported `pet.json` and its folder for changes and reloads configuration/sprites without restarting.
 - Local HTTP API and Server-Sent Events (SSE) for state updates and agent events. Native adapters are provided for Claude Code HTTP hooks and the OpenCode V2 plugin; MCP-compatible clients can use the optional stdio bridge for explicit event reporting, and other sources can use the generic HTTP API.
 - Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
+- Agent settings show live connectivity and the last event time for each source. On first contact or reconnection, pets announce “xxx connected successfully” in a speech bubble without repeating it for every event. Task completion and `idle` keep the connection active; ending all sessions marks it disconnected, while 30 minutes without events marks it as having no recent events. Connectivity is inferred from incoming events, independently of animation filters.
 - Optional completion chime (muted via **Play a sound when an Agent task completes** in General Settings). Permission prompts visually highlight potentially dangerous actions as a heuristic; the warning does not change the Allow once / Deny choices. Agents can also ask the user a question through the local HTTP API.
 - Windows-only option to make the pet's eyes follow the mouse pointer (**Look at the mouse cursor** in the right-click menu, or **Eyes follow the mouse cursor (Windows)** in General Settings). This only changes the pet's gaze; it does not detect or synchronize Copilot session status.
 - Perch (widget) mode: drop a pet on the title bar of another window — VS Code, the Copilot app, Explorer, and similar framed windows — and it walks onto the edge and sits there. A perched pet rides along when you move or resize the host window, can slide down the frame on its own or via **Slide down the window frame**, and hops off when you drag it away.
@@ -76,7 +77,7 @@ A self-signed signature still shows **Unknown publisher** on machines that have 
 
 ## Pet library and format
 
-Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. “Summon all pets” opens every valid library entry at once. **Edit pet.json…** opens the selected library entry's configuration in a text editor; saving validates the JSON and hot-reloads the pet without restarting.
+Use **Import config + spritesheet…** from the pet’s right-click menu or tray menu to select a `pet.json` and image separately. The app copies both into a new library entry, rewrites the sprite filename, and adds a numeric suffix for duplicate names. **Import pet folder…** remains available for complete folders containing `pet.json` and its referenced assets. Imported pets can be previewed for 12 seconds or switched into the main position. **All pets on duty** in the pet’s top-level right-click menu opens every valid imported library entry at once and arranges them on screen; clicking it again recreates the group without accumulating duplicates. The tray menu also offers “Summon all pets”. **Edit pet.json…** opens the selected library entry's configuration in a text editor; saving validates the JSON and hot-reloads the pet without restarting.
 Example `pet.json` in the reference project's format:
 
 ```json
@@ -114,7 +115,11 @@ Example `pet.json` in the reference project's format:
 
  ### Quote pack
 
- Every pet can share one quote pack: a standalone JSON file at `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json` (`QStandardPaths::AppDataLocation/quotes.json`). It is never written into `pet.json`, so switching, updating or re-importing pets keeps it intact.
+ Each pet can have an independent quote pack. Unconfigured pets and missing categories fall back to the global pack. Both use the JSON format below.
+
+ In **Settings → Pet Library & Preview**, select a pet (including the built-in default), then choose **Import pet quotes…**. **Use global quotes** removes its independent pack. Packs are saved by library ID at `%APPDATA%\Ni-ShuWu\At-Pet\pet-quotes\<ID>.json` (with URL-encoded IDs), and imports or resets apply immediately to every running instance of that pet. Other pets are unaffected.
+
+ The global quote pack is a standalone JSON file at `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json` (`QStandardPaths::AppDataLocation/quotes.json`). It is never written into `pet.json`, so switching, updating or re-importing pets keeps it intact.
 
  Complete schema — all five categories, both supported languages:
 
@@ -144,7 +149,7 @@ Example `pet.json` in the reference project's format:
  * **Triggers**: poking the pet, terminal agent events (`done`, `error`, `cancelled`), and one idle line every 2–5 minutes while no agent session is active, the pet is visible and it is not already speaking. The same idle line is not repeated back to back when the pack offers alternatives, and a language switch is honoured on the next line.
  * **Missing animations**: a pet whose `animations` table lacks the requested entry (for example no `done` row) skips that animation and still speaks — the last frame stays on screen instead of turning blank.
 
- A bilingual sample lives at `assets/default/quotes.example.json`; it is not loaded automatically. With no pack installed every behaviour above falls back to the pet's own `quotes` from `pet.json` and then to the built-in prompt.
+ A bilingual sample lives at `assets/default/quotes.example.json`; it is not loaded automatically. Each category resolves the independent pack first, then the global pack, retaining each pack's language fallbacks. If neither provides a poke line, the pet's `quotes`/`pokeQuotes` in `pet.json` are used, followed by the built-in greeting. Other events keep their original messages.
 
  ## Local API
 
@@ -179,6 +184,7 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 ```json
 {
   "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],
     "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:8765/agent-event/claudecode", "timeout": 600 }] }],

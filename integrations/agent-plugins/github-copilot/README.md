@@ -20,7 +20,7 @@
 
 | Copilot hook | At-Pet 事件 |
 | --- | --- |
-| `sessionStart` | 无（首次提交时才显示会话） |
+| `sessionStart` | `connected`（更新连通状态并播报连接成功） |
 | `userPromptSubmitted` | `thinking` |
 | `preToolUse` | `tool_start`（消息为工具名） |
 | `postToolUse` | `tool_end` |

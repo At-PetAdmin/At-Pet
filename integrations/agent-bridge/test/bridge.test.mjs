@@ -139,6 +139,42 @@ test('unknown hooks and unmatched conditions produce no event', () => {
   assert.equal(buildEvent(profile, idlePrompt, 'notification'), null);
 });
 
+test('opencode deletion disconnects while idle keeps connectivity', () => {
+  const profile = loadProfile('opencode-v2');
+  assert.equal(buildEvent(profile, { sessionID: 's' }, 'sessiondeleted').event, 'session_end');
+  assert.equal(buildEvent(profile, { sessionID: 's' }, 'sessionidle').event, 'idle');
+});
+
+test('standalone hook bridges report initial connectivity', async () => {
+  const apps = ['zcode', 'workbuddy', 'github-copilot', 'openai-codex', 'penguin-harness', 'deepseek-harness', 'command-code'];
+  const seen = [];
+  const fake = await startFakeAtPet((method, url, body) => {
+    seen.push({ method, url, body });
+    return { status: 202 };
+  });
+  try {
+    for (const app of apps) {
+      const script = join(HERE, '..', '..', 'agent-plugins', app, 'bridge.mjs');
+      const result = await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [script, app, 'SessionStart'], {
+          env: { ...process.env, AT_PET_URL: fake.url },
+          stdio: ['pipe', 'ignore', 'pipe'],
+        });
+        child.on('error', reject);
+        child.on('close', resolve);
+        child.stdin.end(JSON.stringify({ session_id: 's1' }));
+      });
+      assert.equal(result, 0);
+      assert.equal(seen.at(-1)?.body.agentApp, app);
+      assert.equal(seen.at(-1)?.body.event, 'connected');
+      assert.equal(seen.at(-1)?.url, '/event');
+    }
+    assert.equal(seen.length, apps.length);
+  } finally {
+    fake.server.close();
+  }
+});
+
 test('permission responses follow the hook contract', () => {
   const profile = loadProfile('claude-code');
   assert.deepEqual(buildPermissionResponse(profile, true), {

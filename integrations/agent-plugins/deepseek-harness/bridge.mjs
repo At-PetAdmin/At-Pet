@@ -29,6 +29,7 @@ const HOOK_NAMES = {
 };
 
 const EVENT_FOR_HOOK = {
+  SessionStart: "connected",
   UserPromptSubmit: "thinking",
   PreToolUse: "tool_start",
   PostToolUse: "tool_end",

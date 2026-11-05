@@ -11,6 +11,7 @@
 #include <QRandomGenerator>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QUrl>
 
 namespace {
 
@@ -152,6 +153,12 @@ QString QuotePack::defaultPath() {
     return QDir(dataDirectory).filePath(QStringLiteral("quotes.json"));
 }
 
+QString QuotePack::petPath(const QString &petId) {
+    const QString id = petId.isEmpty() ? QStringLiteral("default") : petId;
+    const QString filename = QString::fromLatin1(QUrl::toPercentEncoding(id)) + QStringLiteral(".json");
+    return QDir(QFileInfo(defaultPath()).absolutePath()).filePath(QStringLiteral("pet-quotes/") + filename);
+}
+
 QuotePack QuotePack::load(const QString &path, QString *errorMessage) {
     if (errorMessage)
         errorMessage->clear();
@@ -239,6 +246,25 @@ QuotePack QuotePack::load(const QString &path, QString *errorMessage) {
 }
 
 bool QuotePack::install(const QString &sourcePath, QString *errorMessage) {
+    return installToPath(sourcePath, defaultPath(), errorMessage);
+}
+
+bool QuotePack::installForPet(const QString &sourcePath, const QString &petId, QString *errorMessage) {
+    return installToPath(sourcePath, petPath(petId), errorMessage);
+}
+
+bool QuotePack::removeForPet(const QString &petId, QString *errorMessage) {
+    if (errorMessage)
+        errorMessage->clear();
+    const QString path = petPath(petId);
+    if (!QFileInfo::exists(path) || QFile::remove(path))
+        return true;
+    if (errorMessage)
+        *errorMessage = translated("Could not remove %1.").arg(QDir::toNativeSeparators(path));
+    return false;
+}
+
+bool QuotePack::installToPath(const QString &sourcePath, const QString &target, QString *errorMessage) {
     if (errorMessage)
         errorMessage->clear();
 
@@ -261,7 +287,6 @@ bool QuotePack::install(const QString &sourcePath, QString *errorMessage) {
     const QByteArray bytes = source.readAll();
     source.close();
 
-    const QString target = defaultPath();
     const QString directory = QFileInfo(target).absolutePath();
     if (!QDir().mkpath(directory)) {
         if (errorMessage)

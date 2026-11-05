@@ -86,6 +86,7 @@ public slots:
     void setGravityEnabled(bool enabled);
     void setLookAtMouseEnabled(bool enabled);
     void setLanguage(const QString &language);
+    void setAgentConnections(const QJsonObject &connections);
 
 protected:
     void changeEvent(QEvent *event) override;
@@ -102,6 +103,8 @@ private slots:
     void onSaveGeneralSettings();
     void onLanguageComboChanged(int index);
     void onImportQuotePack();
+    void onImportPetQuotePack();
+    void onResetPetQuotePack();
 
 private:
     void setupUi();
@@ -110,7 +113,9 @@ private:
     void applyStyle();
     void retranslateUi();
     void refreshQuotePackStatus();
+    void refreshPetQuotePackStatus();
     void updateAgentDescriptions();
+    void updateAgentConnectionLabels();
     void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
 
@@ -135,12 +140,18 @@ private:
     QPushButton *btnDeletePet_ = nullptr;
     QPushButton *btnEditPetJson_ = nullptr;
     QString petInfoBaseText_;
+    QGroupBox *petQuotePackGroupBox_ = nullptr;
+    QLabel *petQuotePackStatusLabel_ = nullptr;
+    QPushButton *btnImportPetQuotePack_ = nullptr;
+    QPushButton *btnResetPetQuotePack_ = nullptr;
 
     // Agent Monitoring Settings tab
     QLabel *agentHeaderLabel_ = nullptr;
     QGroupBox *agentGroupBox_ = nullptr;
     QHash<QString, QCheckBox *> agentCheckboxes_;
     QHash<QString, QLabel *> agentDescriptionLabels_;
+    QHash<QString, QLabel *> agentConnectionLabels_;
+    QJsonObject agentConnections_;
     QCheckBox *subagentPetCheck_ = nullptr;
     QPushButton *btnSaveAgents_ = nullptr;
 

@@ -1,4 +1,5 @@
 #include "agentregistry.h"
+#include "agentconnectivity.h"
 #include "httpapi.h"
 #include "petid.h"
 #include "petsettings.h"
@@ -193,6 +194,21 @@ public:
             else switchPet(request.value("petId").toString());
         });
 
+        connectionAnnouncementTimer_.setSingleShot(true);
+        connect(&connectionAnnouncementTimer_, &QTimer::timeout,
+                this, &PetController::showNextConnectionAnnouncement);
+        connect(&agentConnectivity_, &AgentConnectivity::changed, this, [this] {
+            if (settingsDialog_)
+                settingsDialog_->setAgentConnections(agentConnectivity_.snapshot());
+            publishState();
+        });
+        connect(&agentConnectivity_, &AgentConnectivity::agentConnected, this,
+                [this](const QString &name) {
+            connectionAnnouncements_.enqueue(name);
+            if (!connectionAnnouncementTimer_.isActive())
+                QTimer::singleShot(0, this, &PetController::showNextConnectionAnnouncement);
+        });
+
         const QString portText = QString::fromLocal8Bit(qgetenv("AT_PET_PORT"));
         bool portOk = false;
         const uint requestedPort = portText.toUInt(&portOk);
@@ -281,10 +297,7 @@ private:
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
             pet->setAnimation("interact");
-            // The shared pack wins, then the pet's own quotes, then the built-in prompt.
-            QString quote = quotePack_.randomQuote(QuotePack::Category::Poke, language_);
-            if (quote.isEmpty())
-                quote = pet->randomQuote();
+            const QString quote = pet->randomQuote(QuotePack::Category::Poke, language_, quotePack_);
             pet->setSpeech(quote.isEmpty() ? tr("Hi! Double-click to chat.") : quote);
             QTimer::singleShot(1200, pet, [this, pet] {
                 if (pet->animation() == "interact")
@@ -398,6 +411,7 @@ private:
         settingsDialog_->setGravityEnabled(gravityEnabled_);
         settingsDialog_->setLookAtMouseEnabled(lookAtMouseEnabled_);
         settingsDialog_->setLanguage(language_);
+        settingsDialog_->setAgentConnections(agentConnectivity_.snapshot());
     }
 
     void refreshAgentSessions() {
@@ -482,7 +496,7 @@ private:
                     subagentPetWindows_.insert(it.key(), pet);
                 }
                 pet->setAnimation(it->animation);
-                if (!it->message.isEmpty())
+                if (!it->message.isEmpty() && !connectionAnnouncementPending())
                     pet->setSpeech(it->message);
                 ++index;
             }
@@ -669,6 +683,7 @@ private:
         if (std::any_of(currentPets.cbegin(), currentPets.cend(), [id](PetWindow *pet) { return pet->petId() == id; }))
             switchPet(QStringLiteral("default"));
         QDir(directory).removeRecursively();
+        QuotePack::removeForPet(id);
         publishState();
     }
 
@@ -684,28 +699,32 @@ private:
 
     void showIdleQuote() {
         scheduleIdleQuote();
-        if (!sessions_.isEmpty() || !quotePack_.hasCategory(QuotePack::Category::Idle))
+        if (!sessions_.isEmpty())
             return;
-        QVector<PetWindow *> candidates;
+        QVector<QPair<PetWindow *, QString>> candidates;
         for (PetWindow *pet : visiblePets()) {
-            if (pet->isVisible() && pet->speech().isEmpty())
-                candidates.append(pet);
+            if (!pet->isVisible() || !pet->speech().isEmpty())
+                continue;
+            const QString quote = pet->randomQuote(QuotePack::Category::Idle, language_, quotePack_);
+            if (!quote.isEmpty())
+                candidates.append(qMakePair(pet, quote));
         }
         if (candidates.isEmpty())
             return;
-        QString quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
-        if (quote.isEmpty())
-            return;
+        const auto candidate = candidates.at(QRandomGenerator::global()->bounded(int(candidates.size())));
+        PetWindow *pet = candidate.first;
+        QString quote = candidate.second;
         // Avoid repeating the previous line when the language offers more than one.
-        for (int attempt = 0; attempt < 4 && quote == lastIdleQuote_; ++attempt)
-            quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
-        lastIdleQuote_ = quote;
-        const int index = QRandomGenerator::global()->bounded(int(candidates.size()));
-        candidates.at(index)->setSpeech(quote);
+        for (int attempt = 0; attempt < 4 && quote == lastIdleQuotes_.value(pet->petId()); ++attempt)
+            quote = pet->randomQuote(QuotePack::Category::Idle, language_, quotePack_);
+        lastIdleQuotes_.insert(pet->petId(), quote);
+        pet->setSpeech(quote);
         publishState();
     }
 
     void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
+        agentConnectivity_.recordContact(request.value("agentApp").toString(),
+                                         request.value("sessionId").toString());
         questionQueue_.enqueue(qMakePair(requestId, request));
         showNextQuestionDialog();
     }
@@ -762,7 +781,22 @@ private:
         dialog->activateWindow();
     }
 
+    bool connectionAnnouncementPending() const {
+        return connectionAnnouncementTimer_.isActive() || !connectionAnnouncements_.isEmpty();
+    }
+
+    void showNextConnectionAnnouncement() {
+        if (connectionAnnouncementTimer_.isActive() || connectionAnnouncements_.isEmpty())
+            return;
+        const QString text = tr("%1 connected successfully").arg(connectionAnnouncements_.dequeue());
+        for (PetWindow *pet : visiblePets())
+            pet->setSpeech(text);
+        connectionAnnouncementTimer_.start(3500);
+        publishState();
+    }
+
     void onAgentEvent(const QJsonObject &event) {
+        agentConnectivity_.recordEvent(event);
         const QString sessionId = event.value("sessionId").toString().trimmed();
         if (sessionId.isEmpty())
             return;
@@ -815,7 +849,8 @@ private:
                    eventName == "apierror") {
             animation = "error";
             terminal = true;
-        } else if (eventName == "idle" || eventName == "sessionend" || eventName == "sessionended") {
+        } else if (eventName == "idle" || eventName == "sessionend" || eventName == "sessionended" ||
+                   eventName == "disconnected" || eventName == "disconnect") {
             sessions_.remove(key);
             applySessionAnimation();
             return;
@@ -858,12 +893,13 @@ private:
             terminalCategory = QuotePack::Category::Cancel;
             terminalQuote = true;
         }
-        if (terminalQuote) {
-            const QString quote = quotePack_.randomQuote(terminalCategory, language_);
-            if (!quote.isEmpty()) {
-                for (PetWindow *pet : visiblePets()) pet->setSpeech(quote);
-                publishState();
+        if (terminalQuote && !connectionAnnouncementPending()) {
+            for (PetWindow *pet : visiblePets()) {
+                const QString quote = pet->randomQuote(terminalCategory, language_, quotePack_);
+                if (!quote.isEmpty())
+                    pet->setSpeech(quote);
             }
+            publishState();
         }
         if (successfulCompletion && completionSoundEnabled_)
             QApplication::beep();
@@ -953,7 +989,7 @@ private:
             }
         }
         setAllAnimations(latest == sessions_.cend() ? QStringLiteral("idle") : latest->animation);
-        if (latest != sessions_.cend() && !latest->message.isEmpty()) {
+        if (latest != sessions_.cend() && !latest->message.isEmpty() && !connectionAnnouncementPending()) {
             for (PetWindow *pet : visiblePets()) pet->setSpeech(latest->message);
         }
         updateSubagentPets();
@@ -979,11 +1015,14 @@ private:
         }
         QJsonArray supportedAgentApps;
         QJsonArray agentSources;
+        const QJsonObject connections = agentConnectivity_.snapshot();
         for (const AgentDefinition &agent : agentDefinitions()) {
             supportedAgentApps.append(agent.displayName);
             QJsonObject source{{"key", agent.key}, {"displayName", agent.displayName},
                                {"monitorType", agentMonitorTypeId(agent.monitorType)}};
             source.insert("integration", agentIntegrationId(agent.integration));
+            source.insert("connection", connections.value(agent.key).toObject(
+                QJsonObject{{"status", "not_connected"}, {"connected", false}, {"sessionCount", 0}}));
             if (agent.monitorType != AgentMonitorType::ExternalHttpApi)
                 source.insert("nativeEndpoint", QStringLiteral("/agent-event/%1").arg(agent.key));
             agentSources.append(source);
@@ -1006,6 +1045,7 @@ private:
     }
 
     void pruneStaleSessions() {
+        agentConnectivity_.expire();
         const QDateTime cutoff = QDateTime::currentDateTimeUtc().addSecs(-1800);
         bool removedStaleSession = false;
         for (auto it = sessions_.begin(); it != sessions_.end();) {
@@ -1157,6 +1197,9 @@ private:
     }
 
     HttpApi *api_ = nullptr;
+    AgentConnectivity agentConnectivity_;
+    QQueue<QString> connectionAnnouncements_;
+    QTimer connectionAnnouncementTimer_;
     QSystemTrayIcon *tray_ = nullptr;
     QMenu *trayMenu_ = nullptr;
     QTranslator translator_;
@@ -1191,7 +1234,7 @@ private:
     QTimer housekeepingTimer_;
     QTimer idleQuoteTimer_;
     QuotePack quotePack_;
-    QString lastIdleQuote_;
+    QHash<QString, QString> lastIdleQuotes_;
     QPointer<SettingsDialog> settingsDialog_;
 };
 

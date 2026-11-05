@@ -36,7 +36,9 @@ public:
         }
 
         QString normalizedName;
-        if (hookName == "UserPromptSubmit")
+        if (hookName == "SessionStart")
+            normalizedName = QStringLiteral("connected");
+        else if (hookName == "UserPromptSubmit")
             normalizedName = QStringLiteral("thinking");
         else if (hookName == "PreToolUse")
             normalizedName = QStringLiteral("tool_start");
@@ -47,7 +49,7 @@ public:
         else if (hookName == "Stop" || hookName == "SubagentStop")
             normalizedName = QStringLiteral("completed");
         else if (hookName == "SessionEnd")
-            normalizedName = QStringLiteral("idle");
+            normalizedName = QStringLiteral("session_end");
         else if (hookName == "SubagentStart")
             normalizedName = QStringLiteral("thinking");
         else

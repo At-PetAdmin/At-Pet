@@ -21,7 +21,7 @@ DSH 是插件化的 Agent 框架，本插件不写代码，而是通过 DSH 官�
 
 | Hook | At-Pet 事件 |
 | --- | --- |
-| `SessionStart` | 无 |
+| `SessionStart` | `connected`（更新连通状态并播报连接成功） |
 | `UserPromptSubmit` | `thinking` |
 | `PreToolUse` | `tool_start`（消息为工具名） |
 | `PostToolUse` | `tool_end` |

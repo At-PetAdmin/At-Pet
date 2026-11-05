@@ -15,7 +15,7 @@
       { "event": "idle", "when": { "path": "statusType", "equals": "idle" } }
     ],
     "sessionidle": { "event": "idle" },
-    "sessiondeleted": { "event": "idle" },
+    "sessiondeleted": { "event": "session_end" },
     "toolexecutebefore": { "event": "tool_start", "messageFrom": "toolName" },
     "toolexecuteafter": [
       { "event": "error", "when": { "path": "statusType", "equals": "error" } },
