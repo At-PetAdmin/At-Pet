@@ -114,7 +114,11 @@ Example `pet.json` in the reference project's format:
 
  ### Quote pack
 
- Every pet can share one quote pack: a standalone JSON file at `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json` (`QStandardPaths::AppDataLocation/quotes.json`). It is never written into `pet.json`, so switching, updating or re-importing pets keeps it intact.
+ Each pet can have an independent quote pack. Unconfigured pets and missing categories fall back to the global pack. Both use the JSON format below.
+
+ In **Settings → Pet Library & Preview**, select a pet (including the built-in default), then choose **Import pet quotes…**. **Use global quotes** removes its independent pack. Packs are saved by library ID at `%APPDATA%\Ni-ShuWu\At-Pet\pet-quotes\<ID>.json` (with URL-encoded IDs), and imports or resets apply immediately to every running instance of that pet. Other pets are unaffected.
+
+ The global quote pack is a standalone JSON file at `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json` (`QStandardPaths::AppDataLocation/quotes.json`). It is never written into `pet.json`, so switching, updating or re-importing pets keeps it intact.
 
  Complete schema — all five categories, both supported languages:
 
@@ -144,7 +148,7 @@ Example `pet.json` in the reference project's format:
  * **Triggers**: poking the pet, terminal agent events (`done`, `error`, `cancelled`), and one idle line every 2–5 minutes while no agent session is active, the pet is visible and it is not already speaking. The same idle line is not repeated back to back when the pack offers alternatives, and a language switch is honoured on the next line.
  * **Missing animations**: a pet whose `animations` table lacks the requested entry (for example no `done` row) skips that animation and still speaks — the last frame stays on screen instead of turning blank.
 
- A bilingual sample lives at `assets/default/quotes.example.json`; it is not loaded automatically. With no pack installed every behaviour above falls back to the pet's own `quotes` from `pet.json` and then to the built-in prompt.
+ A bilingual sample lives at `assets/default/quotes.example.json`; it is not loaded automatically. Each category resolves the independent pack first, then the global pack, retaining each pack's language fallbacks. If neither provides a poke line, the pet's `quotes`/`pokeQuotes` in `pet.json` are used, followed by the built-in greeting. Other events keep their original messages.
 
  ## Local API
 

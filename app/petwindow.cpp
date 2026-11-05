@@ -335,6 +335,18 @@ void PetWindow::setLookTarget(const QPoint &globalPosition) {
     update();
 }
 
+QString PetWindow::randomQuote(QuotePack::Category category, const QString &language,
+                              const QuotePack &globalPack) const {
+    // Read on demand so imports and resets apply to every instance of this pet immediately.
+    const QuotePack personalPack = QuotePack::load(QuotePack::petPath(petId()));
+    QString quote = personalPack.randomQuote(category, language);
+    if (quote.isEmpty())
+        quote = globalPack.randomQuote(category, language);
+    if (quote.isEmpty() && category == QuotePack::Category::Poke)
+        quote = randomQuote();
+    return quote;
+}
+
 QString PetWindow::randomQuote() const {
     QStringList quotes;
     const auto collect = [&quotes](const QJsonValue &value) {
@@ -1549,8 +1561,7 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
         connect(action, &QAction::triggered, this, [this, name] { setAnimation(name); });
     }
     menu.addAction(tr("Say something…"), this, &PetWindow::chatRequested);
-    if (!randomQuote().isEmpty())
-        menu.addAction(tr("Poke for a random line"), this, [this] { setSpeech(randomQuote()); });
+    menu.addAction(tr("Poke for a random line"), this, &PetWindow::petClicked);
     QMenu *libraryMenu = menu.addMenu(tr("Pet library"));
     const QString libraryPath = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
     QDir library(libraryPath);

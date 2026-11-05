@@ -22,6 +22,7 @@
 #include "petsettings.h"
 #include "petwindow.h"
 #include "settingsdialog.h"
+#include "testsettings.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -122,6 +123,7 @@ private:
 };
 
 void LookAtMouseSyncTest::initTestCase() {
+    isolateTestSettings();
     // Keep the developer's real At-Pet settings untouched.
     QCoreApplication::setOrganizationName(QStringLiteral("At-Pet-Tests"));
     QCoreApplication::setApplicationName(QStringLiteral("LookAtMouseSyncTest"));

@@ -22,6 +22,7 @@
 // PetController::setLanguage() and updateSettingsCheckboxes().
 
 #include "settingsdialog.h"
+#include "testsettings.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -177,6 +178,7 @@ private:
 };
 
 void LanguageSyncTest::initTestCase() {
+    isolateTestSettings();
     // Keep the developer's real At-Pet settings untouched.
     QCoreApplication::setOrganizationName(QStringLiteral("At-Pet-Tests"));
     QCoreApplication::setApplicationName(QStringLiteral("LanguageSyncTest"));

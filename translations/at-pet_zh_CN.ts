@@ -1126,8 +1126,8 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
     <message>
         <location filename="../app/settingsdialog.cpp" line="573"/>
         <location filename="../app/settingsdialog.cpp" line="1255"/>
-        <source>One quote pack is shared by every pet. Lines are picked by the interface language.</source>
-        <translation>所有桌宠共用一个语录包，按界面语言挑选句子。</translation>
+        <source>Global quotes are used when a pet has no quotes for a category. Lines are picked by the interface language.</source>
+        <translation>桌宠未配置某一分类的语录时使用全局语录，按界面语言挑选句子。</translation>
     </message>
     <message>
         <location filename="../app/settingsdialog.cpp" line="578"/>
@@ -1165,9 +1165,41 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
         <source>Quote pack import failed</source>
         <translation>语录包导入失败</translation>
     </message>
+    <message>
+        <source>Pet Quotes</source>
+        <translation>独立语录</translation>
+    </message>
+    <message>
+        <source>Import pet quotes…</source>
+        <translation>导入独立语录…</translation>
+    </message>
+    <message>
+        <source>Use global quotes</source>
+        <translation>使用全局语录</translation>
+    </message>
+    <message>
+        <source>No usable pet quotes configured; global quotes are used.</source>
+        <translation>未配置可用的独立语录，使用全局语录。</translation>
+    </message>
+    <message>
+        <source>Pet quotes: %1 lines across %2 languages. Missing categories use global quotes.</source>
+        <translation>独立语录：%1 条，共 %2 种语言。未配置的分类使用全局语录。</translation>
+    </message>
+    <message>
+        <source>Import pet quotes</source>
+        <translation>导入独立语录</translation>
+    </message>
+    <message>
+        <source>Could not reset pet quotes</source>
+        <translation>无法恢复全局语录</translation>
+    </message>
 </context>
 <context>
     <name>QuotePack</name>
+    <message>
+        <source>Could not remove %1.</source>
+        <translation>无法删除 %1。</translation>
+    </message>
     <message>
         <location filename="../app/quotepack.cpp" line="167"/>
         <location filename="../app/quotepack.cpp" line="258"/>

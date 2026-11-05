@@ -9,12 +9,19 @@
 // the developer's real At-Pet data directory is never read or written.
 
 #include "quotepack.h"
+#include "petwindow.h"
+#include "settingsdialog.h"
+#include "testsettings.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLabel>
+#include <QListWidget>
+#include <QPushButton>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -86,12 +93,18 @@ private slots:
     void installRejectsInvalidSourceWithoutTouchingExisting();
     void installMissingSourceFails();
     void fileOrderDrivesLastResortFallback();
+    void independentPacksOverrideEveryCategoryPerPet();
+    void missingPetCategoriesFallBackToGlobal();
+    void invalidPetPackFallsBackWithoutReplacingExisting();
+    void resettingPetPackUpdatesRunningInstances();
+    void petQuoteSettingsFollowSelectionAndReset();
 
 private:
     QTemporaryDir *directory_ = nullptr;
 };
 
 void QuotePackTest::initTestCase() {
+    isolateTestSettings();
     QStandardPaths::setTestModeEnabled(true);
     QCoreApplication::setOrganizationName(QStringLiteral("At-Pet-Tests"));
     QCoreApplication::setApplicationName(QStringLiteral("QuotePackTest"));
@@ -106,6 +119,8 @@ void QuotePackTest::cleanup() {
     delete directory_;
     directory_ = nullptr;
     QFile::remove(QuotePack::defaultPath());
+    for (const QString &id : {QStringLiteral("pet-a"), QStringLiteral("pet-b"), QStringLiteral("default")})
+        QuotePack::removeForPet(id);
 }
 
 void QuotePackTest::defaultPathEndsWithQuotesJson() {
@@ -374,6 +389,117 @@ void QuotePackTest::fileOrderDrivesLastResortFallback() {
     QCOMPARE(pack.languages(), (QStringList{QStringLiteral("fr"), QStringLiteral("de")}));
     QCOMPARE(pack.quotes(QuotePack::Category::Poke, QStringLiteral("ja")),
              QStringList{QStringLiteral("fr-line")});
+}
+
+void QuotePackTest::independentPacksOverrideEveryCategoryPerPet() {
+    const QString globalPath = writeTextFile(directory_->filePath("global.json"), twoLanguagePack);
+    QVERIFY(QuotePack::install(globalPath));
+    const QuotePack global = QuotePack::load(QuotePack::defaultPath());
+    QVERIFY(QDir(directory_->path()).mkpath("pet-a"));
+    QVERIFY(QDir(directory_->path()).mkpath("pet-b"));
+    PetWindow petA(directory_->filePath("pet-a"));
+    PetWindow petB(directory_->filePath("pet-b"));
+    PetWindow builtin;
+    const QString personal = writeTextFile(directory_->filePath("personal.json"), R"json({"en": {
+        "poke": "personal-poke", "done": "personal-done", "error": "personal-error",
+        "cancel": "personal-cancel", "idle": "personal-idle"
+    }})json");
+    QVERIFY(QuotePack::installForPet(personal, petA.petId()));
+    const QList<QuotePack::Category> categories = {QuotePack::Category::Poke, QuotePack::Category::Done,
+        QuotePack::Category::Error, QuotePack::Category::Cancel, QuotePack::Category::Idle};
+    const QStringList names = {"poke", "done", "error", "cancel", "idle"};
+    for (int i = 0; i < categories.size(); ++i) {
+        QCOMPARE(petA.randomQuote(categories[i], "en", global), "personal-" + names[i]);
+        QVERIFY(global.quotes(categories[i], "en").contains(petB.randomQuote(categories[i], "en", global)));
+    }
+    QVERIFY(QuotePack::installForPet(personal, QStringLiteral("default")));
+    QCOMPARE(builtin.randomQuote(QuotePack::Category::Poke, "zh_CN", global), QStringLiteral("personal-poke"));
+    QCOMPARE(QuotePack::petPath(QString()), QuotePack::petPath(QStringLiteral("default")));
+    QVERIFY(QuotePack::petPath("pet-a") != QuotePack::defaultPath());
+    QVERIFY(QuotePack::petPath("pet-a") != QuotePack::petPath("pet-b"));
+    QCOMPARE(readFile(QuotePack::defaultPath()), readFile(globalPath));
+}
+
+void QuotePackTest::missingPetCategoriesFallBackToGlobal() {
+    const QString globalPath = writeTextFile(directory_->filePath("global.json"), twoLanguagePack);
+    const QuotePack global = QuotePack::load(globalPath);
+    QVERIFY(QDir(directory_->path()).mkpath("pet-a"));
+    const QString definition = directory_->filePath("pet-a/pet.json");
+    QVERIFY(!writeTextFile(definition, R"json({"quotes": ["legacy-poke"]})json").isEmpty());
+    PetWindow pet(directory_->filePath("pet-a"));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("Hey, that tickles!"));
+    const QString personal = writeTextFile(directory_->filePath("personal.json"),
+        R"json({"zh_CN": {"poke": "personal-poke", "done": [" ", 12]}})json");
+    QVERIFY(QuotePack::installForPet(personal, pet.petId()));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "zh_CN", global), QStringLiteral("personal-poke"));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Done, "en", global), QStringLiteral("All done! Want to review?"));
+    QVERIFY(!pet.randomQuote(QuotePack::Category::Idle, "en", global).isEmpty());
+    QVERIFY(QuotePack::removeForPet(pet.petId()));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", QuotePack()), QStringLiteral("legacy-poke"));
+    QVERIFY(pet.randomQuote(QuotePack::Category::Done, "en", QuotePack()).isEmpty());
+}
+
+void QuotePackTest::invalidPetPackFallsBackWithoutReplacingExisting() {
+    const QString path = QuotePack::petPath("pet-a");
+    QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+    QVERIFY(!writeTextFile(path, "{broken").isEmpty());
+    QVERIFY(QDir(directory_->path()).mkpath("pet-a"));
+    PetWindow pet(directory_->filePath("pet-a"));
+    const QuotePack global = QuotePack::load(writeTextFile(directory_->filePath("global.json"), twoLanguagePack));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("Hey, that tickles!"));
+    QVERIFY(!writeTextFile(path, "{}").isEmpty());
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("Hey, that tickles!"));
+    const QString personal = writeTextFile(directory_->filePath("personal.json"), R"json({"en":{"poke":"personal"}})json");
+    QVERIFY(QuotePack::installForPet(personal, pet.petId()));
+    const QByteArray before = readFile(path);
+    const QString invalid = writeTextFile(directory_->filePath("invalid.json"), "{}");
+    QString error;
+    QVERIFY(!QuotePack::installForPet(invalid, pet.petId(), &error));
+    QVERIFY(!error.isEmpty());
+    QCOMPARE(readFile(path), before);
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("personal"));
+}
+
+void QuotePackTest::resettingPetPackUpdatesRunningInstances() {
+    QVERIFY(QDir(directory_->path()).mkpath("pet-a"));
+    PetWindow pet(directory_->filePath("pet-a"));
+    PetWindow anotherInstance(directory_->filePath("pet-a"));
+    const QuotePack global = QuotePack::load(writeTextFile(directory_->filePath("global.json"), twoLanguagePack));
+    const QString personal = writeTextFile(directory_->filePath("personal.json"), R"json({"en":{"poke":"personal"}})json");
+    QVERIFY(QuotePack::installForPet(personal, pet.petId()));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("personal"));
+    QCOMPARE(anotherInstance.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("personal"));
+    QVERIFY(QuotePack::removeForPet(pet.petId()));
+    QCOMPARE(pet.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("Hey, that tickles!"));
+    QCOMPARE(anotherInstance.randomQuote(QuotePack::Category::Poke, "en", global), QStringLiteral("Hey, that tickles!"));
+    QVERIFY(QuotePack::removeForPet(pet.petId()));
+}
+
+void QuotePackTest::petQuoteSettingsFollowSelectionAndReset() {
+    const QString personal = writeTextFile(directory_->filePath("personal.json"), R"json({"en":{"poke":"personal"}})json");
+    QVERIFY(QuotePack::installForPet(personal, QStringLiteral("default")));
+    SettingsDialog dialog;
+    auto *reset = dialog.findChild<QPushButton *>("resetPetQuotePackButton");
+    auto *status = dialog.findChild<QLabel *>("petQuotePackStatusLabel");
+    auto *list = dialog.findChild<QListWidget *>();
+    QVERIFY(reset);
+    QVERIFY(status);
+    QVERIFY(list);
+    list->setCurrentRow(0);
+    QVERIFY(reset->isEnabled());
+    QVERIFY(status->text().contains("1 lines"));
+    // Selecting another library entry must not reset the default pet's independent pack.
+    auto *other = new QListWidgetItem("pet-b", list);
+    other->setData(Qt::UserRole, QStringLiteral("pet-b"));
+    list->setCurrentItem(other);
+    QVERIFY(!reset->isEnabled());
+    QVERIFY(status->text().contains("global quotes"));
+    QVERIFY(QFileInfo::exists(QuotePack::petPath("default")));
+    list->setCurrentRow(0);
+    reset->click();
+    QVERIFY(!reset->isEnabled());
+    QVERIFY(status->text().contains("global quotes"));
+    QVERIFY(!QFileInfo::exists(QuotePack::petPath("default")));
 }
 
 QTEST_MAIN(QuotePackTest)

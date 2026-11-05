@@ -114,7 +114,11 @@ pwsh -File scripts/new-signing-cert.ps1
 
 ### 语录包
 
-所有桌宠可以共用一个语录包：独立的 JSON 文件，路径为 `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json`（即 `QStandardPaths::AppDataLocation/quotes.json`）。它不会被写进 `pet.json`，因此切换、更新或重新导入桌宠都不会影响它。
+每只桌宠都可以配置独立语录，未配置或缺少某一分类时回退到全局语录。独立语录和全局语录采用下方相同的 JSON 格式。
+
+在 **设置 → 桌宠库与预览** 中选中桌宠（包括内置默认桌宠），点击 **导入独立语录…**；点击 **使用全局语录** 可移除该桌宠的独立配置。配置按桌宠库 ID 保存到 `%APPDATA%\Ni-ShuWu\At-Pet\pet-quotes\<ID>.json`（ID 经 URL 编码），对该桌宠的所有运行实例立即生效，不影响其他桌宠。
+
+全局语录包是独立的 JSON 文件，路径为 `%APPDATA%\Ni-ShuWu\At-Pet\quotes.json`（即 `QStandardPaths::AppDataLocation/quotes.json`）。它不会被写进 `pet.json`，因此切换、更新或重新导入桌宠都不会影响它。
 
 完整 schema（五个类别、两种受支持的语言）：
 
@@ -144,7 +148,7 @@ pwsh -File scripts/new-signing-cert.ps1
 * **触发时机**：戳一戳桌宠、Agent 终态事件（`done`、`error`、`cancelled`），以及没有活跃 Agent 会话、桌宠可见且当前没有说话时，每 2–5 分钟随机显示一句待机语录。语录包有多句时不会连续重复同一句，切换语言后下一句即使用新语言。
 * **缺少动画时**：如果桌宠的 `animations` 表里没有对应条目（例如没有 `done` 行），该动画会被跳过，但语录仍然显示，屏幕上保留上一帧而不会变成空白。
 
-双语示例见 `assets/default/quotes.example.json`，它不会被自动加载。没有安装语录包时，上述行为回退到 `pet.json` 里桌宠自带的 `quotes`，再回退到内置提示语。
+双语示例见 `assets/default/quotes.example.json`，它不会被自动加载。各分类按“独立语录 → 全局语录”顺序读取，并保留各自的语言回退规则。戳一戳在两者都没有可用语录时，继续使用 `pet.json` 的 `quotes`/`pokeQuotes`，最后显示内置问候语；其他事件保留原有消息。
 
 ## 本地 API
 

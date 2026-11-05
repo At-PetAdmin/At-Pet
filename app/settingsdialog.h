@@ -102,6 +102,8 @@ private slots:
     void onSaveGeneralSettings();
     void onLanguageComboChanged(int index);
     void onImportQuotePack();
+    void onImportPetQuotePack();
+    void onResetPetQuotePack();
 
 private:
     void setupUi();
@@ -110,6 +112,7 @@ private:
     void applyStyle();
     void retranslateUi();
     void refreshQuotePackStatus();
+    void refreshPetQuotePackStatus();
     void updateAgentDescriptions();
     void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
@@ -135,6 +138,10 @@ private:
     QPushButton *btnDeletePet_ = nullptr;
     QPushButton *btnEditPetJson_ = nullptr;
     QString petInfoBaseText_;
+    QGroupBox *petQuotePackGroupBox_ = nullptr;
+    QLabel *petQuotePackStatusLabel_ = nullptr;
+    QPushButton *btnImportPetQuotePack_ = nullptr;
+    QPushButton *btnResetPetQuotePack_ = nullptr;
 
     // Agent Monitoring Settings tab
     QLabel *agentHeaderLabel_ = nullptr;

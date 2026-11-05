@@ -281,10 +281,7 @@ private:
         connect(pet, &PetWindow::animationChanged, this, [this] { publishState(); });
         connect(pet, &PetWindow::petClicked, this, [this, pet] {
             pet->setAnimation("interact");
-            // The shared pack wins, then the pet's own quotes, then the built-in prompt.
-            QString quote = quotePack_.randomQuote(QuotePack::Category::Poke, language_);
-            if (quote.isEmpty())
-                quote = pet->randomQuote();
+            const QString quote = pet->randomQuote(QuotePack::Category::Poke, language_, quotePack_);
             pet->setSpeech(quote.isEmpty() ? tr("Hi! Double-click to chat.") : quote);
             QTimer::singleShot(1200, pet, [this, pet] {
                 if (pet->animation() == "interact")
@@ -669,6 +666,7 @@ private:
         if (std::any_of(currentPets.cbegin(), currentPets.cend(), [id](PetWindow *pet) { return pet->petId() == id; }))
             switchPet(QStringLiteral("default"));
         QDir(directory).removeRecursively();
+        QuotePack::removeForPet(id);
         publishState();
     }
 
@@ -684,24 +682,26 @@ private:
 
     void showIdleQuote() {
         scheduleIdleQuote();
-        if (!sessions_.isEmpty() || !quotePack_.hasCategory(QuotePack::Category::Idle))
+        if (!sessions_.isEmpty())
             return;
-        QVector<PetWindow *> candidates;
+        QVector<QPair<PetWindow *, QString>> candidates;
         for (PetWindow *pet : visiblePets()) {
-            if (pet->isVisible() && pet->speech().isEmpty())
-                candidates.append(pet);
+            if (!pet->isVisible() || !pet->speech().isEmpty())
+                continue;
+            const QString quote = pet->randomQuote(QuotePack::Category::Idle, language_, quotePack_);
+            if (!quote.isEmpty())
+                candidates.append(qMakePair(pet, quote));
         }
         if (candidates.isEmpty())
             return;
-        QString quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
-        if (quote.isEmpty())
-            return;
+        const auto candidate = candidates.at(QRandomGenerator::global()->bounded(int(candidates.size())));
+        PetWindow *pet = candidate.first;
+        QString quote = candidate.second;
         // Avoid repeating the previous line when the language offers more than one.
-        for (int attempt = 0; attempt < 4 && quote == lastIdleQuote_; ++attempt)
-            quote = quotePack_.randomQuote(QuotePack::Category::Idle, language_);
-        lastIdleQuote_ = quote;
-        const int index = QRandomGenerator::global()->bounded(int(candidates.size()));
-        candidates.at(index)->setSpeech(quote);
+        for (int attempt = 0; attempt < 4 && quote == lastIdleQuotes_.value(pet->petId()); ++attempt)
+            quote = pet->randomQuote(QuotePack::Category::Idle, language_, quotePack_);
+        lastIdleQuotes_.insert(pet->petId(), quote);
+        pet->setSpeech(quote);
         publishState();
     }
 
@@ -859,11 +859,12 @@ private:
             terminalQuote = true;
         }
         if (terminalQuote) {
-            const QString quote = quotePack_.randomQuote(terminalCategory, language_);
-            if (!quote.isEmpty()) {
-                for (PetWindow *pet : visiblePets()) pet->setSpeech(quote);
-                publishState();
+            for (PetWindow *pet : visiblePets()) {
+                const QString quote = pet->randomQuote(terminalCategory, language_, quotePack_);
+                if (!quote.isEmpty())
+                    pet->setSpeech(quote);
             }
+            publishState();
         }
         if (successfulCompletion && completionSoundEnabled_)
             QApplication::beep();
@@ -1191,7 +1192,7 @@ private:
     QTimer housekeepingTimer_;
     QTimer idleQuoteTimer_;
     QuotePack quotePack_;
-    QString lastIdleQuote_;
+    QHash<QString, QString> lastIdleQuotes_;
     QPointer<SettingsDialog> settingsDialog_;
 };
 
