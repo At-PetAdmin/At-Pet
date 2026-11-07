@@ -221,3 +221,11 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for build inst
 ## License
 
 At-Pet is released under the [MIT License](LICENSE).
+
+### Work companion settings
+
+Open Tasks from the pet menu, tray, or Settings to see sessions, pending permissions/questions and the latest 50 results in the current run. History is not persisted. Agent Monitoring supports per-Agent pet assignments; missing assignments or deleted pets fall back to the current pet. Pet Library provides Balanced, Lively, Quiet and Focused personalities that change rest timing, movement pauses and proactive quote frequency without overriding imported quotes.
+
+Completions within 1.2 seconds are grouped. Pending requests and errors take priority over ordinary messages; do-not-disturb suppresses completion feedback. Allow permission requests to be forwarded to At-Pet defaults to enabled and applies when saved. Disabling it returns an empty Claude permission-hook response (native approval) or HTTP 409 with `permission_forwarding_disabled` for `POST /permission`. Integrations must retain native approval; the bundled OpenCode V2 plugin already falls back. Pending requests still require a decision. Event filtering and questions remain independent.
+
+`GET /state` and SSE additionally expose `recentResults`, `pendingRequests`, `permissionForwardingEnabled` and session `message`.

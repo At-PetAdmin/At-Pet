@@ -323,6 +323,30 @@
         <source>Quit</source>
         <translation>退出</translation>
     </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务面板</translation>
+    </message>
+    <message>
+        <source>%1 tasks completed. See Tasks for details.</source>
+        <translation>%1 个任务已完成，详情见任务面板。</translation>
+    </message>
+    <message>
+        <source>Task completed. See Tasks for details.</source>
+        <translation>任务完成，详情见任务面板。</translation>
+    </message>
+    <message>
+        <source>Ready for our next adventure!</source>
+        <translation>准备好一起开始下一次冒险啦！</translation>
+    </message>
+    <message>
+        <source>I am here with you.</source>
+        <translation>我在这里陪着你。</translation>
+    </message>
+    <message>
+        <source>One step at a time. Remember to take a break.</source>
+        <translation>一步一步来，也记得休息一下。</translation>
+    </message>
 </context>
 <context>
     <name>PetWindow</name>
@@ -524,6 +548,10 @@
         <location filename="../app/petwindow.cpp" line="1484"/>
         <source>Hide pet</source>
         <translation>收起桌宠</translation>
+    </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务面板</translation>
     </message>
 </context>
 <context>
@@ -1220,6 +1248,74 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
     <message>
         <source>Could not reset pet quotes</source>
         <translation>无法恢复全局语录</translation>
+    </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务面板</translation>
+    </message>
+    <message>
+        <source>Personality:</source>
+        <translation>性格：</translation>
+    </message>
+    <message>
+        <source>Balanced</source>
+        <translation>均衡</translation>
+    </message>
+    <message>
+        <source>Lively</source>
+        <translation>活泼</translation>
+    </message>
+    <message>
+        <source>Quiet</source>
+        <translation>安静</translation>
+    </message>
+    <message>
+        <source>Focused</source>
+        <translation>认真</translation>
+    </message>
+    <message>
+        <source>Use current pet</source>
+        <translation>使用当前桌宠</translation>
+    </message>
+    <message>
+        <source>Allow permission requests to be forwarded to At-Pet</source>
+        <translation>允许权限请求转发至 At-Pet</translation>
+    </message>
+    <message>
+        <source>When disabled, new requests stay with the Agent. Pending requests still need a decision.</source>
+        <translation>关闭后，新的权限请求由 Agent 自行处理；已在等待的请求仍需作出决定。</translation>
+    </message>
+    <message>
+        <source>Live sessions and the latest 50 results in this run. Waiting requests need your attention.</source>
+        <translation>显示当前会话及本次运行最近 50 条结果。等待中的请求需要你处理。</translation>
+    </message>
+    <message>
+        <source>Agent</source>
+        <translation>Agent</translation>
+    </message>
+    <message>
+        <source>Session</source>
+        <translation>会话</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>Message</source>
+        <translation>消息</translation>
+    </message>
+    <message>
+        <source>Updated</source>
+        <translation>更新时间</translation>
+    </message>
+    <message>
+        <source>Waiting for permission</source>
+        <translation>等待权限审批</translation>
+    </message>
+    <message>
+        <source>Waiting for answer</source>
+        <translation>等待回答</translation>
     </message>
 </context>
 <context>

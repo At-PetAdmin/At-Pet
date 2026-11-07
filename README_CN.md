@@ -221,3 +221,12 @@ At-Pet 提供的是本地事件桥接，不会直接读取 Agent 会话内部状
 ## 许可证
 
 At-Pet 基于 [MIT License](LICENSE) 发布。
+
+### 工作搭子设置
+
+- 从桌宠右键菜单、托盘菜单或设置中的“任务面板”查看当前会话、待处理权限/提问和本次运行最近 50 条完成、错误及取消结果；关闭程序后清空历史。
+- 在 Agent Monitoring 中为每个 Agent 选择专属桌宠并保存。接收到主会话事件时显示该 Agent 的独立桌宠，没有绑定或绑定资源被删除时使用当前桌宠。
+- 在桌宠库选择“均衡、活泼、安静、认真”性格，即时调整该宠物所有实例的待机动作、走动间隔和主动语录频率；独立及全局语录仍优先。
+- 1.2 秒内完成的任务合并提示，权限、提问和错误优先于普通消息，免打扰期间不播放完成提示。
+- “允许权限请求转发至 At-Pet”默认开启，保存后立即生效。关闭时，Claude 权限 hook 返回空响应交回原生审批；通用 `POST /permission` 返回 HTTP 409 和 `permission_forwarding_disabled`，集成应保留原生审批。随附 OpenCode V2 插件会自动回退。已接收的请求仍需用户决定，关闭开关不会自动允许或拒绝；动画过滤和提问不受此开关影响。
+- `GET /state` / SSE 新增 `recentResults`、`pendingRequests` 和 `permissionForwardingEnabled`，会话增加 `message` 字段。

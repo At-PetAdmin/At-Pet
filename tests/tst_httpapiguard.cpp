@@ -110,6 +110,7 @@ private slots:
     void init();
     void cleanup();
 
+    void permissionForwardingSwitch();
     void acceptsLoopbackHosts();
     void rejectsForeignHost();
     void rejectsBrowserOrigins();
@@ -323,3 +324,31 @@ void HttpApiGuardTest::hidesQuestionAnswersFromBrowsers() {
 QTEST_GUILESS_MAIN(HttpApiGuardTest)
 
 #include "tst_httpapiguard.moc"
+
+void HttpApiGuardTest::permissionForwardingSwitch() {
+    const auto host = "127.0.0.1:" + QByteArray::number(port_);
+    QSignalSpy permissions(api_, &HttpApi::permissionRequestReceived);
+    QSignalSpy events(api_, &HttpApi::eventReceived);
+    api_->setPermissionForwardingEnabled(false);
+    const auto generic = send(postRequest("/permission", host,
+        R"({"agentApp":"opencode","sessionId":"a","toolName":"test"})"));
+    QVERIFY(generic.startsWith("HTTP/1.1 409"));
+    QVERIFY(generic.contains("permission_forwarding_disabled"));
+    const auto native = send(postRequest("/agent-event/claudecode", host,
+        R"({"hook_event_name":"PermissionRequest","session_id":"a","tool_name":"Bash","tool_input":{"command":"echo hi"}})"));
+    QVERIFY(native.startsWith("HTTP/1.1 200"));
+    QVERIFY(!native.contains("permissionDecision"));
+    QCOMPARE(permissions.size(), 0);
+    QVERIFY(send(postRequest("/event", host, R"({"sessionId":"a","event":"thinking"})")).startsWith("HTTP/1.1 202"));
+    QCOMPARE(events.size(), 1);
+    api_->setPermissionForwardingEnabled(true);
+    const auto accepted = send(postRequest("/permission", host,
+        R"({"agentApp":"opencode","sessionId":"a","toolName":"test"})"));
+    QVERIFY(accepted.startsWith("HTTP/1.1 202"));
+    QCOMPARE(permissions.size(), 1);
+    const auto id = permissions.first().first().toString();
+    api_->setPermissionForwardingEnabled(false);
+    api_->resolvePermission(id, false);
+    const auto result = send(getRequest("/permission/" + id.toUtf8(), host));
+    QVERIFY(result.contains("denied"));
+}

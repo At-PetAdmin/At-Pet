@@ -63,11 +63,13 @@ public:
     void setGravityScale(qreal scale);
     qreal gravityScale() const;
     void reloadDefinition();
+    void refreshPersonality();
 
 signals:
     void animationChanged(const QString &name);
     void petClicked();
     void chatRequested();
+    void tasksRequested();
     void switchRequested(const QString &petId);
     void importRequested();
     void importFolderRequested();
@@ -92,6 +94,7 @@ protected:
     void hideEvent(QHideEvent *event) override;
 
 private:
+    QString personality_ = QStringLiteral("balanced");
     enum class AttachmentEdge { None, Top, Left, Right };
 
     void tick();

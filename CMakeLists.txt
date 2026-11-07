@@ -46,6 +46,7 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
 )
 
 target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network)
+target_include_directories(at-pet PRIVATE tests)
 if(WIN32)
     configure_file(
         assets/branding/app-icon.rc.in
@@ -162,4 +163,12 @@ if(AT_PET_BUILD_TESTS)
     endfunction()
 
     at_pet_add_http_test(http-api-guard tst_httpapiguard.cpp)
+    get_target_property(AT_PET_COMPANION_SOURCES at-pet SOURCES)
+    qt_add_executable(companion-flow ${AT_PET_COMPANION_SOURCES} tests/companion_cases.h)
+    target_include_directories(companion-flow PRIVATE app tests)
+    target_compile_definitions(companion-flow PRIVATE AT_PET_COMPANION_TEST AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test)
+    set_target_properties(companion-flow PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME companion-flow COMMAND companion-flow)
+    set_tests_properties(companion-flow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
