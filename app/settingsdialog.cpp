@@ -36,11 +36,14 @@
 #include <QSaveFile>
 #include <QScrollArea>
 #include <QSettings>
+#include <QSet>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTabWidget>
+#include <QTableWidget>
+#include <QScrollBar>
 #include <QDialogButtonBox>
 #include <QVBoxLayout>
 #include <QUrl>
@@ -474,6 +477,21 @@ void SettingsDialog::setupUi() {
     rightCol->addWidget(btnApplyPet_);
 
     petLayout->addLayout(rightCol, 3);
+    personalityLabel_ = new QLabel(tr("Personality:"), petLibraryTab);
+    rightCol->addWidget(personalityLabel_);
+    personalityCombo_ = new QComboBox(petLibraryTab);
+    personalityCombo_->setObjectName("personalityCombo");
+    personalityCombo_->addItem(tr("Balanced"), "balanced");
+    personalityCombo_->addItem(tr("Lively"), "lively");
+    personalityCombo_->addItem(tr("Quiet"), "quiet");
+    personalityCombo_->addItem(tr("Focused"), "focused");
+    rightCol->addWidget(personalityCombo_);
+    connect(personalityCombo_, QOverload<int>::of(&QComboBox::activated), this, [this] {
+        const QString id = currentSelectedPetId();
+        if (id.isEmpty()) return;
+        QSettings().setValue("pets/personality/" + id, personalityCombo_->currentData());
+        emit companionSettingsChanged();
+    });
     tabWidget_->addTab(petLibraryTab, tr("Pet Library & Preview"));
 
     // ---------------- TAB 2: Agent Monitoring Switches ----------------
@@ -511,6 +529,10 @@ void SettingsDialog::setupUi() {
         nameLayout->setSpacing(4);
         nameLayout->addWidget(chk);
         nameLayout->addWidget(connectionLabel);
+        auto *binding = new QComboBox(itemWidget);
+        binding->setObjectName(QStringLiteral("agentPet_") + agent.key);
+        agentPetCombos_.insert(agent.key, binding);
+        nameLayout->addWidget(binding);
         agentConnectionLabels_.insert(agent.key, connectionLabel);
 
         auto *descLabel = new QLabel(itemWidget);
@@ -531,6 +553,10 @@ void SettingsDialog::setupUi() {
     subagentPetCheck_ = new QCheckBox(tr("Show a separate pet for each subagent session reported by incoming events"), agentsTab);
     agentsLayout->addWidget(subagentPetCheck_);
 
+    permissionForwardingCheck_ = new QCheckBox(tr("Allow permission requests to be forwarded to At-Pet"), agentsTab);
+    permissionForwardingCheck_->setObjectName("permissionForwardingCheck");
+    permissionForwardingCheck_->setToolTip(tr("When disabled, new requests stay with the Agent. Pending requests still need a decision."));
+    agentsLayout->addWidget(permissionForwardingCheck_);
     btnSaveAgents_ = new QPushButton(tr("Save Event Filters"), agentsTab);
     btnSaveAgents_->setObjectName("primaryBtn");
     connect(btnSaveAgents_, &QPushButton::clicked, this, &SettingsDialog::saveSettings);
@@ -626,6 +652,20 @@ void SettingsDialog::setupUi() {
 
     tabWidget_->addTab(generalTab, tr("General Settings"));
 
+    auto *tasksTab = new QWidget;
+    auto *tasksLayout = new QVBoxLayout(tasksTab);
+    tasksNote_ = new QLabel(tr("Live sessions and the latest 50 results in this run. Waiting requests need your attention."));
+    tasksNote_->setWordWrap(true);
+    tasksLayout->addWidget(tasksNote_);
+    tasksTable_ = new QTableWidget(0, 5, tasksTab);
+    tasksTable_->setObjectName("tasksTable");
+    tasksTable_->setHorizontalHeaderLabels({tr("Agent"), tr("Session"), tr("Status"), tr("Message"), tr("Updated")});
+    tasksTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    tasksTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    tasksTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    tasksTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    tasksLayout->addWidget(tasksTable_);
+    tabWidget_->addTab(tasksTab, tr("Tasks"));
     // Bottom close button
     auto *bottomLayout = new QHBoxLayout;
     bottomLayout->addStretch(1);
@@ -666,6 +706,7 @@ void SettingsDialog::loadSettings() {
         subagentPetCheck_->setChecked(settings.value("agents/showSubagentPets", false).toBool());
     }
 
+    permissionForwardingCheck_->setChecked(settings.value("agents/allowPermissionForwarding", true).toBool());
     // General settings
     const QString lang = settings.value("ui/language", "zh_CN").toString();
     const int langIdx = languageCombo_->findData(lang);
@@ -821,6 +862,10 @@ void SettingsDialog::saveSettings() {
         settings.setValue(settingKey, it.value()->isChecked());
     }
     settings.setValue("agents/showSubagentPets", subagentPetCheck_->isChecked());
+    settings.setValue("agents/allowPermissionForwarding", permissionForwardingCheck_->isChecked());
+    for (auto it = agentPetCombos_.cbegin(); it != agentPetCombos_.cend(); ++it)
+        settings.setValue("agents/pet/" + it.key(), it.value()->currentData());
+    emit companionSettingsChanged();
     emit agentFilterChanged();
     emit subagentPetSettingChanged(subagentPetCheck_->isChecked());
     QMessageBox::information(this, tr("Settings Saved"), tr("Agent monitoring preferences have been updated."));
@@ -894,6 +939,19 @@ void SettingsDialog::refreshPetsList() {
     }
 
     petList_->setCurrentItem(selectedItem);
+    for (auto it = agentPetCombos_.begin(); it != agentPetCombos_.end(); ++it) {
+        QComboBox *combo = it.value();
+        const QString saved = combo->count() ? combo->currentData().toString()
+                                            : settings.value("agents/pet/" + it.key()).toString();
+        const QSignalBlocker blocker(combo);
+        combo->clear();
+        combo->addItem(tr("Use current pet"), QString());
+        for (int i = 0; i < petList_->count(); ++i) {
+            auto *item = petList_->item(i);
+            combo->addItem(item->text(), item->data(Qt::UserRole));
+        }
+        combo->setCurrentIndex(qMax(0, combo->findData(saved)));
+    }
 }
 
 QString SettingsDialog::currentSelectedPetId() const {
@@ -905,6 +963,9 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
     refreshPetQuotePackStatus();
     if (!current) return;
     const QString id = current->data(Qt::UserRole).toString();
+    const QSignalBlocker personalityBlocker(personalityCombo_);
+    personalityCombo_->setCurrentIndex(qMax(0, personalityCombo_->findData(
+        QSettings().value("pets/personality/" + id, "balanced").toString())));
     btnDeletePet_->setEnabled(id != "default");
     btnEditPetJson_->setEnabled(!id.isEmpty() && id != "default");
     petInfoBaseText_ = tr("Pet details are unavailable.");
@@ -1315,6 +1376,13 @@ void SettingsDialog::updateAgentDescriptions() {
 
 void SettingsDialog::retranslateUi() {
     setWindowTitle(tr("At-Pet Settings & Library"));
+    tabWidget_->setTabText(3, tr("Tasks"));
+    tasksNote_->setText(tr("Live sessions and the latest 50 results in this run. Waiting requests need your attention."));
+    tasksTable_->setHorizontalHeaderLabels({tr("Agent"), tr("Session"), tr("Status"), tr("Message"), tr("Updated")});
+    permissionForwardingCheck_->setText(tr("Allow permission requests to be forwarded to At-Pet"));
+    personalityLabel_->setText(tr("Personality:"));
+    const QStringList personalities{tr("Balanced"), tr("Lively"), tr("Quiet"), tr("Focused")};
+    for (int i = 0; i < personalities.size(); ++i) personalityCombo_->setItemText(i, personalities[i]);
     tabWidget_->setTabText(0, tr("Pet Library & Preview"));
     tabWidget_->setTabText(1, tr("Agent Monitoring"));
     tabWidget_->setTabText(2, tr("General Settings"));
@@ -1377,4 +1445,42 @@ void SettingsDialog::changeEvent(QEvent *event) {
     if (event->type() == QEvent::LanguageChange)
         retranslateUi();
     QDialog::changeEvent(event);
+}
+
+void SettingsDialog::showTasks() { tabWidget_->setCurrentIndex(3); }
+
+void SettingsDialog::setTasks(const QJsonObject &state) {
+    const int scroll = tasksTable_->verticalScrollBar()->value();
+    QJsonArray rows = state.value("pendingRequests").toArray();
+    QSet<QString> waitingSessions;
+    const auto keyFor = [](const QJsonObject &row) {
+        return agentAppKey(normalizeAgentApp(row.value("agentApp").toString())) + QChar(0x1f) + row.value("sessionId").toString();
+    };
+    for (const auto &row : rows)
+        if (!row.toObject().value("sessionId").toString().isEmpty()) waitingSessions.insert(keyFor(row.toObject()));
+    for (const auto &row : state.value("sessions").toArray()) {
+        const QString status = row.toObject().value("animation").toString();
+        if (status != "done" && status != "error" && status != "cancelled" && !waitingSessions.contains(keyFor(row.toObject()))) rows.append(row);
+    }
+    for (const auto &row : state.value("recentResults").toArray()) rows.append(row);
+    tasksTable_->setRowCount(rows.size());
+    int index = 0;
+    for (const auto &value : rows) {
+        const auto row = value.toObject();
+        const QString status = row.value("animation").toString();
+        const QHash<QString, QString> labels{{"thinking", tr("Thinking")}, {"tool", tr("Using tools")},
+            {"work", tr("Working")}, {"review", tr("Review")}, {"done", tr("Completed")},
+            {"error", tr("Error")}, {"cancelled", tr("Cancelled")}, {"permission", tr("Waiting for permission")},
+            {"question", tr("Waiting for answer")}};
+        const QStringList cells{row.value("agentApp").toString(), row.value("sessionId").toString(),
+            labels.value(status, status), row.value("message").toString(),
+            QDateTime::fromString(row.value("updatedAt").toString(), Qt::ISODate).toLocalTime().toString("MM-dd HH:mm:ss")};
+        for (int col = 0; col < cells.size(); ++col) {
+            auto *item = new QTableWidgetItem(cells[col]);
+            item->setToolTip(cells[col]);
+            tasksTable_->setItem(index, col, item);
+        }
+        ++index;
+    }
+    tasksTable_->verticalScrollBar()->setValue(scroll);
 }

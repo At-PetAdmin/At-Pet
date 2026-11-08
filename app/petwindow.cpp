@@ -419,7 +419,8 @@ void PetWindow::scheduleRest() {
         return;
     if (animationGroup(QStringLiteral("rest")).isEmpty())
         return;
-    restTimer_.start(QRandomGenerator::global()->bounded(restIdleDelayMinMs, restIdleDelayMaxMs));
+    const int factor = personality_ == "quiet" ? 1 : personality_ == "lively" ? 3 : 2;
+    restTimer_.start(QRandomGenerator::global()->bounded(restIdleDelayMinMs * factor / 2, restIdleDelayMaxMs * factor / 2));
 }
 
 void PetWindow::beginRest() {
@@ -920,7 +921,8 @@ void PetWindow::scheduleFreeMovement(int delayMs) {
         return;
     if (attachment_ != AttachmentEdge::None && attachment_ != AttachmentEdge::Top)
         return;
-    movementTimer_.start(qMax(0, delayMs));
+    const int factor = personality_ == "quiet" || personality_ == "focused" ? 3 : 1;
+    movementTimer_.start(qMax(0, delayMs * factor));
 }
 
 void PetWindow::stopFreeMovement() {
@@ -1544,6 +1546,7 @@ void PetWindow::contextMenuEvent(QContextMenuEvent *event) {
 
 void PetWindow::showContextMenu(const QPoint &globalPosition) {
     QMenu menu(this);
+    menu.addAction(tr("Tasks"), this, &PetWindow::tasksRequested);
     QMenu *animationMenu = menu.addMenu(tr("Animation"));
     QStringList animationNames = definition_.value("animations").toObject().isEmpty()
         ? builtinAnimations
@@ -1604,4 +1607,9 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
     connect(quietAction, &QAction::toggled, this, &PetWindow::doNotDisturbToggled);
     menu.addAction(tr("Hide pet"), this, &QWidget::hide);
     menu.exec(globalPosition);
+}
+
+void PetWindow::refreshPersonality() {
+    personality_ = QSettings().value("pets/personality/" + petId(), "balanced").toString();
+    if (animation_ == "idle") scheduleRest();
 }

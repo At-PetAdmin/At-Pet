@@ -2,10 +2,10 @@ name: Build Windows amd64 package
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [main, beta]
   workflow_dispatch:
 
 concurrency:
@@ -70,12 +70,20 @@ jobs:
 
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
+            -DAT_PET_BUILD_TESTS=ON `
             -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
             -DCMAKE_CXX_COMPILER="$env:MINGW_BIN\g++.exe"
           if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed with exit code $LASTEXITCODE." }
 
           cmake --build build --parallel
           if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE." }
+
+      - name: Run regression tests
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:MINGW_BIN;$env:QT_ROOT_DIR\bin;$env:PATH"
+          ctest --test-dir build --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "Regression tests failed with exit code $LASTEXITCODE." }
 
       - name: Sign executable
         if: env.SIGNING_ENABLED == 'true'

@@ -323,6 +323,30 @@
         <source>Quit</source>
         <translation>退出</translation>
     </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务面板</translation>
+    </message>
+    <message>
+        <source>%1 tasks completed. See Tasks for details.</source>
+        <translation>%1 个任务已完成，详情见任务面板。</translation>
+    </message>
+    <message>
+        <source>Task completed. See Tasks for details.</source>
+        <translation>任务完成，详情见任务面板。</translation>
+    </message>
+    <message>
+        <source>Ready for our next adventure!</source>
+        <translation>准备好一起开始下一次冒险啦！</translation>
+    </message>
+    <message>
+        <source>I am here with you.</source>
+        <translation>我在这里陪着你。</translation>
+    </message>
+    <message>
+        <source>One step at a time. Remember to take a break.</source>
+        <translation>一步一步来，也记得休息一下。</translation>
+    </message>
 </context>
 <context>
     <name>PetWindow</name>
@@ -524,6 +548,10 @@
         <location filename="../app/petwindow.cpp" line="1484"/>
         <source>Hide pet</source>
         <translation>收起桌宠</translation>
+    </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务面板</translation>
     </message>
 </context>
 <context>
@@ -1221,6 +1249,74 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
         <source>Could not reset pet quotes</source>
         <translation>无法恢复全局语录</translation>
     </message>
+    <message>
+        <source>Tasks</source>
+        <translation>任务面板</translation>
+    </message>
+    <message>
+        <source>Personality:</source>
+        <translation>性格：</translation>
+    </message>
+    <message>
+        <source>Balanced</source>
+        <translation>均衡</translation>
+    </message>
+    <message>
+        <source>Lively</source>
+        <translation>活泼</translation>
+    </message>
+    <message>
+        <source>Quiet</source>
+        <translation>安静</translation>
+    </message>
+    <message>
+        <source>Focused</source>
+        <translation>认真</translation>
+    </message>
+    <message>
+        <source>Use current pet</source>
+        <translation>使用当前桌宠</translation>
+    </message>
+    <message>
+        <source>Allow permission requests to be forwarded to At-Pet</source>
+        <translation>允许权限请求转发至 At-Pet</translation>
+    </message>
+    <message>
+        <source>When disabled, new requests stay with the Agent. Pending requests still need a decision.</source>
+        <translation>关闭后，新的权限请求由 Agent 自行处理；已在等待的请求仍需作出决定。</translation>
+    </message>
+    <message>
+        <source>Live sessions and the latest 50 results in this run. Waiting requests need your attention.</source>
+        <translation>显示当前会话及本次运行最近 50 条结果。等待中的请求需要你处理。</translation>
+    </message>
+    <message>
+        <source>Agent</source>
+        <translation>Agent</translation>
+    </message>
+    <message>
+        <source>Session</source>
+        <translation>会话</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>Message</source>
+        <translation>消息</translation>
+    </message>
+    <message>
+        <source>Updated</source>
+        <translation>更新时间</translation>
+    </message>
+    <message>
+        <source>Waiting for permission</source>
+        <translation>等待权限审批</translation>
+    </message>
+    <message>
+        <source>Waiting for answer</source>
+        <translation>等待回答</translation>
+    </message>
 </context>
 <context>
     <name>QuotePack</name>
@@ -1259,6 +1355,35 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
         <location filename="../app/quotepack.cpp" line="277"/>
         <source>Could not write %1.</source>
         <translation>无法写入 %1。</translation>
+    </message>
+</context>
+<context>
+    <name>CrashReporter</name>
+    <message>
+        <source>Crash report</source>
+        <translation>崩溃报告</translation>
+    </message>
+    <message>
+        <source>At-Pet saved an error log after a crash. Export it to help diagnose the problem?
+
+Local log: %1</source>
+        <translation>At-Pet 已保存崩溃后的错误日志。是否导出日志以帮助排查问题？
+
+本地日志：%1</translation>
+    </message>
+    <message>
+        <source>Export error log</source>
+        <translation>导出错误日志</translation>
+    </message>
+    <message>
+        <source>Log files (*.log)</source>
+        <translation>日志文件 (*.log)</translation>
+    </message>
+    <message>
+        <source>Could not export the error log. The original log has been kept at:
+%1</source>
+        <translation>无法导出错误日志，原始日志已保留在：
+%1</translation>
     </message>
 </context>
 </TS>

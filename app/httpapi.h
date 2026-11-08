@@ -16,6 +16,7 @@ public:
     bool start(quint16 port = 8765);
     quint16 port() const;
     void publishState();
+    void setPermissionForwardingEnabled(bool enabled) { permissionForwardingEnabled_ = enabled; }
     void resolvePermission(const QString &requestId, bool allowOnce);
     void resolveQuestion(const QString &requestId, bool answered, const QString &answer);
 
@@ -54,6 +55,7 @@ private:
     };
 
     QTcpServer server_;
+    bool permissionForwardingEnabled_ = true;
     std::function<QJsonObject()> stateProvider_;
     QList<QTcpSocket *> eventClients_;
     QHash<QTcpSocket *, QByteArray> requestBuffers_;

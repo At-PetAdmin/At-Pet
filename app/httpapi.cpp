@@ -331,6 +331,12 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
             return;
         }
         if (strategy->isPermissionRequest(object)) {
+            if (!permissionForwardingEnabled_) {
+                sendJson(socket, strategy->usesNativeHookResponse() ? 200 : 409,
+                         strategy->usesNativeHookResponse() ? QJsonObject{} :
+                         QJsonObject{{"error", "permission_forwarding_disabled"}, {"accepted", false}});
+                return;
+            }
             QJsonObject request;
             QString error;
             if (!strategy->normalizePermissionRequest(object, &request, &error)) {
@@ -391,6 +397,10 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         return;
     }
     if (path == "/permission") {
+        if (!permissionForwardingEnabled_) {
+            sendJson(socket, 409, {{"error", "permission_forwarding_disabled"}, {"accepted", false}});
+            return;
+        }
         const QString sessionId = object.value("sessionId").toString().trimmed();
         const QString agentApp = object.value("agentApp").toString().trimmed();
         QString tool = object.value("toolName").toString().trimmed();

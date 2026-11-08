@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
-project(AtPet VERSION 1.3.2 LANGUAGES CXX)
+project(AtPet VERSION 1.3.3 LANGUAGES CXX)
 # Human-readable version string compiled into the binary (CMake's project VERSION
 # must stay numeric; pre-release suffixes live here). The Windows resource keeps
 # using PROJECT_VERSION_* for FILEVERSION/PRODUCTVERSION.
-set(AT_PET_VERSION_STRING "1.3.2" CACHE STRING "Human-readable At-Pet version string")
+set(AT_PET_VERSION_STRING "1.3.3" CACHE STRING "Human-readable At-Pet version string")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,6 +15,8 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Network LinguistTools)
 
 qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/main.cpp
+    app/crashreporter.cpp
+    app/crashreporter.h
     app/petwindow.cpp
     app/petwindow.h
     app/httpapi.cpp
@@ -46,6 +48,7 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
 )
 
 target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network)
+target_include_directories(at-pet PRIVATE tests)
 if(WIN32)
     configure_file(
         assets/branding/app-icon.rc.in
@@ -162,4 +165,25 @@ if(AT_PET_BUILD_TESTS)
     endfunction()
 
     at_pet_add_http_test(http-api-guard tst_httpapiguard.cpp)
+    get_target_property(AT_PET_COMPANION_SOURCES at-pet SOURCES)
+    qt_add_executable(companion-flow ${AT_PET_COMPANION_SOURCES} tests/companion_cases.h)
+    target_include_directories(companion-flow PRIVATE app tests)
+    target_compile_definitions(companion-flow PRIVATE AT_PET_COMPANION_TEST AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test)
+    set_target_properties(companion-flow PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME companion-flow COMMAND companion-flow)
+    set_tests_properties(companion-flow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(crash-probe tests/crash_probe.cpp app/crashreporter.cpp)
+    target_include_directories(crash-probe PRIVATE app)
+    target_compile_definitions(crash-probe PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(crash-probe PRIVATE Qt6::Core)
+    set_target_properties(crash-probe PROPERTIES WIN32_EXECUTABLE FALSE)
+    qt_add_executable(crash-reporter tests/tst_crashreporter.cpp app/crashreporter.cpp)
+    target_include_directories(crash-reporter PRIVATE app)
+    target_compile_definitions(crash-reporter PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(crash-reporter PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(crash-reporter PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_dependencies(crash-reporter crash-probe)
+    add_test(NAME crash-reporter COMMAND crash-reporter)
 endif()

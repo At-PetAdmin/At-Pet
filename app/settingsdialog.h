@@ -19,6 +19,7 @@ class QListWidgetItem;
 class QPushButton;
 class QSpinBox;
 class QTabWidget;
+class QTableWidget;
 
 class PetPreviewWidget final : public QWidget {
     Q_OBJECT
@@ -66,6 +67,7 @@ public:
     explicit SettingsDialog(QWidget *parent = nullptr);
 
 signals:
+    void companionSettingsChanged();
     void petSwitched(const QString &petId);
     void languageChanged(const QString &language);
     void lookAtMouseToggled(bool enabled);
@@ -81,6 +83,8 @@ signals:
 
 public slots:
     void refreshPetsList();
+    void setTasks(const QJsonObject &state);
+    void showTasks();
     // Adopt the authoritative state owned by the window that created this dialog. These never
     // emit the matching signal, so pushing state cannot loop back.
     void setGravityEnabled(bool enabled);
@@ -120,6 +124,12 @@ private:
     QString currentSelectedPetId() const;
 
     // Tabs
+    QTableWidget *tasksTable_ = nullptr;
+    QLabel *tasksNote_ = nullptr;
+    QCheckBox *permissionForwardingCheck_ = nullptr;
+    QHash<QString, QComboBox *> agentPetCombos_;
+    QComboBox *personalityCombo_ = nullptr;
+    QLabel *personalityLabel_ = nullptr;
     QTabWidget *tabWidget_ = nullptr;
 
     // Pet Library & Preview tab
