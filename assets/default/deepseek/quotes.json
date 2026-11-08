@@ -1,0 +1,59 @@
+{
+  "zh_CN": {
+    "poke": [
+      "需要我帮你看看吗？",
+      "我在这儿陪你～",
+      "别戳啦，痒痒的！",
+      "潜下去，把问题找出来。",
+      "思路再深一点，答案就近一点。",
+      "小鲸鱼已就位，准备开工。"
+    ],
+    "done": [
+      "浮出水面，结果带回来啦。",
+      "这一潜，任务完成。",
+      "成功靠岸，看看成果吧。"
+    ],
+    "error": [
+      "发现暗礁，先看看日志。",
+      "这里水有点深，换个角度分析。",
+      "先定位问题，再继续下潜。"
+    ],
+    "cancel": [
+      "收到，结束本次下潜。",
+      "先回港休整，稍后再出发。",
+      "这条路线先暂停。"
+    ],
+    "idle": [
+      "小鲸鱼在旁边安静巡航。",
+      "伸个懒腰，再去探索新问题。",
+      "补充一点水分，继续乘风破浪。"
+    ]
+  },
+  "en": {
+    "poke": [
+      "Ready to dive into the problem.",
+      "One deeper look may reveal a clue.",
+      "Your little whale is ready to work."
+    ],
+    "done": [
+      "Back at the surface with the result.",
+      "This dive is complete.",
+      "Safely ashore. Check the result."
+    ],
+    "error": [
+      "A reef ahead. Check the logs first.",
+      "Let us inspect this from another angle.",
+      "Locate the issue before the next dive."
+    ],
+    "cancel": [
+      "Understood. Ending this dive.",
+      "Back to the harbor for now.",
+      "Pausing this route."
+    ],
+    "idle": [
+      "Your little whale is cruising nearby.",
+      "Stretch before the next discovery.",
+      "A sip of water before the next wave."
+    ]
+  }
+}

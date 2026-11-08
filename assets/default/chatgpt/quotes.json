@@ -1,0 +1,59 @@
+{
+  "zh_CN": {
+    "poke": [
+      "嗯……",
+      "要不要给你降智",
+      "待会给你切6A",
+      "需求给我，思路一起理。",
+      "这段代码，我陪你拆开看。",
+      "先说目标，再选最短的路。"
+    ],
+    "done": [
+      "完成啦，记得看看结果。",
+      "这一步搞定，下一步你来定。",
+      "任务收工，给自己一点掌声。"
+    ],
+    "error": [
+      "遇到问题了，我们从日志开始。",
+      "别急，先把复现步骤缩小。",
+      "这一处再检查一下，答案快到了。"
+    ],
+    "cancel": [
+      "收到，先停在这里。",
+      "这条思路先存档，换个方向。",
+      "暂停也是计划的一部分。"
+    ],
+    "idle": [
+      "让眼睛离开屏幕，休息片刻吧。",
+      "我在，随时陪你理清新点子。",
+      "喝口水，再继续下一小步。"
+    ]
+  },
+  "en": {
+    "poke": [
+      "Tell me the goal; we can map the steps.",
+      "Let us work through this together.",
+      "One clear question is a good start."
+    ],
+    "done": [
+      "All done. Take a look at the result.",
+      "One more step completed.",
+      "Time for a small victory lap."
+    ],
+    "error": [
+      "Let us start with the logs.",
+      "A smaller reproduction can help.",
+      "We can check this one step at a time."
+    ],
+    "cancel": [
+      "Understood. Stopping here.",
+      "We can try another approach later.",
+      "A pause can be part of the plan."
+    ],
+    "idle": [
+      "Rest your eyes for a moment.",
+      "I am here for the next idea.",
+      "A sip of water, then one small step."
+    ]
+  }
+}

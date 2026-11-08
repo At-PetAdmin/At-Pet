@@ -128,6 +128,10 @@
 <context>
     <name>PetController</name>
     <message>
+        <source>Pet library</source>
+        <translation>桌宠库</translation>
+    </message>
+    <message>
         <source>%1 connected successfully</source>
         <translation>%1连接成功</translation>
     </message>
@@ -589,6 +593,14 @@
 </context>
 <context>
     <name>SettingsDialog</name>
+    <message>
+        <source>%1 (Built-in)</source>
+        <translation>%1（内置）</translation>
+    </message>
+    <message>
+        <source>Built-in quotes: %1 lines across %2 languages. Custom pet and global quotes take priority.</source>
+        <translation>内置语录：%1 条，覆盖 %2 种语言。独立语录和全局语录优先使用。</translation>
+    </message>
     <message>
         <source>Not connected</source>
         <translation>未连接</translation>

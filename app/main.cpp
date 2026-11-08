@@ -3,6 +3,7 @@
 #include "crashreporter.h"
 #include "httpapi.h"
 #include "petid.h"
+#include "petcatalog.h"
 #include "petsettings.h"
 #include "permissiondialog.h"
 #include "questiondialog.h"
@@ -310,7 +311,7 @@ private:
     void startSelectedPet() {
         QSettings settings;
         const QString id = settings.value("pet/selected").toString();
-        const QString directory = id.isEmpty() ? QString() : QDir(petLibraryPath()).filePath(id);
+        const QString directory = petcatalog::directory(id);
         createPet(QFileInfo::exists(QDir(directory).filePath("pet.json")) ? directory : QString(), defaultPosition());
     }
 
@@ -377,7 +378,9 @@ private:
         });
         connect(pet, &PetWindow::settingsRequested, this, &PetController::showSettingsDialog);
         connect(pet, &PetWindow::previewRequested, this, [this](const QString &id) {
-            const QString path = QDir(petLibraryPath()).filePath(id);
+            if (!petid::isSafe(id)) return;
+            const QString path = id.isEmpty() || id == "default"
+                ? PetWindow::builtinPetDirectory() : petcatalog::directory(id);
             if (!QFileInfo::exists(QDir(path).filePath("pet.json"))) return;
             PetWindow *preview = createPet(path, defaultPosition() - QPoint(190, 0));
             preview->setWindowTitle(tr("Preview: %1").arg(preview->petName()));
@@ -533,8 +536,7 @@ private:
         if (subagentPetsEnabled_) {
             int index = 0;
             const QString selectedId = QSettings().value("pet/selected").toString();
-            const QString selectedDirectory = selectedId.isEmpty()
-                ? QString() : QDir(petLibraryPath()).filePath(selectedId);
+            const QString selectedDirectory = petcatalog::directory(selectedId);
             const QString petDirectory = QFileInfo::exists(QDir(selectedDirectory).filePath("pet.json"))
                 ? selectedDirectory : QString();
 
@@ -587,10 +589,10 @@ private:
         // that could leave the pet library before QDir::filePath() turns it into a path.
         if (!petid::isSafe(id))
             return;
-        const QString directory = id.isEmpty() || id == "default" ? QString() : QDir(petLibraryPath()).filePath(id);
+        const QString directory = petcatalog::directory(id);
         if (!directory.isEmpty() && !QFileInfo::exists(QDir(directory).filePath("pet.json")))
             return;
-        QSettings().setValue("pet/selected", directory.isEmpty() ? QString() : QFileInfo(directory).fileName());
+        QSettings().setValue("pet/selected", id == "default" ? QString() : id);
         clearPets();
         createPet(directory, defaultPosition());
         applySessionAnimation();
@@ -648,7 +650,7 @@ private:
         QString id = baseName;
         QString destination = QDir(petLibraryPath()).filePath(id);
         int suffix = 2;
-        while (QFileInfo::exists(destination)) {
+        while (petcatalog::isBuiltin(id) || QFileInfo::exists(destination)) {
             id = baseName + QStringLiteral("-%1").arg(suffix++);
             destination = QDir(petLibraryPath()).filePath(id);
         }
@@ -689,7 +691,7 @@ private:
         QString id = baseName.isEmpty() ? QStringLiteral("pet") : baseName;
         QString destination = QDir(petLibraryPath()).filePath(id);
         int suffix = 2;
-        while (QFileInfo::exists(destination)) {
+        while (petcatalog::isBuiltin(id) || QFileInfo::exists(destination)) {
             id = baseName + QStringLiteral("-%1").arg(suffix++);
             destination = QDir(petLibraryPath()).filePath(id);
         }
@@ -703,12 +705,11 @@ private:
 
     void summonAll() {
         releaseDoNotDisturb();
-        QDir library(petLibraryPath());
-        const QFileInfoList directories = library.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         QVector<QString> validPets;
-        for (const QFileInfo &directory : directories) {
-            if (QFileInfo::exists(QDir(directory.absoluteFilePath()).filePath("pet.json")))
-                validPets.append(directory.absoluteFilePath());
+        for (const QString &id : petcatalog::ids()) {
+            const QString directory = petcatalog::directory(id);
+            if (directory.isEmpty() || QFileInfo::exists(QDir(directory).filePath("pet.json")))
+                validPets.append(directory);
         }
         if (validPets.isEmpty()) {
             switchPet(QStringLiteral("default"));
@@ -729,6 +730,7 @@ private:
     }
 
     void deletePet(const QString &id) {
+        if (!petid::isSafe(id) || petcatalog::isBuiltin(id)) return;
         const QString directory = QDir(petLibraryPath()).filePath(id);
         const auto answer = QMessageBox::question(nullptr, tr("Delete pet"),
             tr("Remove %1 from your pet library? This cannot be undone.").arg(id));
@@ -1111,7 +1113,8 @@ private:
     QString boundPetId(const QString &agentKey) const {
         const QString id = QSettings().value("agents/pet/" + agentKey).toString();
         if (id == "default") return id;
-        if (!id.isEmpty() && petid::isSafe(id) && QFileInfo::exists(QDir(petLibraryPath()).filePath(id + "/pet.json"))) return id;
+        if (!id.isEmpty() && petid::isSafe(id)
+            && QFileInfo::exists(QDir(petcatalog::directory(id)).filePath("pet.json"))) return id;
         return {};
     }
 
@@ -1131,7 +1134,7 @@ private:
                 pets_.removeAll(pet); pet->close(); pet->deleteLater(); pet = nullptr;
             }
             if (!pet) {
-                pet = createPet(id == "default" ? QString() : QDir(petLibraryPath()).filePath(id),
+                pet = createPet(petcatalog::directory(id),
                                 defaultPosition() - QPoint(180 * active.size(), 0));
                 boundPetWindows_.insert(it.key(), pet);
             }
@@ -1316,6 +1319,14 @@ private:
         trayMenu_ = new QMenu;
         trayMenu_->addAction(tr("Summon selected pet"), this, &PetController::summonPets);
         trayMenu_->addAction(tr("Summon all pets"), this, &PetController::summonAll);
+        QMenu *libraryMenu = trayMenu_->addMenu(tr("Pet library"));
+        const auto refreshLibraryMenu = [this, libraryMenu] {
+            libraryMenu->clear();
+            for (const QString &id : petcatalog::ids())
+                libraryMenu->addAction(petcatalog::name(id), this, [this, id] { switchPet(id); });
+        };
+        refreshLibraryMenu();
+        connect(libraryMenu, &QMenu::aboutToShow, this, refreshLibraryMenu);
         dndAction_ = trayMenu_->addAction(tr("Do not disturb"));
         dndAction_->setCheckable(true);
         dndAction_->setChecked(manualDoNotDisturb_);

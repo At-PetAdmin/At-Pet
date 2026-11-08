@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QTableWidget>
+#include <QListWidget>
 #include "testsettings.h"
 
 class CompanionTest : public QObject {
@@ -51,6 +52,35 @@ private slots:
         send("another", "done");
         QTest::qWait(1400);
         QCOMPARE(controller.visiblePets().first()->speech(), errorSpeech);
+        controller.clearPets();
+    }
+    void builtinPetSelectionAndBinding() {
+        const QString first = petcatalog::bundledIds().first();
+        QSettings().setValue("pet/selected", first);
+        PetController controller;
+        QCOMPARE(controller.visiblePets().first()->petId(), first);
+        const QString second = petcatalog::bundledIds().at(1);
+        controller.switchPet(second);
+        QCOMPARE(QSettings().value("pet/selected").toString(), second);
+        QCOMPARE(controller.visiblePets().first()->petId(), second);
+        controller.setSubagentPetsEnabled(true);
+        controller.onAgentEvent({{"sessionId", "builtin-subagent"}, {"event", "thinking"},
+            {"agentApp", "claude-code"}, {"isSubagent", true}});
+        QVERIFY(!controller.subagentPetWindows_.isEmpty());
+        for (auto pet : controller.subagentPetWindows_) QCOMPARE(pet->petId(), second);
+        const auto key = agentAppKey(normalizeAgentApp("claude-code"));
+        QSettings().setValue("agents/pet/" + key, first);
+        controller.onAgentEvent({{"sessionId", "builtin-bound"}, {"event", "thinking"}, {"agentApp", "claude-code"}});
+        QCOMPARE(controller.boundPetWindows_.value(key)->petId(), first);
+        controller.setSubagentPetsEnabled(false);
+        QSettings().remove("agents/pet/" + key);
+        controller.summonAll();
+        QSet<QString> summoned;
+        for (auto pet : controller.visiblePets()) summoned.insert(pet->petId());
+        QVERIFY(summoned.contains("default"));
+        for (const QString &id : petcatalog::bundledIds()) QVERIFY(summoned.contains(id));
+        for (const QString &id : petcatalog::bundledIds()) controller.deletePet(id);
+        QCOMPARE(controller.visiblePets().size(), summoned.size());
         controller.clearPets();
     }
     void settingsAndPersonality() {
