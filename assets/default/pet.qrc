@@ -3,4 +3,24 @@
         <file alias="pet.json">pet.json</file>
         <file alias="spritesheet.png">spritesheet.png</file>
     </qresource>
+    <qresource prefix="/pets/builtin-chatgpt">
+        <file alias="pet.json">chatgpt/pet.json</file>
+        <file alias="spritesheet.png">chatgpt/spritesheet.png</file>
+        <file alias="quotes.json">chatgpt/quotes.json</file>
+    </qresource>
+    <qresource prefix="/pets/builtin-claude">
+        <file alias="pet.json">claude/pet.json</file>
+        <file alias="spritesheet.png">claude/spritesheet.png</file>
+        <file alias="quotes.json">claude/quotes.json</file>
+    </qresource>
+    <qresource prefix="/pets/builtin-deepseek">
+        <file alias="pet.json">deepseek/pet.json</file>
+        <file alias="spritesheet.png">deepseek/spritesheet.png</file>
+        <file alias="quotes.json">deepseek/quotes.json</file>
+    </qresource>
+    <qresource prefix="/pets/builtin-gemini">
+        <file alias="pet.json">gemini/pet.json</file>
+        <file alias="spritesheet.png">gemini/spritesheet.png</file>
+        <file alias="quotes.json">gemini/quotes.json</file>
+    </qresource>
 </RCC>

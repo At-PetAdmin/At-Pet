@@ -1,0 +1,59 @@
+{
+  "zh_CN": {
+    "poke": [
+      "需要我帮你看看吗？",
+      "我在这儿陪你～",
+      "别戳啦，痒痒的！",
+      "先理清边界，再落笔。",
+      "这一步，我想再核对一次。",
+      "把问题说完整，我会认真听。"
+    ],
+    "done": [
+      "已完成，请再核对一下结果。",
+      "这一段收好了，可以继续。",
+      "任务完成，细节也值得再看一眼。"
+    ],
+    "error": [
+      "先留下线索，再定位原因。",
+      "这里有个异常，我们逐项核对。",
+      "不用急着下结论，先看证据。"
+    ],
+    "cancel": [
+      "已停止，保留当前思路。",
+      "收到，我们在这里暂停。",
+      "等你确定方向后再继续。"
+    ],
+    "idle": [
+      "专注很久了，记得休息。",
+      "我安静待命，你慢慢想。",
+      "留一点空白，也能整理思路。"
+    ]
+  },
+  "en": {
+    "poke": [
+      "Let us clarify the boundaries first.",
+      "I would like to double-check this step.",
+      "Take your time. I am listening."
+    ],
+    "done": [
+      "Finished. Please review the result.",
+      "This part is ready for your review.",
+      "The task is complete; details still matter."
+    ],
+    "error": [
+      "Keep the clues, then find the cause.",
+      "Let us check the evidence carefully.",
+      "An exception needs a closer look."
+    ],
+    "cancel": [
+      "Stopped. We can keep the current notes.",
+      "Understood. Pausing here.",
+      "We can continue once the direction is clear."
+    ],
+    "idle": [
+      "You have been focused. Take a break.",
+      "I will wait quietly while you think.",
+      "A little space can help organize your thoughts."
+    ]
+  }
+}

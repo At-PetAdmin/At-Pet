@@ -1,0 +1,59 @@
+{
+  "zh_CN": {
+    "poke": [
+      "需要我帮你看看吗？",
+      "我在这儿陪你～",
+      "别戳啦，痒痒的！",
+      "灵感已上线，准备点亮新点子。",
+      "换个视角，试试另一条路。",
+      "你的下一颗灵感星星是什么？"
+    ],
+    "done": [
+      "点亮一颗完成之星。",
+      "这次的点子变成成果啦。",
+      "任务完成，看看这一份新成果。"
+    ],
+    "error": [
+      "星光打了个结，我们慢慢解开。",
+      "先检查线索，再换个角度。",
+      "这里需要再调试一下。"
+    ],
+    "cancel": [
+      "先收起这颗点子，稍后再点亮。",
+      "收到，暂停本次探索。",
+      "换个方向也会有新风景。"
+    ],
+    "idle": [
+      "给大脑一点空白，灵感也要呼吸。",
+      "抬头看看远处，眼睛也要休息。",
+      "我在这里，等你的下一个点子。"
+    ]
+  },
+  "en": {
+    "poke": [
+      "Ready to light up a new idea.",
+      "Shall we try another perspective?",
+      "What is your next spark of inspiration?"
+    ],
+    "done": [
+      "Another star on the completion board.",
+      "That idea has become a result.",
+      "Finished. Take a look at what is new."
+    ],
+    "error": [
+      "A little knot to untangle.",
+      "Check the clues, then change perspective.",
+      "This part needs another debugging pass."
+    ],
+    "cancel": [
+      "Saving this spark for later.",
+      "Understood. Pausing the exploration.",
+      "Another direction may bring a new view."
+    ],
+    "idle": [
+      "Give your ideas a little breathing room.",
+      "Look into the distance and rest your eyes.",
+      "I am here for your next spark."
+    ]
+  }
+}

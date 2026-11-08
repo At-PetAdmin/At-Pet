@@ -1,4 +1,5 @@
 #include "petwindow.h"
+#include "petcatalog.h"
 
 #include <QAction>
 #include <QContextMenuEvent>
@@ -342,6 +343,8 @@ QString PetWindow::randomQuote(QuotePack::Category category, const QString &lang
     QString quote = personalPack.randomQuote(category, language);
     if (quote.isEmpty())
         quote = globalPack.randomQuote(category, language);
+    if (quote.isEmpty() && petcatalog::isBuiltin(petId()) && !directory_.isEmpty())
+        quote = QuotePack::load(QDir(directory_).filePath("quotes.json")).randomQuote(category, language);
     if (quote.isEmpty() && category == QuotePack::Category::Poke)
         quote = randomQuote();
     return quote;
@@ -1083,7 +1086,7 @@ void PetWindow::watchConfiguration() {
         watcher_.removePath(path);
     for (const QString &path : watcher_.directories())
         watcher_.removePath(path);
-    if (directory_.isEmpty())
+    if (directory_.isEmpty() || directory_.startsWith(QLatin1String(":/")))
         return;
     if (!configPath.isEmpty() && QFileInfo::exists(configPath))
         watcher_.addPath(configPath);
@@ -1566,21 +1569,17 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
     menu.addAction(tr("Say something…"), this, &PetWindow::chatRequested);
     menu.addAction(tr("Poke for a random line"), this, &PetWindow::petClicked);
     QMenu *libraryMenu = menu.addMenu(tr("Pet library"));
-    const QString libraryPath = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath("pets");
-    QDir library(libraryPath);
-    const QFileInfoList pets = library.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-    for (const QFileInfo &pet : pets) {
-        const QString id = pet.fileName();
-        QAction *switchAction = libraryMenu->addAction(tr("Switch to %1").arg(id));
+    for (const QString &id : petcatalog::ids()) {
+        QAction *switchAction = libraryMenu->addAction(tr("Switch to %1").arg(petcatalog::name(id)));
         connect(switchAction, &QAction::triggered, this, [this, id] { emit switchRequested(id); });
-        QAction *previewAction = libraryMenu->addAction(tr("Preview %1").arg(id));
+        QAction *previewAction = libraryMenu->addAction(tr("Preview %1").arg(petcatalog::name(id)));
         connect(previewAction, &QAction::triggered, this, [this, id] { emit previewRequested(id); });
     }
     libraryMenu->addSeparator();
     libraryMenu->addAction(tr("Import config + spritesheet…"), this, &PetWindow::importRequested);
     libraryMenu->addAction(tr("Import pet folder…"), this, &PetWindow::importFolderRequested);
     menu.addAction(tr("All pets on duty"), this, &PetWindow::summonAllRequested);
-    if (petId() != "default") {
+    if (!petcatalog::isBuiltin(petId())) {
         menu.addAction(tr("Delete this pet…"), this, [this] { emit deleteRequested(petId()); });
     }
     menu.addSeparator();

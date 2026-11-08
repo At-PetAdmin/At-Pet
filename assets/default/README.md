@@ -1,5 +1,25 @@
 # Built-in default pet
 
+## Included pets
+
+The built-in library includes Octocat, ChatGPT, Claude, DeepSeek and Gemini.
+The four AI-inspired pets use the user-supplied sprite sheets and animation
+configurations in `chatgpt/`, `claude/`, `deepseek/` and `gemini/`. Each uses an
+8 x 11 grid of 192 x 208 cells (1536 x 2288 pixels), preserving its original
+animation frames, directional walking and frame rates.
+
+Each additional pet includes 33 English/Chinese lines across `poke`, `done`,
+`error`, `cancel` and `idle` in `quotes.json`. Existing `pet.json` poke lines
+are preserved and extended. Per-pet imported quotes take priority, followed by
+the global quote pack, then these embedded defaults. IDs use `builtin-` to
+avoid replacing existing imported pets with the same display name.
+
+All five pets are available without importing files. Built-in resources can be
+previewed, selected, assigned to agents and summoned together, but cannot be
+deleted or edited in place. Imported pets remain editable.
+
+## Octocat
+
 `spritesheet.png` and `pet.json` are embedded through `pet.qrc` and used as the
 built-in default pet. The character is a fan-made chibi homage to GitHub's
 Octocat mascot: black cat head, cat ears, peach face mask, large eyes, whiskers,

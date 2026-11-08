@@ -1,5 +1,6 @@
 #include "agentregistry.h"
 #include "settingsdialog.h"
+#include "petcatalog.h"
 #include "petsettings.h"
 #include "petwindow.h"
 #include "quotepack.h"
@@ -819,7 +820,11 @@ void SettingsDialog::refreshPetQuotePackStatus() {
     const bool installed = !id.isEmpty() && QFileInfo::exists(QuotePack::petPath(id));
     btnResetPetQuotePack_->setEnabled(installed);
     const QuotePack pack = installed ? QuotePack::load(QuotePack::petPath(id)) : QuotePack();
-    if (pack.isEmpty()) {
+    if (pack.isEmpty() && petcatalog::bundledIds().contains(id)) {
+        const QuotePack bundled = QuotePack::load(QDir(petcatalog::directory(id)).filePath("quotes.json"));
+        petQuotePackStatusLabel_->setText(tr("Built-in quotes: %1 lines across %2 languages. Custom pet and global quotes take priority.")
+                                             .arg(bundled.quoteCount()).arg(bundled.languageCount()));
+    } else if (pack.isEmpty()) {
         petQuotePackStatusLabel_->setText(tr("No usable pet quotes configured; global quotes are used."));
     } else {
         petQuotePackStatusLabel_->setText(tr("Pet quotes: %1 lines across %2 languages. Missing categories use global quotes.")
@@ -920,8 +925,14 @@ void SettingsDialog::refreshPetsList() {
     const QString currentSelected = settings.value("pet/selected").toString();
 
     QListWidgetItem *selectedItem = defaultItem;
+    for (const QString &id : petcatalog::bundledIds()) {
+        auto *item = new QListWidgetItem(tr("%1 (Built-in)").arg(petcatalog::name(id)), petList_);
+        item->setData(Qt::UserRole, id);
+        if (id == currentSelected) selectedItem = item;
+    }
     for (const QFileInfo &pet : pets) {
         const QString id = pet.fileName();
+        if (petcatalog::isBuiltin(id)) continue;
         const QString configPath = QDir(pet.absoluteFilePath()).filePath("pet.json");
         if (QFileInfo::exists(configPath)) {
             QString name = id;
@@ -966,8 +977,8 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
     const QSignalBlocker personalityBlocker(personalityCombo_);
     personalityCombo_->setCurrentIndex(qMax(0, personalityCombo_->findData(
         QSettings().value("pets/personality/" + id, "balanced").toString())));
-    btnDeletePet_->setEnabled(id != "default");
-    btnEditPetJson_->setEnabled(!id.isEmpty() && id != "default");
+    btnDeletePet_->setEnabled(!petcatalog::isBuiltin(id));
+    btnEditPetJson_->setEnabled(!petcatalog::isBuiltin(id));
     petInfoBaseText_ = tr("Pet details are unavailable.");
 
     if (id == "default" || id.isEmpty()) {
@@ -1017,7 +1028,7 @@ void SettingsDialog::onPetSelected(QListWidgetItem *current, QListWidgetItem *) 
                                    .arg(def.value("fps").toInt(8));
         }
     } else {
-        const QString dir = QDir(petLibraryPath()).filePath(id);
+        const QString dir = petcatalog::directory(id);
         const QString configPath = QDir(dir).filePath("pet.json");
         QFile f(configPath);
         if (f.open(QIODevice::ReadOnly)) {
@@ -1178,7 +1189,7 @@ void SettingsDialog::onImportConfigAndSheet() {
     QString id = baseName;
     QString destination = QDir(petLibraryPath()).filePath(id);
     int suffix = 2;
-    while (QFileInfo::exists(destination)) {
+    while (petcatalog::isBuiltin(id) || QFileInfo::exists(destination)) {
         id = baseName + QStringLiteral("-%1").arg(suffix++);
         destination = QDir(petLibraryPath()).filePath(id);
     }
@@ -1231,7 +1242,7 @@ void SettingsDialog::onImportFolder() {
     QString id = baseName.isEmpty() ? QStringLiteral("pet") : baseName;
     QString destination = QDir(petLibraryPath()).filePath(id);
     int suffix = 2;
-    while (QFileInfo::exists(destination)) {
+    while (petcatalog::isBuiltin(id) || QFileInfo::exists(destination)) {
         id = baseName + QStringLiteral("-%1").arg(suffix++);
         destination = QDir(petLibraryPath()).filePath(id);
     }
@@ -1257,7 +1268,7 @@ void SettingsDialog::onImportFolder() {
 
 void SettingsDialog::onDeletePet() {
     const QString id = currentSelectedPetId();
-    if (id.isEmpty() || id == "default") return;
+    if (petcatalog::isBuiltin(id) || !petid::isSafe(id)) return;
 
     const auto answer = QMessageBox::question(this, tr("Delete pet"),
         tr("Remove %1 from your pet library? This cannot be undone.").arg(id));
@@ -1275,7 +1286,7 @@ void SettingsDialog::onDeletePet() {
 
 void SettingsDialog::onEditPetJson() {
     const QString id = currentSelectedPetId();
-    if (id.isEmpty() || id == "default") return;
+    if (petcatalog::isBuiltin(id) || !petid::isSafe(id)) return;
     const QString path = QDir(QDir(petLibraryPath()).filePath(id)).filePath("pet.json");
     QFile source(path);
     if (!source.open(QIODevice::ReadOnly)) {

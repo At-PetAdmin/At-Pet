@@ -13,6 +13,10 @@ set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Network LinguistTools)
 
+# Compile the bundled sprite sheets once and link their resources into the app/tests.
+add_library(at-pet-pets OBJECT assets/default/pet.qrc)
+target_link_libraries(at-pet-pets PRIVATE Qt6::Core)
+
 qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/main.cpp
     app/crashreporter.cpp
@@ -35,6 +39,7 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/agentconnectivity.cpp
     app/agentconnectivity.h
     app/petid.h
+    app/petcatalog.h
     app/petsettings.cpp
     app/petsettings.h
     app/quotepack.cpp
@@ -44,10 +49,9 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/theme.cpp
     app/theme.h
     assets/branding/branding.qrc
-    assets/default/pet.qrc
 )
 
-target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network)
+target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network at-pet-pets)
 target_include_directories(at-pet PRIVATE tests)
 if(WIN32)
     configure_file(
@@ -95,14 +99,13 @@ if(AT_PET_BUILD_TESTS)
         app/theme.h
         app/agentregistry.h
         assets/branding/branding.qrc
-        assets/default/pet.qrc
     )
 
     function(at_pet_add_test name source)
         qt_add_executable(${name} tests/${source} ${AT_PET_TEST_SOURCES})
         target_include_directories(${name} PRIVATE app)
         target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test)
+        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test at-pet-pets)
         # Keep tests console programs so QTest's PASS/FAIL output stays visible.
         set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
         if(WIN32)
@@ -130,6 +133,7 @@ if(AT_PET_BUILD_TESTS)
     at_pet_add_test(quote-pack tst_quotepack.cpp)
     at_pet_add_test(animation-fallback tst_animationfallback.cpp)
     at_pet_add_test(walk-mirror tst_walkmirror.cpp)
+    at_pet_add_test(builtin-pets tst_builtinpets.cpp)
     at_pet_add_test(agent-connectivity tst_agentconnectivity.cpp)
     target_sources(agent-connectivity PRIVATE
         app/agentconnectivity.cpp app/agentconnectivity.h
@@ -169,7 +173,7 @@ if(AT_PET_BUILD_TESTS)
     qt_add_executable(companion-flow ${AT_PET_COMPANION_SOURCES} tests/companion_cases.h)
     target_include_directories(companion-flow PRIVATE app tests)
     target_compile_definitions(companion-flow PRIVATE AT_PET_COMPANION_TEST AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test)
+    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test at-pet-pets)
     set_target_properties(companion-flow PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME companion-flow COMMAND companion-flow)
     set_tests_properties(companion-flow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
