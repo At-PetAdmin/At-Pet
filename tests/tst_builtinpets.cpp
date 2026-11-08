@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QListWidget>
+#include <QLabel>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTabWidget>
@@ -90,6 +91,12 @@ private slots:
             const auto *preview = dialog.findChild<PetPreviewWidget *>();
             QVERIFY(preview);
             QVERIFY(preview->availableAnimations().contains("walkLeft"));
+            bool matchingDetails = false;
+            for (const auto *label : dialog.findChildren<QLabel *>()) {
+                matchingDetails |= label->text().contains("ID: " + id)
+                    && label->text().contains("Name: " + petcatalog::name(id));
+            }
+            QVERIFY(matchingDetails);
             for (auto *button : dialog.findChildren<QPushButton *>()) {
                 if (button->text().contains("Delete") || button->text().contains("Edit pet.json"))
                     QVERIFY(!button->isEnabled());
