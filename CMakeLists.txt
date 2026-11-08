@@ -15,6 +15,8 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Network LinguistTools)
 
 qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/main.cpp
+    app/crashreporter.cpp
+    app/crashreporter.h
     app/petwindow.cpp
     app/petwindow.h
     app/httpapi.cpp
@@ -171,4 +173,17 @@ if(AT_PET_BUILD_TESTS)
     set_target_properties(companion-flow PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME companion-flow COMMAND companion-flow)
     set_tests_properties(companion-flow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(crash-probe tests/crash_probe.cpp app/crashreporter.cpp)
+    target_include_directories(crash-probe PRIVATE app)
+    target_compile_definitions(crash-probe PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(crash-probe PRIVATE Qt6::Core)
+    set_target_properties(crash-probe PROPERTIES WIN32_EXECUTABLE FALSE)
+    qt_add_executable(crash-reporter tests/tst_crashreporter.cpp app/crashreporter.cpp)
+    target_include_directories(crash-reporter PRIVATE app)
+    target_compile_definitions(crash-reporter PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(crash-reporter PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(crash-reporter PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_dependencies(crash-reporter crash-probe)
+    add_test(NAME crash-reporter COMMAND crash-reporter)
 endif()

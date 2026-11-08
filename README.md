@@ -7,6 +7,8 @@
 
 English | [简体中文](README_CN.md)
 
+Community: [Join the QQ group](https://qm.qq.com/q/MnHKbgZ9ke).
+
 A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built on Qt 6. Windows is the only supported platform; Linux and macOS are outside this project's scope.
 
 ## Features
@@ -26,6 +28,12 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 - Animation groups: `animationGroups.rest` (for example `["idle", "sleep"]`) periodically switches a resting pet between those animations instead of always showing `idle`.
 - **Edit pet.json…** in the pet library tab opens the selected pet's configuration in a text editor, validates the JSON before saving, and hot-reloads the pet immediately.
 - System-tray controls for showing/hiding pets, importing pets, summoning the whole library, and switching between Simplified Chinese and English. The default follows the system locale; your selection is remembered.（托盘菜单支持简体中文/英语切换，默认跟随系统语言并记住选择。）
+
+## Crash logs
+
+At-Pet automatically records diagnostic logs in `%LOCALAPPDATA%\Ni-ShuWu\At-Pet\logs`. After a captured crash, the next launch offers **Export error log** to save a `.log` file (the default destination is the desktop). Cancelling or a failed export keeps the report for the next launch. Logs contain the app/Qt versions, Windows version, CPU architecture, Qt messages, and crash details such as the Windows exception code and address. No report is uploaded automatically.
+
+Session messages are capped at 1 MiB; fatal details are saved separately and included in the export. The latest ten completed session logs are retained; crash reports awaiting export are kept. Windows unhandled exceptions, Qt fatal errors, `abort` and `std::terminate` are captured on a best-effort basis. Forced termination, power loss, and failures that bypass or prevent execution of the crash handler may leave only the session log without an export prompt.
 
 ## Build (Windows / Qt MinGW)
 

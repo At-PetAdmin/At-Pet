@@ -1,5 +1,6 @@
 #include "agentregistry.h"
 #include "agentconnectivity.h"
+#include "crashreporter.h"
 #include "httpapi.h"
 #include "petid.h"
 #include "petsettings.h"
@@ -114,6 +115,29 @@ bool isPotentiallyDangerous(const QJsonObject &request) {
 
 QIcon appIcon() {
     return QIcon(QStringLiteral(":/branding/logo.png"));
+}
+
+void offerCrashReportExport() {
+    for (const QString &report : crashreporter::pendingReports()) {
+        const QString title = QCoreApplication::translate("CrashReporter", "Crash report");
+        const QString text = QCoreApplication::translate("CrashReporter",
+            "At-Pet saved an error log after a crash. Export it to help diagnose the problem?\n\nLocal log: %1")
+            .arg(QDir::toNativeSeparators(report));
+        if (QMessageBox::question(nullptr, title, text, QMessageBox::Save | QMessageBox::Cancel,
+                                  QMessageBox::Save) != QMessageBox::Save) continue;
+        const QString destination = QFileDialog::getSaveFileName(nullptr,
+            QCoreApplication::translate("CrashReporter", "Export error log"),
+            QDir(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation)).filePath(QFileInfo(report).fileName()),
+            QCoreApplication::translate("CrashReporter", "Log files (*.log)"));
+        if (destination.isEmpty()) continue;
+        if (crashreporter::exportReport(report, destination)) {
+            crashreporter::acknowledgeReport(report);
+        } else {
+            QMessageBox::warning(nullptr, title, QCoreApplication::translate("CrashReporter",
+                "Could not export the error log. The original log has been kept at:\n%1")
+                .arg(QDir::toNativeSeparators(report)));
+        }
+    }
 }
 
 #ifdef Q_OS_WIN
@@ -1380,12 +1404,17 @@ private:
 
 #ifndef AT_PET_COMPANION_TEST
 int main(int argc, char *argv[]) {
-    QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Ni-ShuWu"));
     QCoreApplication::setApplicationName(QStringLiteral("At-Pet"));
+    const bool loggingStarted = crashreporter::start();
+    // The guard outlives QApplication so shutdown warnings and failures are captured.
+    struct LogGuard { ~LogGuard() { crashreporter::stop(); } } logGuard;
+    QApplication app(argc, argv);
+    if (!loggingStarted) qWarning("Could not create the At-Pet error log directory");
     app.setWindowIcon(appIcon());
     QApplication::setQuitOnLastWindowClosed(false);
     PetController controller;
+    QTimer::singleShot(0, &app, offerCrashReportExport);
     return app.exec();
 }
 

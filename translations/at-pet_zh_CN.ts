@@ -1357,4 +1357,33 @@ bubble at the screen edge. Summon it again from the tray icon.</source>
         <translation>无法写入 %1。</translation>
     </message>
 </context>
+<context>
+    <name>CrashReporter</name>
+    <message>
+        <source>Crash report</source>
+        <translation>崩溃报告</translation>
+    </message>
+    <message>
+        <source>At-Pet saved an error log after a crash. Export it to help diagnose the problem?
+
+Local log: %1</source>
+        <translation>At-Pet 已保存崩溃后的错误日志。是否导出日志以帮助排查问题？
+
+本地日志：%1</translation>
+    </message>
+    <message>
+        <source>Export error log</source>
+        <translation>导出错误日志</translation>
+    </message>
+    <message>
+        <source>Log files (*.log)</source>
+        <translation>日志文件 (*.log)</translation>
+    </message>
+    <message>
+        <source>Could not export the error log. The original log has been kept at:
+%1</source>
+        <translation>无法导出错误日志，原始日志已保留在：
+%1</translation>
+    </message>
+</context>
 </TS>
