@@ -127,7 +127,7 @@ void QuotePackTest::defaultPathEndsWithQuotesJson() {
     const QString path = QuotePack::defaultPath();
     QVERIFY(path.endsWith(QStringLiteral("quotes.json")));
     QVERIFY(path.startsWith(QDir::fromNativeSeparators(
-        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))));
+        QFileInfo(QSettings().fileName()).absolutePath())));
 }
 
 // No pack installed is the normal first-run state: not an error, just an empty pack.

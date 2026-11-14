@@ -29,12 +29,14 @@ public:
 
     static QJsonObject withInferredAnimations(const QJsonObject &definition);
     static QString builtinPetDirectory();
-    // Direction-specific walk art already faces the walking direction, so it is painted as
-    // authored; only the shared "walk" fallback is mirrored for leftward movement. While a
-    // movement animation plays, the walking direction beats the mouse-gaze flip.
+    // Dedicated directional art is drawn as authored; shared walk art mirrors left.
     static bool spriteShouldMirror(bool movementAnimationActive, bool movementFacingLeft,
-                                   bool movementAnimationDirectional, bool lookAtMouse,
-                                   bool faceLeft);
+                                   bool movementAnimationDirectional);
+    void setBasketballEnabled(bool enabled);
+    bool basketballEnabled() const { return basketballEnabled_; }
+    int basketballScore() const { return basketballScore_; }
+    int basketballShots() const { return basketballShots_; }
+    static bool basketballCrossesRim(const QPointF &from, const QPointF &to, const QRect &rim);
     QString petId() const;
     QString petName() const;
     QString animation() const;
@@ -48,9 +50,6 @@ public:
     QString randomQuote(QuotePack::Category category, const QString &language,
                         const QuotePack &globalPack) const;
     QStringList animationGroup(const QString &groupName) const;
-    void setLookAtMouse(bool enabled);
-    bool lookAtMouse() const;
-    void setLookTarget(const QPoint &globalPosition);
     void setDoNotDisturb(bool enabled);
     bool doNotDisturb() const;
     bool attachedToWindow() const;
@@ -75,7 +74,6 @@ signals:
     void importFolderRequested();
     void summonAllRequested();
     void deleteRequested(const QString &petId);
-    void lookAtMouseToggled(bool enabled);
     void doNotDisturbToggled(bool enabled);
     void attachmentChanged(bool attached);
     void freeMovementToggled(bool enabled);
@@ -98,6 +96,19 @@ private:
     enum class AttachmentEdge { None, Top, Left, Right };
 
     void tick();
+    void advanceBasketball();
+    QWidget *basketballHoop_ = nullptr;
+    QTimer basketballTimer_;
+    QPointF basketballPosition_;
+    QPointF basketballVelocity_;
+    QPoint basketballRestorePosition_;
+    QRect basketballCourt_;
+    QRect basketballRim_;
+    bool basketballEnabled_ = false;
+    bool basketballFlying_ = false;
+    bool basketballScored_ = false;
+    int basketballScore_ = 0;
+    int basketballShots_ = 0;
     void applyDisplaySize();
     void paintPet(QPainter &painter, const QSize &canvasSize);
     void paintCompact(QPainter &painter);
@@ -161,7 +172,6 @@ private:
     QElapsedTimer dragVelocityTimer_;
     QPoint dragOffset_;
     QPoint pressPosition_;
-    QPointF lookOffset_;
     QSize baseSize_ = QSize(176, 176);
     QRect doNotDisturbRestoreGeometry_;
     QRect hostBounds_;
@@ -180,8 +190,6 @@ private:
     qreal scale_ = 1.0;
     qreal slideVelocity_ = 0.0;
     bool dragging_ = false;
-    bool lookAtMouse_ = false;
-    bool faceLeft_ = false;
     bool doNotDisturb_ = false;
     bool sliding_ = false;
     bool freeMovementEnabled_ = false;

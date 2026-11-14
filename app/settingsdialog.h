@@ -70,7 +70,6 @@ signals:
     void companionSettingsChanged();
     void petSwitched(const QString &petId);
     void languageChanged(const QString &language);
-    void lookAtMouseToggled(bool enabled);
     void autoDoNotDisturbToggled(bool enabled);
     void gravityToggled(bool enabled);
     void gravityScaleChanged(qreal scale);
@@ -88,7 +87,6 @@ public slots:
     // Adopt the authoritative state owned by the window that created this dialog. These never
     // emit the matching signal, so pushing state cannot loop back.
     void setGravityEnabled(bool enabled);
-    void setLookAtMouseEnabled(bool enabled);
     void setLanguage(const QString &language);
     void setAgentConnections(const QJsonObject &connections);
 
@@ -172,7 +170,6 @@ private:
     QLabel *apiPortLabel_ = nullptr;
     QComboBox *languageCombo_ = nullptr;
     QComboBox *themeCombo_ = nullptr;
-    QCheckBox *lookAtMouseCheck_ = nullptr;
     QCheckBox *autoDndCheck_ = nullptr;
     QCheckBox *gravityCheck_ = nullptr;
     QLabel *gravityScaleLabel_ = nullptr;

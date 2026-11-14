@@ -1,0 +1,136 @@
+name: Repository security
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+    branches: [main, beta]
+  schedule:
+    - cron: '23 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  local-security:
+    name: Local security and CodeQL
+    runs-on: windows-2022
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-extended
+      - name: Build app and local API security tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cmake -S . -B build-security -G Ninja -DCMAKE_BUILD_TYPE=Release -DAT_PET_BUILD_TESTS=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -DCMAKE_CXX_COMPILER=cl
+          if ($LASTEXITCODE -ne 0) { throw 'Security build configuration failed.' }
+          cmake --build build-security --target at-pet http-api-guard --parallel 4
+          if ($LASTEXITCODE -ne 0) { throw 'Security build failed.' }
+      - name: Test loopback, browser isolation, path validation and permission forwarding
+        shell: pwsh
+        run: |
+          ctest --test-dir build-security --output-on-failure -R '^http-api-guard$'
+          if ($LASTEXITCODE -ne 0) { throw 'Local security regression failed.' }
+      - uses: github/codeql-action/analyze@v4
+        with:
+          output: build-security/codeql-results
+          category: local-security-cpp
+      - name: Fail on CodeQL security findings
+        shell: pwsh
+        run: python scripts/check-codeql-results.py build-security/codeql-results
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: local-security-reports
+          path: |
+            build-security/codeql-results/*.sarif
+            build-security/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  secrets:
+    name: Secrets (email permitted)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned Gitleaks with checksum verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=8.30.1
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
+          cd "$RUNNER_TEMP"
+          curl --fail --location --retry 3 "$base/$archive" -o "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check --strict
+          mkdir -p gitleaks-bin
+          tar -xzf "$archive" -C gitleaks-bin gitleaks
+          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Verify email exception and real-secret detection
+        run: |
+          python3 -m unittest discover -s tests -p test_security_ci.py
+          python3 scripts/test-secret-scanner.py
+      - name: Scan full repository history (redacted)
+        run: gitleaks git . --config .gitleaks.toml --redact --log-opts='--all' --report-format sarif --report-path "$RUNNER_TEMP/gitleaks.sarif"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: redacted-secret-scan
+          path: ${{ runner.temp }}/gitleaks.sarif
+          if-no-files-found: warn
+          retention-days: 14
+
+  malware:
+    name: Malware signatures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install ClamAV and update signatures
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y clamav
+          sudo systemctl stop clamav-freshclam.service || true
+          sudo freshclam
+      - name: Scan tracked repository snapshot including archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/malware-snapshot"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/malware-snapshot"
+          clamscan --recursive --infected --scan-archive=yes --alert-exceeds-max=yes --max-filesize=200M --max-scansize=500M --log="$RUNNER_TEMP/clamav.log" "$RUNNER_TEMP/malware-snapshot"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: malware-scan-report
+          path: ${{ runner.temp }}/clamav.log
+          if-no-files-found: warn
+          retention-days: 14

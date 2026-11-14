@@ -10,6 +10,7 @@
 #include <QJsonParseError>
 #include <QRandomGenerator>
 #include <QSaveFile>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -149,7 +150,12 @@ QStringList topLevelKeys(const QByteArray &json) {
 } // namespace
 
 QString QuotePack::defaultPath() {
-    const QString dataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    // Tests already isolate QSettings in a temporary INI directory. Keep their
+    // quote writes there too, rather than touching the Windows profile.
+    const QSettings settings;
+    const QString dataDirectory = QStandardPaths::isTestModeEnabled() && settings.format() == QSettings::IniFormat
+        ? QFileInfo(settings.fileName()).absolutePath()
+        : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     return QDir(dataDirectory).filePath(QStringLiteral("quotes.json"));
 }
 
