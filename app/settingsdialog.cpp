@@ -1,7 +1,6 @@
 #include "agentregistry.h"
 #include "settingsdialog.h"
 #include "petcatalog.h"
-#include "petsettings.h"
 #include "petwindow.h"
 #include "quotepack.h"
 #include "theme.h"
@@ -592,8 +591,6 @@ void SettingsDialog::setupUi() {
     themeCombo_->addItem(tr("Dark"), QStringLiteral("dark"));
     uiForm->addWidget(themeCombo_, 1, 1);
 
-    lookAtMouseCheck_ = new QCheckBox(tr("Eyes follow the mouse cursor (Windows)"), uiGroup);
-    uiForm->addWidget(lookAtMouseCheck_, 2, 0, 1, 2);
 
     autoDndCheck_ = new QCheckBox(tr("Do not disturb automatically in full-screen apps (shrink to the screen edge)"), uiGroup);
     autoDndCheck_->setToolTip(tr("When a full-screen game or editor is in the foreground, the pet shrinks into a small\nbubble at the screen edge. Summon it again from the tray icon."));
@@ -718,12 +715,6 @@ void SettingsDialog::loadSettings() {
     if (themeIdx >= 0) themeCombo_->setCurrentIndex(themeIdx);
 
     {
-        const QSignalBlocker blocker(lookAtMouseCheck_);
-        // Render only: the legacy pet/lookAtCopilot migration belongs to the controller
-        // (petsettings::loadLookAtMouse), which pushes its authoritative value on show().
-        lookAtMouseCheck_->setChecked(petsettings::storedLookAtMouse());
-    }
-    {
         const QSignalBlocker blocker(autoDndCheck_);
         autoDndCheck_->setChecked(settings.value("pet/autoDoNotDisturb", true).toBool());
     }
@@ -749,14 +740,6 @@ void SettingsDialog::loadSettings() {
     refreshQuotePackStatus();
 }
 
-void SettingsDialog::setLookAtMouseEnabled(bool enabled) {
-    if (!lookAtMouseCheck_)
-        return;
-    // QSignalBlocker keeps this push from re-emitting toggled()/lookAtMouseToggled() and
-    // bouncing the change straight back to the controller.
-    const QSignalBlocker blocker(lookAtMouseCheck_);
-    lookAtMouseCheck_->setChecked(enabled);
-}
 
 void SettingsDialog::setGravityEnabled(bool enabled) {
     if (!gravityCheck_)
@@ -879,14 +862,13 @@ void SettingsDialog::saveSettings() {
 void SettingsDialog::onSaveGeneralSettings() {
     QSettings settings;
     const QString newLang = languageCombo_->currentData().toString();
-    const bool lookAtMouse = lookAtMouseCheck_->isChecked();
     const bool autoDoNotDisturb = autoDndCheck_->isChecked();
     const bool gravity = gravityCheck_->isChecked();
     const qreal gravityScale = gravityScaleSpin_->value();
     const bool completionSound = completionSoundCheck_->isChecked();
     const quint16 apiPort = quint16(apiPortSpin_->value());
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
-    // ui/language, pet/lookAtMouse, pet/gravity, pet/gravityScale and feedback/completionSound
+    // ui/language, pet/gravity, pet/gravityScale and feedback/completionSound
     // are persisted by the controller (the single source of truth) when it handles the signals
     // below; writing them here as well would desync the two the next time the dialog is
     // constructed.
@@ -894,7 +876,6 @@ void SettingsDialog::onSaveGeneralSettings() {
     settings.setValue("api/port", apiPort);
 
     emit languageChanged(newLang);
-    emit lookAtMouseToggled(lookAtMouse);
     emit autoDoNotDisturbToggled(autoDoNotDisturb);
     emit gravityToggled(gravity);
     emit gravityScaleChanged(gravityScale);
@@ -1436,7 +1417,6 @@ void SettingsDialog::retranslateUi() {
     themeCombo_->setItemText(0, tr("Follow System"));
     themeCombo_->setItemText(1, tr("Light"));
     themeCombo_->setItemText(2, tr("Dark"));
-    lookAtMouseCheck_->setText(tr("Eyes follow the mouse cursor (Windows)"));
     autoDndCheck_->setText(tr("Do not disturb automatically in full-screen apps (shrink to the screen edge)"));
     autoDndCheck_->setToolTip(tr("When a full-screen game or editor is in the foreground, the pet shrinks into a small\nbubble at the screen edge. Summon it again from the tray icon."));
     gravityScaleLabel_->setText(tr("Gravity strength:"));

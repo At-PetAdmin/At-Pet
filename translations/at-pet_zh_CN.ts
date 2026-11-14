@@ -557,6 +557,26 @@
         <source>Tasks</source>
         <translation>任务面板</translation>
     </message>
+    <message>
+        <source>Basketball game</source>
+        <translation>投篮小游戏</translation>
+    </message>
+    <message>
+        <source>Drag and throw your pet!
+Right-click to exit</source>
+        <translation>拖动并甩出桌宠！
+右键菜单取消投篮模式</translation>
+    </message>
+    <message>
+        <source>Basket! +1</source>
+        <translation>进球！+1</translation>
+    </message>
+    <message>
+        <source>Score: %1 / %2
+Drag to throw · Right-click to exit</source>
+        <translation>进球：%1 / %2 次投篮
+拖动甩出 · 右键菜单退出</translation>
+    </message>
 </context>
 <context>
     <name>QuestionDialog</name>

@@ -40,8 +40,6 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/agentconnectivity.h
     app/petid.h
     app/petcatalog.h
-    app/petsettings.cpp
-    app/petsettings.h
     app/quotepack.cpp
     app/quotepack.h
     app/settingsdialog.cpp
@@ -76,7 +74,7 @@ install(TARGETS at-pet BUNDLE DESTINATION . RUNTIME DESTINATION bin)
 
 # --- Tests -------------------------------------------------------------------
 # Regression tests for user-visible UI state sync (pet context menu / tray <-> Settings dialog):
-# Gravity, "Look at the mouse cursor" and interface language. Opt in with
+# Gravity and interface language. Opt in with
 # -DAT_PET_BUILD_TESTS=ON so normal builds and the packaging flow are unaffected.
 option(AT_PET_BUILD_TESTS "Build the At-Pet QTest regression tests" OFF)
 
@@ -91,8 +89,6 @@ if(AT_PET_BUILD_TESTS)
         app/settingsdialog.h
         app/petwindow.cpp
         app/petwindow.h
-        app/petsettings.cpp
-        app/petsettings.h
         app/quotepack.cpp
         app/quotepack.h
         app/theme.cpp
@@ -128,7 +124,7 @@ if(AT_PET_BUILD_TESTS)
     # One executable per suite: QTEST_MAIN expands to main(), so two suites cannot share one
     # binary.
     at_pet_add_test(gravity-sync tst_gravitysync.cpp)
-    at_pet_add_test(lookat-sync tst_lookatsync.cpp)
+    at_pet_add_test(event-scheduler tst_eventscheduler.cpp)
     at_pet_add_test(language-sync tst_languagesync.cpp)
     at_pet_add_test(quote-pack tst_quotepack.cpp)
     at_pet_add_test(animation-fallback tst_animationfallback.cpp)

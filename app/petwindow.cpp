@@ -302,37 +302,120 @@ void PetWindow::setAnimation(const QString &name) {
     }
 }
 
+namespace {
+class BasketballHoop final : public QWidget {
+public:
+    explicit BasketballHoop(QWidget *owner) : QWidget(owner, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::WindowTransparentForInput | Qt::WindowDoesNotAcceptFocus) {
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_ShowWithoutActivating);
+        resize(220, 240);
+    }
+    QString label;
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(QPen(QColor("#345270"), 4));
+        p.setBrush(QColor(240, 247, 255, 235));
+        p.drawRoundedRect(QRect(50, 8, 155, 110), 8, 8);
+        p.drawRect(QRect(95, 45, 65, 50));
+        p.setPen(QPen(QColor(235, 240, 250), 3));
+        for (int i = 0; i < 6; ++i)
+            p.drawLine(20 + i * 30, 100, 45 + i * 20, 165);
+        p.drawLine(32, 130, 158, 130);
+        p.drawLine(45, 165, 145, 165);
+        p.setPen(QPen(QColor("#f47632"), 7));
+        p.drawEllipse(QRect(20, 94, 150, 12));
+        p.setPen(Qt::white);
+        p.setBrush(QColor(28, 42, 62, 235));
+        p.drawRoundedRect(QRect(0, 178, 220, 60), 8, 8);
+        p.drawText(QRect(8, 182, 204, 52), Qt::AlignCenter | Qt::TextWordWrap, label);
+    }
+};
+}
+
+bool PetWindow::basketballCrossesRim(const QPointF &from, const QPointF &to, const QRect &rim) {
+    if (to.y() <= from.y() || from.y() >= rim.center().y() || to.y() < rim.center().y()) return false;
+    const qreal fraction = (rim.center().y() - from.y()) / (to.y() - from.y());
+    const qreal x = from.x() + (to.x() - from.x()) * fraction;
+    return x >= rim.left() + 20 && x <= rim.right() - 20;
+}
+
+void PetWindow::setBasketballEnabled(bool enabled) {
+    if (enabled == basketballEnabled_) return;
+    if (enabled && doNotDisturb_) return;
+    basketballEnabled_ = enabled;
+    basketballTimer_.stop();
+    basketballFlying_ = false;
+    if (!enabled) {
+        delete basketballHoop_;
+        basketballHoop_ = nullptr;
+        move(boundedPosition(basketballRestorePosition_, basketballRestorePosition_));
+        if (isVisible()) {
+            if (gravityEnabled_) startGravity();
+            else scheduleFreeMovement(900);
+            scheduleRest();
+        }
+        return;
+    }
+    basketballRestorePosition_ = pos();
+    detachFromWindow();
+    cancelRest();
+    stopFreeMovement();
+    stopGravity();
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    basketballCourt_ = screen ? screen->availableGeometry() : QRect(0, 0, 1280, 720);
+    basketballScore_ = basketballShots_ = 0;
+    auto *hoop = new BasketballHoop(this);
+    basketballHoop_ = hoop;
+    hoop->move(basketballCourt_.right() - hoop->width() - 30,
+               basketballCourt_.top() + basketballCourt_.height() / 3 - 100);
+    basketballRim_ = QRect(hoop->pos() + QPoint(20, 94), QSize(150, 12));
+    hoop->label = tr("Drag and throw your pet!\nRight-click to exit");
+    hoop->show();
+    disconnect(&basketballTimer_, nullptr, this, nullptr);
+    connect(&basketballTimer_, &QTimer::timeout, this, &PetWindow::advanceBasketball);
+}
+
+void PetWindow::advanceBasketball() {
+    if (!basketballEnabled_ || !basketballFlying_ || dragging_) { basketballTimer_.stop(); return; }
+    const QPointF centerOffset(width() / 2.0, height() * 0.65);
+    const QPointF previous = basketballPosition_ + centerOffset;
+    basketballVelocity_.ry() += 0.65;
+    basketballPosition_ += basketballVelocity_;
+    if (!basketballScored_ && basketballCrossesRim(previous, basketballPosition_ + centerOffset, basketballRim_)) {
+        basketballScored_ = true;
+        ++basketballScore_;
+        setSpeech(tr("Basket! +1"));
+    }
+    const int minX = basketballCourt_.left();
+    const int maxX = qMax(minX, basketballCourt_.right() - width() + 1);
+    if (basketballPosition_.x() < minX || basketballPosition_.x() > maxX) {
+        basketballPosition_.setX(qBound(qreal(minX), basketballPosition_.x(), qreal(maxX)));
+        basketballVelocity_.rx() *= -0.65;
+    }
+    if (basketballPosition_.y() < basketballCourt_.top()) {
+        basketballPosition_.setY(basketballCourt_.top());
+        basketballVelocity_.setY(qAbs(basketballVelocity_.y()) * 0.65);
+    }
+    const int floor = qMax(basketballCourt_.top(), basketballCourt_.bottom() - height() + 1);
+    if (basketballPosition_.y() >= floor) {
+        basketballPosition_.setY(floor);
+        basketballFlying_ = false;
+        basketballTimer_.stop();
+    }
+    move(basketballPosition_.toPoint());
+    auto *hoop = static_cast<BasketballHoop *>(basketballHoop_);
+    hoop->label = tr("Score: %1 / %2\nDrag to throw · Right-click to exit")
+        .arg(basketballScore_).arg(basketballShots_);
+    hoop->update();
+}
+
 void PetWindow::setSpeech(const QString &text) {
     speech_ = text.left(180);
     speechTimer_.start(5000);
-    update();
-}
-
-void PetWindow::setLookAtMouse(bool enabled) {
-    if (lookAtMouse_ == enabled)
-        return;
-    lookAtMouse_ = enabled;
-    if (!enabled) {
-        lookOffset_ = {};
-        faceLeft_ = false;
-    }
-    update();
-}
-
-bool PetWindow::lookAtMouse() const {
-    return lookAtMouse_;
-}
-
-void PetWindow::setLookTarget(const QPoint &globalPosition) {
-    if (!lookAtMouse_)
-        return;
-    const QPoint delta = globalPosition - frameGeometry().center();
-    const QPointF offset(qBound(-1.0, delta.x() / static_cast<double>(qMax(80, width())), 1.0),
-                         qBound(-1.0, delta.y() / static_cast<double>(qMax(80, height())), 1.0));
-    if (qAbs(offset.x() - lookOffset_.x()) < 0.01 && qAbs(offset.y() - lookOffset_.y()) < 0.01)
-        return;
-    lookOffset_ = offset;
-    faceLeft_ = offset.x() < -0.08;
     update();
 }
 
@@ -417,6 +500,7 @@ QStringList PetWindow::animationGroup(const QString &groupName) const {
 }
 
 void PetWindow::scheduleRest() {
+    if (basketballEnabled_) return;
     restTimer_.stop();
     if (doNotDisturb_ || isHidden())
         return;
@@ -495,6 +579,7 @@ void PetWindow::cancelRest() {
 }
 
 void PetWindow::setDoNotDisturb(bool enabled) {
+    if (enabled) setBasketballEnabled(false);
     if (doNotDisturb_ == enabled)
         return;
     doNotDisturb_ = enabled;
@@ -814,6 +899,7 @@ qreal PetWindow::gravityScale() const {
 }
 
 void PetWindow::startGravity(const QPointF &initialVelocity) {
+    if (basketballEnabled_) return;
     if (!gravityEnabled_ || !isVisible() || dragging_ ||
         attachment_ != AttachmentEdge::None || doNotDisturb_)
         return;
@@ -919,7 +1005,7 @@ void PetWindow::advanceGravity() {
 }
 
 void PetWindow::scheduleFreeMovement(int delayMs) {
-    if (!freeMovementEnabled_ || !isVisible() || dragging_ || gravityActive_ ||
+    if (basketballEnabled_ || !freeMovementEnabled_ || !isVisible() || dragging_ || gravityActive_ ||
         doNotDisturb_ || movementTimer_.isActive())
         return;
     if (attachment_ != AttachmentEdge::None && attachment_ != AttachmentEdge::Top)
@@ -1222,6 +1308,7 @@ void PetWindow::showEvent(QShowEvent *event) {
 }
 
 void PetWindow::hideEvent(QHideEvent *event) {
+    setBasketballEnabled(false);
     stopFreeMovement();
     stopGravity();
     cancelRest();
@@ -1293,11 +1380,10 @@ void PetWindow::drawSpeechBubble(QPainter &painter, const QRect &bubble, const Q
 }
 
 bool PetWindow::spriteShouldMirror(bool movementAnimationActive, bool movementFacingLeft,
-                                   bool movementAnimationDirectional, bool lookAtMouse,
-                                   bool faceLeft) {
+                                   bool movementAnimationDirectional) {
     if (movementAnimationActive)
         return movementFacingLeft && !movementAnimationDirectional;
-    return lookAtMouse && faceLeft;
+    return false;
 }
 
 void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
@@ -1348,8 +1434,7 @@ void PetWindow::paintPet(QPainter &painter, const QSize &canvasSize) {
             if (source.right() <= spriteSheet_.width() && source.bottom() <= spriteSheet_.height()) {
                 painter.save();
                 const bool faceLeft = spriteShouldMirror(movementAnimationActive_, movementFacingLeft_,
-                                                         movementAnimationDirectional_, lookAtMouse_,
-                                                         faceLeft_);
+                                                         movementAnimationDirectional_);
                 if (faceLeft) {
                     painter.translate(bounds.left() + bounds.right(), 0);
                     painter.scale(-1, 1);
@@ -1390,8 +1475,8 @@ void PetWindow::drawFallbackPet(QPainter &painter, const QRect &bounds) {
     painter.drawPath(ears);
     painter.drawEllipse(body);
 
-    const qreal eyeY = body.top() + body.height() * 0.42 + (lookAtMouse_ ? lookOffset_.y() * 2.0 : 0.0);
-    qreal eyeOffset = lookAtMouse_ ? lookOffset_.x() * 3.0 : 0.0;
+    const qreal eyeY = body.top() + body.height() * 0.42 + 0.0;
+    qreal eyeOffset = 0.0;
     if (animation_ == "thinking") eyeOffset = -3.0;
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(52, 48, 50));
@@ -1443,6 +1528,8 @@ void PetWindow::mouseMoveEvent(QMouseEvent *event) {
         const QPoint globalPosition = event->globalPosition().toPoint();
         if ((globalPosition - pressPosition_).manhattanLength() > 4 && !dragging_) {
             dragging_ = true;
+            basketballFlying_ = false;
+            basketballTimer_.stop();
             detachFromWindow();
             cancelRest();
             stopFreeMovement();
@@ -1519,6 +1606,16 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
     QWidget::mouseReleaseEvent(event);
     if (!wasDragging)
         return;
+    if (basketballEnabled_) {
+        ++basketballShots_;
+        basketballFlying_ = true;
+        basketballScored_ = false;
+        basketballPosition_ = pos();
+        basketballVelocity_ = flingVelocity;
+        basketballTimer_.start(16);
+        event->accept();
+        return;
+    }
     if (tryAttachToWindow(event->globalPosition().toPoint(), flingVelocity))
         return;
     if (doNotDisturb_) {
@@ -1592,10 +1689,10 @@ void PetWindow::showContextMenu(const QPoint &globalPosition) {
     gravityAction->setCheckable(true);
     gravityAction->setChecked(gravityEnabled_);
     connect(gravityAction, &QAction::toggled, this, &PetWindow::gravityToggled);
-    QAction *lookAction = menu.addAction(tr("Look at the mouse cursor"));
-    lookAction->setCheckable(true);
-    lookAction->setChecked(lookAtMouse_);
-    connect(lookAction, &QAction::toggled, this, &PetWindow::lookAtMouseToggled);
+    QAction *basketballAction = menu.addAction(tr("Basketball game"));
+    basketballAction->setCheckable(true);
+    basketballAction->setChecked(basketballEnabled_);
+    connect(basketballAction, &QAction::toggled, this, &PetWindow::setBasketballEnabled);
     if (attachedToWindow()) {
         menu.addAction(tr("Slide down the window frame"), this, &PetWindow::slideDownBorder);
         menu.addAction(tr("Let go of the window"), this, &PetWindow::releaseFromWindow);
