@@ -226,7 +226,11 @@ jobs:
             if (-not $env:GITHUB_REF.StartsWith('refs/tags/v')) {
               throw "The requested release $tag does not exist; refusing to create it from a manual run."
             }
-            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "At-Pet $tag" --generate-notes
+            $releaseFlags = @()
+            if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+              $releaseFlags = @('--prerelease', '--draft', '--latest=false')
+            }
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "At-Pet $tag" --generate-notes @releaseFlags
             if ($LASTEXITCODE -ne 0) {
               gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
               if ($LASTEXITCODE -ne 0) { throw "Could not create or find release $tag." }

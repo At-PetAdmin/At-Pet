@@ -242,8 +242,12 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
+          release_flags=()
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            release_flags=(--prerelease --draft --latest=false)
+          fi
           if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            if ! gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "At-Pet $tag" --generate-notes; then
+            if ! gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "At-Pet $tag" --generate-notes "${release_flags[@]}"; then
               gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || {
                 echo "Could not create or find release $tag." >&2
                 exit 1

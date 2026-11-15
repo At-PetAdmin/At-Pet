@@ -9,9 +9,9 @@ VS_VERSION_INFO VERSIONINFO
  PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
  FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
 #ifdef _DEBUG
- FILEFLAGS VS_FF_DEBUG
+ FILEFLAGS VS_FF_DEBUG | @AT_PET_FILE_FLAGS@
 #else
- FILEFLAGS 0x0L
+ FILEFLAGS @AT_PET_FILE_FLAGS@
 #endif
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_APP
@@ -23,12 +23,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "At-PetAdmin"
             VALUE "FileDescription", "At-Pet desktop companion"
-            VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "FileVersion", "@AT_PET_VERSION_STRING@"
             VALUE "InternalName", "at-pet"
             VALUE "LegalCopyright", "Copyright (c) 2026 Ni-ShuWu"
             VALUE "OriginalFilename", "at-pet.exe"
             VALUE "ProductName", "At-Pet"
-            VALUE "ProductVersion", "@PROJECT_VERSION@"
+            VALUE "ProductVersion", "@AT_PET_VERSION_STRING@"
         END
     END
     BLOCK "VarFileInfo"
