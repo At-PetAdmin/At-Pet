@@ -10,7 +10,8 @@
 // The process exits 0 unless --strict is passed: a failing bridge must never break the
 // agent that invoked it.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { authenticatedFetch } from './client-auth.mjs';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -213,8 +214,9 @@ export function buildPermissionResponse(profile, allow) {
   return decision;
 }
 
-async function requestJson(url, init, timeoutMs) {
-  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+async function requestJson(url, init, timeoutMs, agentApp) {
+  const parsed = new URL(url);
+  return authenticatedFetch(parsed.origin, parsed.pathname, { ...init, signal: AbortSignal.timeout(timeoutMs) }, agentApp);
 }
 
 export async function relayPermission(profile, payload, sessionId, options) {
@@ -239,7 +241,7 @@ export async function relayPermission(profile, payload, sessionId, options) {
         title,
         description,
       }),
-    }, timing.requestTimeoutMs);
+    }, timing.requestTimeoutMs, profile.agentApp);
     if (!accepted.ok) return null;
     requestId = String((await accepted.json()).requestId || '');
     if (!requestId) return null;
@@ -247,7 +249,7 @@ export async function relayPermission(profile, payload, sessionId, options) {
     const deadline = Date.now() + timing.permissionWaitMs;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, timing.permissionPollMs));
-      const result = await requestJson(baseUrl + '/permission/' + encodeURIComponent(requestId), {}, timing.requestTimeoutMs);
+      const result = await requestJson(baseUrl + '/permission/' + encodeURIComponent(requestId), {}, timing.requestTimeoutMs, profile.agentApp);
       if (result.status === 404) return null;
       if (!result.ok) continue;
       const status = String((await result.json()).status || '');
@@ -258,7 +260,7 @@ export async function relayPermission(profile, payload, sessionId, options) {
     // At-Pet unreachable: fall back to the agent's own approval prompt.
   }
   if (requestId) {
-    await requestJson(baseUrl + '/permission/' + encodeURIComponent(requestId), { method: 'DELETE' }, timing.requestTimeoutMs)
+    await requestJson(baseUrl + '/permission/' + encodeURIComponent(requestId), { method: 'DELETE' }, timing.requestTimeoutMs, profile.agentApp)
       .catch(() => {});
   }
   return null;
@@ -371,11 +373,23 @@ export async function main(argv = process.argv.slice(2)) {
     process.stdout.write(JSON.stringify(body) + '\n');
     return 0;
   }
-  await requestJson(baseUrl + '/event', {
+  body.occurredAt = new Date().toISOString();
+  const stableId = payload.prompt_id ? createHash('sha256').update(JSON.stringify([
+    payload.prompt_id, hookToken, payload.tool_use_id || payload.toolCallId || '', body.sessionId,
+  ])).digest('hex') : randomUUID();
+  body.eventId = String(payload.event_id || payload.eventId || stableId).slice(0, 256);
+  const toolCallId = payload.tool_use_id || payload.toolCallId || payload.callID || payload.call_id;
+  if (toolCallId) body.toolCallId = String(toolCallId).slice(0, 256);
+  const runId = payload.runId || payload.run_id || payload.prompt_id;
+  if (runId) body.runId = String(runId).slice(0, 256);
+  if (runId && Number.isSafeInteger(payload.sequence) && payload.sequence >= 0) body.sequence = payload.sequence;
+  if (['sessionstart', 'userpromptsubmit', 'userpromptsubmitted', 'turnstart', 'subagentstart', 'sessioncreated'].includes(hookToken)) body.turnStart = true;
+  const response = await requestJson(baseUrl + '/event', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }, DEFAULT_TIMING.requestTimeoutMs);
+  }, DEFAULT_TIMING.requestTimeoutMs, profile.agentApp);
+  if (!response.ok) throw new Error(`At-Pet event rejected: HTTP ${response.status}`);
   return 0;
 }
 

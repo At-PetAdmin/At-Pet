@@ -1,4 +1,6 @@
 import { Plugin } from "@opencode/plugin"
+import { randomUUID } from "node:crypto"
+import { authenticatedFetch } from "./client-auth.mjs"
 
 const apiBase = (process.env.AT_PET_URL || "http://127.0.0.1:8765").replace(/\/+$/, "")
 const permissionPollIntervalMs = 500
@@ -11,14 +13,31 @@ async function atPetFetch(path: string, init: RequestInit = {}, signal?: AbortSi
   else signal?.addEventListener("abort", abortFromParent, { once: true })
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
   try {
-    return await fetch(`${apiBase}${path}`, { ...init, signal: controller.signal })
+    return await authenticatedFetch(apiBase, path, { ...init, signal: controller.signal }, "opencode")
   } finally {
     clearTimeout(timeout)
     signal?.removeEventListener("abort", abortFromParent)
   }
 }
 
+const sourceSequences = new Map<string, { runId: string; sequence: number; idle: boolean }>()
+
 function postEvent(payload: Record<string, unknown>, signal: AbortSignal) {
+  const key = String(payload.sessionID)
+  let state = sourceSequences.get(key)
+  const begins = payload.sourceEvent === "session.created" ||
+    (payload.sourceEvent === "session.status" && payload.statusType === "busy" && state?.idle)
+  if (!state || begins) {
+    state = { runId: randomUUID(), sequence: 0, idle: false }
+    sourceSequences.set(key, state)
+    payload.turnStart = true
+  }
+  if (sourceSequences.size > 4096) sourceSequences.delete(sourceSequences.keys().next().value!)
+  payload.runId = state.runId
+  payload.sequence = ++state.sequence
+  payload.eventId = randomUUID()
+  payload.occurredAt = new Date().toISOString()
+  if (payload.sourceEvent === "session.idle" || payload.sourceEvent === "session.deleted" || payload.statusType === "idle") state.idle = true
   return atPetFetch("/agent-event/opencode", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

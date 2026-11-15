@@ -14,7 +14,7 @@
 - 项目级：将 `at-pet.ts` 复制到项目的 `.opencode/plugins/` 目录。
 - 全局：将 `at-pet.ts` 复制到 `%USERPROFILE%\.config\opencode\plugins\`。
 
-然后重启 OpenCode。
+同时将同目录的 `client-auth.mjs` 复制到 `at-pet.ts` 旁，再重启 OpenCode。客户端自动读取 At-Pet 为 OpenCode 生成的凭证，详见[认证说明](../../../docs/local-api-security.md)。
 
 ## 说明
 

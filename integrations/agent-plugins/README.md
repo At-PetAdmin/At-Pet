@@ -24,6 +24,11 @@ Source: [At-Pet_Agent-plugin](https://github.com/Ni-ShuWu/At-Pet_Agent-plugin) (
 
 Every plugin except Claude Code and OpenCode uses its own copy of the zero-dependency `bridge.mjs`, so each directory can be installed on its own. Each directory has a README with install steps.
 
+After upgrading At-Pet, update installed integration copies too. Copy `client-auth.mjs`
+with each Node/TypeScript entry point; native Claude HTTP hooks require the configured
+`AT_PET_API_TOKEN_CLAUDECODE` environment variable. See
+[authentication and event ordering](../../docs/local-api-security.md).
+
 `../agent-bridge/` holds a profile-driven replacement for those copies: one engine plus a JSON profile per agent, with the field contract for each profile traced back to the adapter or bridge it replaces. The plugins here are unaffected; switching one over is a one-line change in its hook command.
 
 ## Requirements

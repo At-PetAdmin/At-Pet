@@ -3,7 +3,7 @@
 #include "agentregistry.h"
 
 void AgentConnectivity::recordContact(const QString &agentApp, const QString &sessionId,
-                                      const QDateTime &now) {
+                                      const QDateTime &now, const QString &clientId) {
     if (agentApp.trimmed().isEmpty())
         return;
     expire(now);
@@ -13,7 +13,7 @@ void AgentConnectivity::recordContact(const QString &agentApp, const QString &se
     connection.lastSeen = now;
     connection.status = QStringLiteral("connected");
     // /question permits contacts without a session ID.
-    connection.sessions.insert(sessionId.trimmed(), now);
+    connection.sessions.insert(clientId + QChar(0x1f) + sessionId.trimmed(), now);
     emit changed();
     if (!wasConnected)
         emit agentConnected(connection.displayName);
@@ -22,6 +22,7 @@ void AgentConnectivity::recordContact(const QString &agentApp, const QString &se
 void AgentConnectivity::recordEvent(const QJsonObject &event, const QDateTime &now) {
     const QString agentApp = event.value("agentApp").toString().trimmed();
     const QString sessionId = event.value("sessionId").toString().trimmed();
+    const QString clientId = event.value("clientId").toString();
     const QString name = agentAppToken(event.value("event").toString());
     if (agentApp.isEmpty() || sessionId.isEmpty() || name.isEmpty())
         return;
@@ -31,12 +32,12 @@ void AgentConnectivity::recordEvent(const QJsonObject &event, const QDateTime &n
     // Subagent task completion must not leave a phantom connection after its
     // owning session ends, or disconnect the parent while it is still running.
     if (!parentSessionId.isEmpty()) {
-        recordContact(agentApp, parentSessionId, now);
+        recordContact(agentApp, parentSessionId, now, clientId);
         return;
     }
     if (name != "sessionend" && name != "sessionended" &&
         name != "disconnected" && name != "disconnect") {
-        recordContact(agentApp, sessionId, now);
+        recordContact(agentApp, sessionId, now, clientId);
         return;
     }
 
@@ -44,7 +45,7 @@ void AgentConnectivity::recordEvent(const QJsonObject &event, const QDateTime &n
     Connection &connection = connections_[agentAppKey(agentApp)];
     connection.displayName = normalizeAgentApp(agentApp);
     connection.lastSeen = now;
-    connection.sessions.remove(sessionId);
+    connection.sessions.remove(clientId + QChar(0x1f) + sessionId);
     if (connection.sessions.isEmpty())
         connection.status = QStringLiteral("disconnected");
     emit changed();

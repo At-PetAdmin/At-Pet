@@ -17,7 +17,7 @@ public:
     void recordEvent(const QJsonObject &event,
                      const QDateTime &now = QDateTime::currentDateTimeUtc());
     void recordContact(const QString &agentApp, const QString &sessionId,
-                       const QDateTime &now = QDateTime::currentDateTimeUtc());
+                       const QDateTime &now = QDateTime::currentDateTimeUtc(), const QString &clientId = {});
     void expire(const QDateTime &now = QDateTime::currentDateTimeUtc());
     QJsonObject snapshot() const;
 

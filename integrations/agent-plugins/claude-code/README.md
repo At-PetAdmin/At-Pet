@@ -6,6 +6,7 @@
 
 - Windows 10/11，且 At-Pet 已启动（默认监听 `127.0.0.1:8765`）。
 - Claude Code 版本需支持 HTTP hooks。
+- 首次启动更新后的 At-Pet，再按[认证迁移说明](../../../docs/local-api-security.md)为启动 Claude Code 的进程设置 `AT_PET_API_TOKEN_CLAUDECODE`。未配置凭证时请求会被拒绝。
 
 ## 安装方式
 

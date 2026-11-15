@@ -1,6 +1,7 @@
 #include "adapter.h"
 
 #include <QJsonArray>
+#include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QJsonValue>
 
@@ -64,6 +65,14 @@ public:
         *event = {{"sessionId", normalizedSessionId},
                   {"agentApp", "claude-code"},
                   {"event", normalizedName}};
+        copyAgentEventMetadata(source, event);
+        if (!event->contains("eventId") && !event->value("runId").toString().isEmpty()) {
+            const auto identity = QJsonArray{event->value("runId"), hookName, event->value("toolCallId")};
+            event->insert("eventId", QString::fromLatin1(QCryptographicHash::hash(
+                QJsonDocument(identity).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex()));
+        }
+        if (hookName == "SessionStart" || hookName == "UserPromptSubmit" || hookName == "SubagentStart")
+            event->insert("turnStart", true);
         if (isSubagent) {
             event->insert("isSubagent", true);
             event->insert("parentSessionId", sessionId);

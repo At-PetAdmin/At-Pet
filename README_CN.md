@@ -166,7 +166,7 @@ pwsh -File scripts/new-signing-cert.ps1
 
 ## 本地 API
 
-服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。该 API 不进行身份验证，仅用于同一台机器上的可信程序；请勿将其暴露或转发到网络。
+服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。除 `/health` 外，所有端点均需要 Bearer 凭证；Agent 凭证绑定对应 Agent，权限／问答请求仅可由所属客户端读取和取消；全局状态、SSE 和桌宠控制需要独立管理员凭证。更新时请同步升级桥接客户端，参见[认证、接入迁移与事件顺序说明](docs/local-api-security.md)。请勿将端口暴露或转发到网络。
 
 请求必须携带回环 `Host`（`127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`），且不得携带 `Origin` 请求头；因此网页、DNS rebinding 主机名以及 `<iframe sandbox>` 的 null origin 都会被 `403` 拒绝。`POST` 请求若带有 `Content-Type`，则必须是 `application/json`。响应不包含 `Access-Control-Allow-Origin`，浏览器源无法读取。
 
@@ -211,7 +211,7 @@ Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool
 }
 ```
 
-**OpenCode V2：** 将 [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) 复制到项目的 `.opencode/plugins/` 文件夹，或全局目录 `%USERPROFILE%\.config\opencode\plugins\`，然后重启 OpenCode。仅当 At-Pet 使用非默认本地端口时才需设置 `AT_PET_URL`。插件会上报会话/工具事件，并将 `ask` 权限决定交给 At-Pet；若 At-Pet 不可用，则保留 OpenCode 原有的 `ask` 决定。插件卸载时，如果仍有权限弹窗，插件会取消待处理请求并关闭弹窗，不会更改 OpenCode 原有的 `ask` 决定。
+**OpenCode V2：** 将 [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) 和同目录的 `client-auth.mjs` 一起 复制到项目的 `.opencode/plugins/` 文件夹，或全局目录 `%USERPROFILE%\.config\opencode\plugins\`，然后重启 OpenCode。仅当 At-Pet 使用非默认本地端口时才需设置 `AT_PET_URL`。插件会上报会话/工具事件，并将 `ask` 权限决定交给 At-Pet；若 At-Pet 不可用，则保留 OpenCode 原有的 `ask` 决定。插件卸载时，如果仍有权限弹窗，插件会取消待处理请求并关闭弹窗，不会更改 OpenCode 原有的 `ask` 决定。
 
 **可选 MCP Server：** 兼容 MCP 的客户端可按 [`integrations/at-pet-mcp/README_CN.md`](integrations/at-pet-mcp/README_CN.md) 配置本地 stdio 桥接。工具仅在被明确调用时上报事件；与 hooks 和插件不同，MCP 不会自动监听生命周期。
 

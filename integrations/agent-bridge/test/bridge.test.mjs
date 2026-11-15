@@ -18,6 +18,9 @@ import {
   toText,
 } from '../bridge.mjs';
 
+// Fake APIs use a fixture credential; never read the user's real credential store.
+process.env.AT_PET_API_TOKEN = 'test-bridge-credential';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BRIDGE = join(HERE, '..', 'bridge.mjs');
 
@@ -235,7 +238,10 @@ test('CLI posts the event body to /event', async () => {
     assert.equal(seen.length, 1);
     assert.equal(seen[0].method, 'POST');
     assert.equal(seen[0].url, '/event');
-    assert.deepEqual(seen[0].body, {
+    assert.ok(seen[0].body.eventId);
+    assert.ok(Number.isFinite(Date.parse(seen[0].body.occurredAt)));
+    const { eventId, occurredAt, ...body } = seen[0].body;
+    assert.deepEqual(body, {
       sessionId: 's1',
       agentApp: 'openai-codex',
       event: 'tool_start',

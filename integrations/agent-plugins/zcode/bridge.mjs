@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // At-Pet bridge: turns agent hook payloads into At-Pet events and relays permission prompts.
 // Usage: node bridge.mjs [agentApp] [hookEvent]   stdin: hook payload JSON
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { authenticatedFetch } from "./client-auth.mjs";
 
 const AGENT_APP = process.argv[2] || "zcode";
 const EVENT_NAME = process.argv[3] || "";
@@ -61,7 +62,7 @@ function sessionOf(payload) {
 }
 
 function request(path, init = {}) {
-  return fetch(`${BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  return authenticatedFetch(BASE_URL, path, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }, AGENT_APP);
 }
 
 function postJson(path, body) {
@@ -141,10 +142,20 @@ async function main() {
     sessionId: isSubagent && payload.agent_id ? String(payload.agent_id) : sessionId,
     agentApp: AGENT_APP,
     event,
+    occurredAt: new Date().toISOString(),
+    eventId: String(payload.event_id || payload.eventId || (payload.prompt_id
+      ? createHash("sha256").update(JSON.stringify([payload.prompt_id, hookName, payload.tool_use_id || payload.toolCallId || "", sessionId])).digest("hex")
+      : randomUUID())).slice(0, 256),
+    turnStart: ["SessionStart", "UserPromptSubmit", "SubagentStart"].includes(hookName),
     model: typeof payload.model === "string" ? payload.model : "",
     isSubagent,
     parentSessionId: isSubagent ? sessionId : "",
   };
+  const toolCallId = payload.tool_use_id ?? payload.toolCallId;
+  if (toolCallId) body.toolCallId = String(toolCallId).slice(0, 256);
+  const runId = payload.runId || payload.run_id || payload.prompt_id;
+  if (runId) body.runId = String(runId).slice(0, 256);
+  if (runId && Number.isSafeInteger(payload.sequence)) body.sequence = payload.sequence;
   const toolName = payload.tool_name ?? payload.toolName;
   if (toolName) body.message = String(toolName);
   await postJson("/event", body);

@@ -25,6 +25,8 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/petwindow.h
     app/httpapi.cpp
     app/httpapi.h
+    app/apicredentials.cpp
+    app/apicredentials.h
     app/agentmonitor.cpp
     app/agentmonitor.h
     app/agentadapters/claude-code/adapter.cpp
@@ -52,6 +54,7 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
 target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network at-pet-pets)
 target_include_directories(at-pet PRIVATE tests)
 if(WIN32)
+    target_link_libraries(at-pet PRIVATE advapi32)
     configure_file(
         assets/branding/app-icon.rc.in
         "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc"
@@ -81,6 +84,11 @@ option(AT_PET_BUILD_TESTS "Build the At-Pet QTest regression tests" OFF)
 if(AT_PET_BUILD_TESTS)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
     enable_testing()
+    qt_add_executable(event-guard tests/tst_eventguard.cpp app/agenteventguard.h)
+    target_include_directories(event-guard PRIVATE app)
+    target_link_libraries(event-guard PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(event-guard PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME event-guard COMMAND event-guard)
 
     # Production sources the SettingsDialog suites need. PetController lives in app/main.cpp
     # and is not linkable on its own, so each suite drives a fake controller instead.
@@ -144,6 +152,8 @@ if(AT_PET_BUILD_TESTS)
     set(AT_PET_HTTP_TEST_SOURCES
         app/httpapi.cpp
         app/httpapi.h
+        app/apicredentials.cpp
+        app/apicredentials.h
         app/agentmonitor.cpp
         app/agentmonitor.h
         app/agentadapters/claude-code/adapter.cpp
@@ -159,6 +169,9 @@ if(AT_PET_BUILD_TESTS)
         target_include_directories(${name} PRIVATE app)
         target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
         target_link_libraries(${name} PRIVATE Qt6::Network Qt6::Test)
+        if(WIN32)
+            target_link_libraries(${name} PRIVATE advapi32)
+        endif()
         # QTEST_GUILESS_MAIN runs without a platform plugin, so no QT_QPA_PLATFORM is needed.
         set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
         add_test(NAME ${name} COMMAND ${name})
@@ -170,6 +183,9 @@ if(AT_PET_BUILD_TESTS)
     target_include_directories(companion-flow PRIVATE app tests)
     target_compile_definitions(companion-flow PRIVATE AT_PET_COMPANION_TEST AT_PET_VERSION="${AT_PET_VERSION_STRING}")
     target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test at-pet-pets)
+    if(WIN32)
+        target_link_libraries(companion-flow PRIVATE advapi32)
+    endif()
     set_target_properties(companion-flow PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME companion-flow COMMAND companion-flow)
     set_tests_properties(companion-flow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

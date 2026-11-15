@@ -5,6 +5,8 @@
 #include "petid.h"
 #include "petcatalog.h"
 #include "agenteventscheduler.h"
+#include "apicredentials.h"
+#include "agenteventguard.h"
 #include "permissiondialog.h"
 #include "questiondialog.h"
 #include "petwindow.h"
@@ -90,8 +92,8 @@ QString eventToken(const QString &name) {
     return token;
 }
 
-QString sessionKey(const QString &agentKey, const QString &sessionId) {
-    return agentKey + QChar(0x1f) + sessionId;
+QString sessionKey(const QString &agentKey, const QString &sessionId, const QString &clientId = {}) {
+    return clientId + QChar(0x1f) + agentKey + QChar(0x1f) + sessionId;
 }
 
 bool isPotentiallyDangerous(const QJsonObject &request) {
@@ -256,7 +258,14 @@ public:
         const quint16 savedPort = quint16(QSettings().value("api/port", 8765).toUInt());
         const quint16 port = portOk && requestedPort > 0 && requestedPort <= 65535
             ? quint16(requestedPort) : (savedPort >= 1024 ? savedPort : 8765);
-        if (!api_->start(port))
+        QList<ApiClient> apiClients;
+        QString credentialError;
+        if (!apicredentials::loadOrCreate(&apiClients, &credentialError)) {
+            qWarning("At-Pet local API disabled: %s", qPrintable(credentialError));
+        } else {
+            api_->setClients(apiClients);
+        }
+        if (!apiClients.isEmpty() && !api_->start(port))
             qWarning("At-Pet local API could not bind to port %u", unsigned(port));
 
         createTrayIcon();
@@ -285,6 +294,7 @@ public:
 
 private:
     struct SessionState {
+        QString clientId;
         QString sessionId;
         QString agentApp;
         QString agentKey;
@@ -295,6 +305,7 @@ private:
         QString source;
         QDateTime updatedAt;
         quint64 sequence = 0;
+        int activeToolCount = 0;
         bool isSubagent = false;
         bool terminal = false;
     };
@@ -799,7 +810,8 @@ private:
     void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
         trackRequest(requestId, request, "question");
         agentConnectivity_.recordContact(request.value("agentApp").toString(),
-                                         request.value("sessionId").toString());
+                                         request.value("sessionId").toString(), QDateTime::currentDateTimeUtc(),
+                                         request.value("clientId").toString());
         questionQueue_.enqueue(qMakePair(requestId, request));
         showNextQuestionDialog();
     }
@@ -880,14 +892,20 @@ private:
         publishState();
     }
 
-    void onAgentEvent(const QJsonObject &event) {
-        agentConnectivity_.recordEvent(event);
+    void onAgentEvent(QJsonObject event) {
+        updateAgentEvent(event, false);
+    }
+
+    void updateAgentEvent(QJsonObject event, bool permissionControl) {
         const QString sessionId = event.value("sessionId").toString().trimmed();
         if (sessionId.isEmpty())
             return;
         const QString agentApp = normalizeAgentApp(event.value("agentApp").toString());
         const QString agentKey = agentAppKey(agentApp);
-        const QString key = sessionKey(agentKey, sessionId);
+        const QString clientId = event.value("clientId").toString();
+        const QString key = sessionKey(agentKey, sessionId, clientId);
+        if (!(permissionControl ? eventGuard_.permissionEvent(key, &event) : eventGuard_.accept(key, &event))) return;
+        agentConnectivity_.recordEvent(event);
         const QString eventName = eventToken(event.value("event").toString());
         bool successfulCompletion = false;
         if (agentKey != "external" &&
@@ -944,6 +962,8 @@ private:
             return;
 
         SessionState state;
+        state.clientId = clientId;
+        state.activeToolCount = event.value("activeToolCount").toInt();
         const auto previous = sessions_.constFind(key);
         successfulCompletion = successfulCompletion &&
             (previous == sessions_.cend() || !previous->terminal);
@@ -964,6 +984,7 @@ private:
         state.source = event.value("source").toString().left(40);
         state.updatedAt = QDateTime::currentDateTimeUtc();
         state.sequence = ++sessionSequence_;
+        if (event.value("toolFailure").toBool()) terminal = false;
         state.terminal = terminal;
         const bool newResult = terminal && (previous == sessions_.cend() || !previous->terminal || previous->animation != animation);
         sessions_.insert(key, state);
@@ -993,7 +1014,7 @@ private:
         trackRequest(requestId, request, "permission");
         QJsonObject event = request;
         event.insert("event", "permission_requested");
-        onAgentEvent(event);
+        updateAgentEvent(event, true);
         permissionQueue_.enqueue(qMakePair(requestId, request));
         showNextPermissionDialog();
     }
@@ -1042,7 +1063,7 @@ private:
             publishState();
             QJsonObject event = request;
             event.insert("event", allowOnce ? "permission_approved" : "permission_denied");
-            onAgentEvent(event);
+            updateAgentEvent(event, true);
             permissionDialog_ = nullptr;
             currentPermissionRequestId_.clear();
             QTimer::singleShot(0, this, &PetController::showNextPermissionDialog);
@@ -1126,7 +1147,7 @@ private:
                 eventScheduler_.forget("bound/" + it.key());
             }
             const bool present = eventScheduler_.present("bound/" + it.key(),
-                sessionKey(it->agentKey, it->sessionId), it->animation, it->message);
+                sessionKey(it->agentKey, it->sessionId, it->clientId), it->animation, it->message);
             if (present && !pet->basketballEnabled()) {
                 pet->setAnimation(it->animation);
                 showScheduledResult(pet, it.value());
@@ -1152,6 +1173,7 @@ private:
         QJsonArray sessions;
         for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
             QJsonObject session{{"sessionId", it->sessionId}, {"agentApp", it->agentApp},
+                                {"clientId", it->clientId}, {"activeToolCount", it->activeToolCount},
                                 {"animation", it->animation}, {"message", it->message}, {"model", it->model},
                                 {"isSubagent", it->isSubagent},
                                 {"updatedAt", it->updatedAt.toString(Qt::ISODate)}};
@@ -1390,6 +1412,7 @@ private:
     QPointer<QuestionDialog> questionDialog_;
     QString currentQuestionRequestId_;
     AgentEventScheduler eventScheduler_;
+    AgentEventGuard eventGuard_;
     QTimer eventPresentationTimer_;
     QTimer fullscreenTimer_;
     QTimer housekeepingTimer_;

@@ -162,7 +162,7 @@ Example `pet.json` in the reference project's format:
 
  ## Local API
 
-The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. The API is unauthenticated and intended only for trusted programs on the same machine; do not expose or forward this port to a network.
+The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. All endpoints except `/health` require a bearer credential. Agent credentials are scoped to their Agent and their own permission/question requests; global state, SSE and pet control require the separate administrator credential. See [authentication, integration upgrades and event ordering](docs/local-api-security.md). Do not expose or forward this port to a network.
 
 Requests must carry a loopback `Host` (`127.0.0.1:<port>`, `localhost:<port>`, or `[::1]:<port>`) and must not carry an `Origin` header, so browser pages, DNS-rebinding host names, and null origins from a sandboxed iframe are rejected with `403`. A `POST` body must use `Content-Type: application/json` when that header is present. Responses never include `Access-Control-Allow-Origin`, so no browser origin can read them.
 
@@ -207,7 +207,7 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 }
 ```
 
-**OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
+**OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) together with its adjacent `client-auth.mjs` into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
 
 **Optional MCP server:** MCP-compatible clients can use the local stdio bridge described in [`integrations/at-pet-mcp/README.md`](integrations/at-pet-mcp/README.md). Its tools report events only when explicitly called; unlike hooks and plugins, MCP does not automatically observe lifecycle events.
 

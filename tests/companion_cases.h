@@ -35,6 +35,24 @@ private slots:
         QCOMPARE(pet->animation(), QString("permission"));
         controller.clearPets();
     }
+    void lateEventsCannotReconnectOrRecreateEndedSessions() {
+        PetController controller;
+        const auto send = [&](const QString &name, const QString &client) {
+            controller.onAgentEvent({{"sessionId", "same"}, {"event", name},
+                {"agentApp", "claude-code"}, {"clientId", client}});
+        };
+        send("started", "a");
+        send("started", "b");
+        QCOMPARE(controller.sessions_.size(), 2);
+        send("session_end", "a");
+        send("tool_start", "a");
+        QCOMPARE(controller.sessions_.size(), 1);
+        send("session_end", "b");
+        send("tool_start", "b");
+        QVERIFY(controller.sessions_.isEmpty());
+        QVERIFY(!controller.agentConnectivity_.snapshot().value("claudecode").toObject().value("connected").toBool());
+        controller.clearPets();
+    }
     void controllerFlow() {
         PetController controller;
         const auto send = [&](const QString &id, const QString &event) {

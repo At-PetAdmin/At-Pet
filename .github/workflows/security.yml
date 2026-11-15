@@ -39,19 +39,24 @@ jobs:
           languages: c-cpp
           build-mode: manual
           queries: security-extended
-      - name: Build app and local API security tests
+      - name: Build app, API authentication and event ordering tests
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           cmake -S . -B build-security -G Ninja -DCMAKE_BUILD_TYPE=Release -DAT_PET_BUILD_TESTS=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -DCMAKE_CXX_COMPILER=cl
           if ($LASTEXITCODE -ne 0) { throw 'Security build configuration failed.' }
-          cmake --build build-security --target at-pet http-api-guard --parallel 4
+          cmake --build build-security --target at-pet http-api-guard event-guard --parallel 4
           if ($LASTEXITCODE -ne 0) { throw 'Security build failed.' }
-      - name: Test loopback, browser isolation, path validation and permission forwarding
+      - name: Test authentication, request ownership and event ordering
         shell: pwsh
         run: |
-          ctest --test-dir build-security --output-on-failure -R '^http-api-guard$'
+          ctest --test-dir build-security --output-on-failure -R '^(http-api-guard|event-guard)$'
           if ($LASTEXITCODE -ne 0) { throw 'Local security regression failed.' }
+      - name: Test authenticated Agent bridges
+        shell: pwsh
+        run: |
+          node --test integrations/agent-bridge/test/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Agent bridge security regression failed.' }
       - uses: github/codeql-action/analyze@v4
         with:
           output: build-security/codeql-results

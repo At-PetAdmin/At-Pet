@@ -101,7 +101,7 @@ Keep the `--print` output with a captured payload in the pull request. It is the
 - Reading stdin gives up after 2 s of idleness or 1 MiB of input.
 - Only the normalized fields listed above are sent: session, app, event, model, tool name, a short message, and the subagent markers. Prompts and tool results are not forwarded. Permission requests carry the tool name plus a truncated description, which is what the user needs to decide.
 - Every event carries `source`, set to the profile id, so a consumer can tell a hook report from a weaker signal later.
-- The default endpoint is loopback. `AT_PET_URL` can point elsewhere, but At-Pet's API is unauthenticated by design and should stay local.
+- Only loopback HTTP origins are accepted. `client-auth.mjs` loads this Agent's credential from At-Pet's protected local store; keep it beside `bridge.mjs` when copying the integration. See [authentication and event ordering](../../docs/local-api-security.md).
 
 ## Tests
 
@@ -110,7 +110,7 @@ cd integrations/agent-bridge
 npm test
 ```
 
-26 tests: path resolution, profile inheritance, event mapping, subagent handling, conditional rules, permission allow and deny against a fake local API, the two permission response styles, per-profile permission policy, payload capture, and the guarantee that a missing At-Pet does not fail the process.
+29 tests cover event mapping, permission relay, credential scoping and rotation, redirect protection, payload capture, and graceful fallback when At-Pet is unavailable.
 
 ## Relationship to the existing plugins
 

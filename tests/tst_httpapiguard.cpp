@@ -1,7 +1,6 @@
 // Regression tests for the trust boundary of the local HTTP API.
 //
-// README documents the API as unauthenticated and "intended only for trusted programs on
-// the same machine". A web page is not one, yet it can reach the API:
+// Bearer credentials identify local clients; browser checks remain defense in depth:
 //   * CSRF: a cross-site POST (even "simple" text/plain, which skips the preflight) can
 //     forge /say, /event, /permission or /question. Browsers attach Origin to those
 //     requests, so any Origin is rejected while raw local clients keep working.
@@ -25,6 +24,8 @@
 #include <QSignalSpy>
 #include <QTcpSocket>
 #include <QTest>
+#include <QTemporaryDir>
+#include <QFile>
 
 namespace {
 
@@ -79,19 +80,24 @@ bool hasCorsHeader(const QByteArray &response) {
     return headersOf(response).toLower().contains("access-control-");
 }
 
+QByteArray asClient(QByteArray request, const QByteArray &token) {
+    return request.replace("Authorization: Bearer test-admin\r\n",
+        token.isEmpty() ? QByteArray() : "Authorization: Bearer " + token + "\r\n");
+}
+
 QByteArray hostFor(quint16 port) {
     return "127.0.0.1:" + QByteArray::number(port);
 }
 
 QByteArray getRequest(const QByteArray &path, const QByteArray &host,
                       const QByteArray &extraHeaders = {}) {
-    return "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\n" + extraHeaders + "\r\n";
+    return "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\nAuthorization: Bearer test-admin\r\n" + extraHeaders + "\r\n";
 }
 
 QByteArray postRequest(const QByteArray &path, const QByteArray &host, const QByteArray &body,
                        const QByteArray &contentType = "application/json",
                        const QByteArray &extraHeaders = {}) {
-    QByteArray request = "POST " + path + " HTTP/1.1\r\nHost: " + host + "\r\n";
+    QByteArray request = "POST " + path + " HTTP/1.1\r\nHost: " + host + "\r\nAuthorization: Bearer test-admin\r\n";
     if (!contentType.isEmpty())
         request += "Content-Type: " + contentType + "\r\n";
     request += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
@@ -109,6 +115,10 @@ class HttpApiGuardTest final : public QObject {
 private slots:
     void init();
     void cleanup();
+    void requiresAuthentication();
+    void bindsAgentIdentityAndRequestOwnership();
+    void boundsPendingRequests();
+    void persistsCredentialsAndRejectsCorruption();
 
     void permissionForwardingSwitch();
     void acceptsLoopbackHosts();
@@ -133,6 +143,10 @@ void HttpApiGuardTest::init() {
     api_ = new HttpApi([] {
         return QJsonObject{{"app", "At-Pet"}, {"pets", QJsonArray{}}};
     });
+    api_->setClients({{"admin", {}, "test-admin", true},
+                      {"a", "claudecode", "test-a", false},
+                      {"b", "claudecode", "test-b", false},
+                      {"other", "opencode", "test-other", false}});
     QVERIFY(api_->start(0));
     port_ = api_->port();
     QVERIFY(port_ != 0);
@@ -142,6 +156,98 @@ void HttpApiGuardTest::cleanup() {
     delete api_;
     api_ = nullptr;
     port_ = 0;
+}
+
+void HttpApiGuardTest::requiresAuthentication() {
+    const auto host = hostFor(port_);
+    QCOMPARE(statusOf(send(asClient(getRequest("/health", host), {}))), 200);
+    for (const auto &path : {"/state", "/events", "/question/not-owned", "/permission/not-owned"})
+        QCOMPARE(statusOf(send(asClient(getRequest(path, host), {}))), 401);
+    QCOMPARE(statusOf(send(asClient(postRequest("/event", host, R"({"sessionId":"s","event":"thinking"})"), {}))), 401);
+    QCOMPARE(statusOf(send(asClient(getRequest("/state", host), "wrong"))), 401);
+    QCOMPARE(statusOf(send(getRequest("/state", host, "Authorization: Bearer test-a\r\n"))), 403);
+    QCOMPARE(statusOf(send(asClient(getRequest("/state", host), "test-a"))), 403);
+    QCOMPARE(statusOf(send(asClient(getRequest("/events", host), "test-a"))), 403);
+    QCOMPARE(statusOf(send(asClient(postRequest("/say", host, R"({"text":"fake"})"), "test-a"))), 403);
+}
+
+void HttpApiGuardTest::bindsAgentIdentityAndRequestOwnership() {
+    const auto host = hostFor(port_);
+    QSignalSpy events(api_, &HttpApi::eventReceived);
+    QCOMPARE(statusOf(send(asClient(postRequest("/event", host,
+        R"({"sessionId":"s","agentApp":"OpenCode","event":"thinking"})"), "test-a"))), 403);
+    QCOMPARE(statusOf(send(asClient(postRequest("/agent-event/opencode", host,
+        R"({"sessionID":"s","sourceEvent":"session.created"})"), "test-a"))), 403);
+    QCOMPARE(statusOf(send(asClient(postRequest("/event", host,
+        R"({"sessionId":"s","agentApp":"claude-code","event":"thinking","clientId":"b"})"), "test-a"))), 202);
+    QCOMPARE(events.size(), 1);
+    QCOMPARE(events.first().first().toJsonObject().value("clientId").toString(), QString("a"));
+    const auto accepted = send(asClient(postRequest("/question", host,
+        R"({"sessionId":"s","agentApp":"Claude Code","question":"Choose?"})"), "test-a"));
+    QCOMPARE(statusOf(accepted), 202);
+    const auto id = QJsonDocument::fromJson(bodyOf(accepted)).object().value("requestId").toString();
+    const QByteArray path = "/question/" + id.toUtf8();
+    QCOMPARE(statusOf(send(asClient(getRequest(path, host), "test-b"))), 404);
+    auto deletion = asClient(getRequest(path, host), "test-b");
+    deletion.replace("GET ", "DELETE ");
+    QCOMPARE(statusOf(send(deletion)), 404);
+    api_->resolveQuestion(id, true, "private answer");
+    QCOMPARE(statusOf(send(asClient(getRequest(path, host), "test-b"))), 404);
+    const auto answer = send(asClient(getRequest(path, host), "test-a"));
+    QVERIFY(answer.contains("private answer"));
+    QCOMPARE(statusOf(send(asClient(getRequest(path, host), "test-a"))), 404);
+
+    const auto permission = send(asClient(postRequest("/permission", host,
+        R"({"sessionId":"s","agentApp":"claude-code","toolName":"Read"})"), "test-a"));
+    QCOMPARE(statusOf(permission), 202);
+    const auto permissionId = QJsonDocument::fromJson(bodyOf(permission)).object().value("requestId").toString();
+    const QByteArray permissionPath = "/permission/" + permissionId.toUtf8();
+    QCOMPARE(statusOf(send(asClient(getRequest(permissionPath, host), "test-b"))), 404);
+    deletion = asClient(getRequest(permissionPath, host), "test-b");
+    deletion.replace("GET ", "DELETE ");
+    QCOMPARE(statusOf(send(deletion)), 404);
+    api_->resolvePermission(permissionId, true);
+    QVERIFY(send(asClient(getRequest(permissionPath, host), "test-a")).contains("allowed_once"));
+    QCOMPARE(statusOf(send(asClient(getRequest(permissionPath, host), "test-a"))), 404);
+}
+
+void HttpApiGuardTest::boundsPendingRequests() {
+    const auto request = asClient(postRequest("/question", hostFor(port_),
+        R"({"agentApp":"claude-code","question":"test"})"), "test-a");
+    QString firstId;
+    for (int i = 0; i < 16; ++i) {
+        const auto response = send(request);
+        QCOMPARE(statusOf(response), 202);
+        if (i == 0) firstId = QJsonDocument::fromJson(bodyOf(response)).object().value("requestId").toString();
+    }
+    QCOMPARE(statusOf(send(request)), 429);
+    api_->resolveQuestion(firstId, false, {});
+    QCOMPARE(statusOf(send(asClient(getRequest("/question/" + firstId.toUtf8(), hostFor(port_)), "test-a"))), 200);
+    QCOMPARE(statusOf(send(request)), 202);
+}
+
+void HttpApiGuardTest::persistsCredentialsAndRejectsCorruption() {
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString path = temporary.filePath("api-security/clients.json");
+    QList<ApiClient> first, second;
+    QString error;
+    QVERIFY2(apicredentials::loadOrCreate(&first, &error, path), qPrintable(error));
+    QVERIFY(first.size() > 2);
+    QVERIFY2(apicredentials::loadOrCreate(&second, &error, path), qPrintable(error));
+    QCOMPARE(first.size(), second.size());
+    for (int i = 0; i < first.size(); ++i) {
+        QVERIFY(first[i].token == second[i].token);
+        QVERIFY(first[i].token.size() >= 32);
+    }
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("invalid synthetic store");
+    file.close();
+    QVERIFY(!apicredentials::loadOrCreate(&second, &error, path));
+    QVERIFY(second.isEmpty());
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("invalid synthetic store"));
 }
 
 // The documented clients (hooks, bridges, curl, PowerShell) talk to 127.0.0.1 or localhost.
@@ -238,7 +344,7 @@ void HttpApiGuardTest::neverAdvertisesCors() {
     QCOMPARE(statusOf(health), 200);
     QVERIFY(!hasCorsHeader(health));
 
-    const QByteArray options = send("OPTIONS /say HTTP/1.1\r\nHost: " + hostFor(port_) + "\r\n\r\n");
+    const QByteArray options = send("OPTIONS /say HTTP/1.1\r\nHost: " + hostFor(port_) + "\r\nAuthorization: Bearer test-admin\r\n\r\n");
     QCOMPARE(statusOf(options), 204);
     QVERIFY(!hasCorsHeader(options));
 
@@ -280,7 +386,9 @@ void HttpApiGuardTest::keepsServingTrustedClients() {
 
     const QByteArray health = send(getRequest("/health", host));
     QCOMPARE(statusOf(health), 200);
-    QCOMPARE(bodyOf(health), QByteArray(R"({"ok":true})"));
+    const auto healthJson = QJsonDocument::fromJson(bodyOf(health)).object();
+    QVERIFY(healthJson.value("ok").toBool());
+    QVERIFY(healthJson.value("authenticationRequired").toBool());
 
     QCOMPARE(statusOf(send(getRequest("/state", host))), 200);
 
