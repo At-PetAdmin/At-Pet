@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
-project(AtPet VERSION 1.3.3 LANGUAGES CXX)
+project(AtPet VERSION 1.3.4 LANGUAGES CXX)
 # Human-readable version string compiled into the binary (CMake's project VERSION
 # must stay numeric; pre-release suffixes live here). The Windows resource keeps
 # using PROJECT_VERSION_* for FILEVERSION/PRODUCTVERSION.
-set(AT_PET_VERSION_STRING "1.3.3" CACHE STRING "Human-readable At-Pet version string")
+set(AT_PET_VERSION_STRING "1.3.4" CACHE STRING "Human-readable At-Pet version string")
+set(AT_PET_FILE_FLAGS "0x0L")
+if(AT_PET_VERSION_STRING MATCHES "-")
+    set(AT_PET_FILE_FLAGS "VS_FF_PRERELEASE")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,20 +21,25 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Network LinguistTools)
 add_library(at-pet-pets OBJECT assets/default/pet.qrc)
 target_link_libraries(at-pet-pets PRIVATE Qt6::Core)
 
+# Build the API once, including under CodeQL tracing, and reuse it in app/tests.
+add_library(at-pet-api OBJECT
+    app/httpapi.cpp app/httpapi.h
+    app/apicredentials.cpp app/apicredentials.h
+    app/agentmonitor.cpp app/agentmonitor.h
+    app/agentadapters/claude-code/adapter.cpp app/agentadapters/claude-code/adapter.h
+    app/agentadapters/opencode-v2/adapter.cpp app/agentadapters/opencode-v2/adapter.h
+)
+target_link_libraries(at-pet-api PUBLIC Qt6::Network)
+if(WIN32)
+    target_link_libraries(at-pet-api PUBLIC advapi32)
+endif()
+
 qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/main.cpp
     app/crashreporter.cpp
     app/crashreporter.h
     app/petwindow.cpp
     app/petwindow.h
-    app/httpapi.cpp
-    app/httpapi.h
-    app/agentmonitor.cpp
-    app/agentmonitor.h
-    app/agentadapters/claude-code/adapter.cpp
-    app/agentadapters/claude-code/adapter.h
-    app/agentadapters/opencode-v2/adapter.cpp
-    app/agentadapters/opencode-v2/adapter.h
     app/permissiondialog.cpp
     app/permissiondialog.h
     app/questiondialog.cpp
@@ -40,20 +49,22 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/agentconnectivity.h
     app/petid.h
     app/petcatalog.h
-    app/petsettings.cpp
-    app/petsettings.h
     app/quotepack.cpp
     app/quotepack.h
     app/settingsdialog.cpp
     app/settingsdialog.h
+    app/agentsetup.cpp app/agentsetup.h
+    app/updateswidget.cpp app/updateswidget.h
+    integrations/setup.qrc
     app/theme.cpp
     app/theme.h
     assets/branding/branding.qrc
 )
 
-target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network at-pet-pets)
+target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network at-pet-pets at-pet-api)
 target_include_directories(at-pet PRIVATE tests)
 if(WIN32)
+    target_link_libraries(at-pet PRIVATE advapi32)
     configure_file(
         assets/branding/app-icon.rc.in
         "${CMAKE_CURRENT_BINARY_DIR}/app-icon.rc"
@@ -76,23 +87,29 @@ install(TARGETS at-pet BUNDLE DESTINATION . RUNTIME DESTINATION bin)
 
 # --- Tests -------------------------------------------------------------------
 # Regression tests for user-visible UI state sync (pet context menu / tray <-> Settings dialog):
-# Gravity, "Look at the mouse cursor" and interface language. Opt in with
+# Gravity and interface language. Opt in with
 # -DAT_PET_BUILD_TESTS=ON so normal builds and the packaging flow are unaffected.
 option(AT_PET_BUILD_TESTS "Build the At-Pet QTest regression tests" OFF)
 
 if(AT_PET_BUILD_TESTS)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
     enable_testing()
+    qt_add_executable(event-guard tests/tst_eventguard.cpp app/agenteventguard.h)
+    target_include_directories(event-guard PRIVATE app)
+    target_link_libraries(event-guard PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(event-guard PROPERTIES WIN32_EXECUTABLE FALSE)
+    add_test(NAME event-guard COMMAND event-guard)
 
     # Production sources the SettingsDialog suites need. PetController lives in app/main.cpp
     # and is not linkable on its own, so each suite drives a fake controller instead.
     set(AT_PET_TEST_SOURCES
         app/settingsdialog.cpp
         app/settingsdialog.h
+        app/agentsetup.cpp app/agentsetup.h
+        app/updateswidget.cpp app/updateswidget.h
+        integrations/setup.qrc
         app/petwindow.cpp
         app/petwindow.h
-        app/petsettings.cpp
-        app/petsettings.h
         app/quotepack.cpp
         app/quotepack.h
         app/theme.cpp
@@ -101,11 +118,18 @@ if(AT_PET_BUILD_TESTS)
         assets/branding/branding.qrc
     )
 
+    # The UI implementation is identical across suites. Sharing these objects
+    # avoids compiling SettingsDialog/PetWindow and their Qt headers eight times.
+    add_library(at-pet-test-ui OBJECT ${AT_PET_TEST_SOURCES})
+    target_include_directories(at-pet-test-ui PRIVATE app)
+    target_compile_definitions(at-pet-test-ui PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(at-pet-test-ui PUBLIC Qt6::Widgets Qt6::Network)
+
     function(at_pet_add_test name source)
-        qt_add_executable(${name} tests/${source} ${AT_PET_TEST_SOURCES})
+        qt_add_executable(${name} tests/${source})
         target_include_directories(${name} PRIVATE app)
         target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test at-pet-pets)
+        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test at-pet-pets at-pet-test-ui)
         # Keep tests console programs so QTest's PASS/FAIL output stays visible.
         set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
         if(WIN32)
@@ -128,13 +152,14 @@ if(AT_PET_BUILD_TESTS)
     # One executable per suite: QTEST_MAIN expands to main(), so two suites cannot share one
     # binary.
     at_pet_add_test(gravity-sync tst_gravitysync.cpp)
-    at_pet_add_test(lookat-sync tst_lookatsync.cpp)
+    at_pet_add_test(event-scheduler tst_eventscheduler.cpp)
     at_pet_add_test(language-sync tst_languagesync.cpp)
     at_pet_add_test(quote-pack tst_quotepack.cpp)
     at_pet_add_test(animation-fallback tst_animationfallback.cpp)
     at_pet_add_test(walk-mirror tst_walkmirror.cpp)
     at_pet_add_test(builtin-pets tst_builtinpets.cpp)
     at_pet_add_test(agent-connectivity tst_agentconnectivity.cpp)
+    at_pet_add_test(agent-setup tst_agentsetup.cpp)
     target_sources(agent-connectivity PRIVATE
         app/agentconnectivity.cpp app/agentconnectivity.h
         app/agentmonitor.cpp app/agentmonitor.h
@@ -145,24 +170,14 @@ if(AT_PET_BUILD_TESTS)
     # The local HTTP API owns its own trust boundary (Host/Origin checks, no CORS headers,
     # petId validation). Those network sources stay out of AT_PET_TEST_SOURCES so the UI
     # suites above do not compile them.
-    set(AT_PET_HTTP_TEST_SOURCES
-        app/httpapi.cpp
-        app/httpapi.h
-        app/agentmonitor.cpp
-        app/agentmonitor.h
-        app/agentadapters/claude-code/adapter.cpp
-        app/agentadapters/claude-code/adapter.h
-        app/agentadapters/opencode-v2/adapter.cpp
-        app/agentadapters/opencode-v2/adapter.h
-        app/agentregistry.h
-        app/petid.h
-    )
-
     function(at_pet_add_http_test name source)
-        qt_add_executable(${name} tests/${source} ${AT_PET_HTTP_TEST_SOURCES})
+        qt_add_executable(${name} tests/${source})
         target_include_directories(${name} PRIVATE app)
         target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-        target_link_libraries(${name} PRIVATE Qt6::Network Qt6::Test)
+        target_link_libraries(${name} PRIVATE Qt6::Network Qt6::Test at-pet-api)
+        if(WIN32)
+            target_link_libraries(${name} PRIVATE advapi32)
+        endif()
         # QTEST_GUILESS_MAIN runs without a platform plugin, so no QT_QPA_PLATFORM is needed.
         set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
         add_test(NAME ${name} COMMAND ${name})
@@ -173,7 +188,10 @@ if(AT_PET_BUILD_TESTS)
     qt_add_executable(companion-flow ${AT_PET_COMPANION_SOURCES} tests/companion_cases.h)
     target_include_directories(companion-flow PRIVATE app tests)
     target_compile_definitions(companion-flow PRIVATE AT_PET_COMPANION_TEST AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test at-pet-pets)
+    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test at-pet-pets at-pet-api)
+    if(WIN32)
+        target_link_libraries(companion-flow PRIVATE advapi32)
+    endif()
     set_target_properties(companion-flow PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME companion-flow COMMAND companion-flow)
     set_tests_properties(companion-flow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

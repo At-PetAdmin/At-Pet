@@ -99,7 +99,7 @@ payload 形状还不确定时，先用 `--capture payload.jsonl` 跑一次真实
 - 读 stdin 超过 2 秒无数据或超过 1 MiB 就放弃。
 - 只上报上面列出的归一化字段：会话、应用、事件、模型、工具名、短消息、子代理标记。prompt 与工具结果不会转发。权限请求会带上工具名和截断后的描述 —— 那是用户做判断必需的信息。
 - 每条事件都带 source（等于 profile id），后续接入弱信号通道时，消费方能区分「hook 直报」和「推断」。
-- 默认连本机。`AT_PET_URL` 可以指向别处，但 At-Pet 的 API 按设计不鉴权，应当只在本机使用。
+- 仅允许本机回环 HTTP 地址。`client-auth.mjs` 从 At-Pet 的受保护目录读取当前 Agent 的凭证；复制集成时须与 `bridge.mjs` 一起复制。参见[认证与事件顺序说明](../../docs/local-api-security.md)。
 
 ## 测试
 
@@ -108,7 +108,7 @@ cd integrations/agent-bridge
 npm test
 ```
 
-共 26 项：路径解析、profile 继承、事件映射、子代理处理、条件规则、对着本地假 API 的权限允许 / 拒绝、两种权限响应格式、各 profile 的权限策略、payload 抓取，以及「At-Pet 不在也不让进程失败」。
+共 29 项：覆盖事件映射、权限回传、凭证隔离与轮换、重定向保护、payload 抓取，以及 At-Pet 不可用时的平稳回退。
 
 ## 与现有插件的关系
 

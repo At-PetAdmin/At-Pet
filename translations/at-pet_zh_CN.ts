@@ -557,6 +557,26 @@
         <source>Tasks</source>
         <translation>任务面板</translation>
     </message>
+    <message>
+        <source>Basketball game</source>
+        <translation>投篮小游戏</translation>
+    </message>
+    <message>
+        <source>Drag and throw your pet!
+Right-click to exit</source>
+        <translation>拖动并甩出桌宠！
+右键菜单取消投篮模式</translation>
+    </message>
+    <message>
+        <source>Basket! +1</source>
+        <translation>进球！+1</translation>
+    </message>
+    <message>
+        <source>Score: %1 / %2
+Drag to throw · Right-click to exit</source>
+        <translation>进球：%1 / %2 次投篮
+拖动甩出 · 右键菜单退出</translation>
+    </message>
 </context>
 <context>
     <name>QuestionDialog</name>
@@ -593,6 +613,94 @@
 </context>
 <context>
     <name>SettingsDialog</name>
+    <message>
+        <source>Select the Agents whose events you want to show. Set up their hooks in one click, or follow the organization plugin guide. Connection status updates when real events arrive.</source>
+        <translation>勾选需要展示事件的 Agent，一键配置 hook 或按组织仓库指引安装插件。收到真实事件后会更新连接状态。</translation>
+    </message>
+    <message>
+        <source>Agent connections</source>
+        <translation>Agent 接入</translation>
+    </message>
+    <message>
+        <source>Get updates</source>
+        <translation>获取更新</translation>
+    </message>
+    <message>
+        <source>One-click setup available · Backups preserve existing configuration</source>
+        <translation>支持一键配置 · 保留原有设置并自动备份</translation>
+    </message>
+    <message>
+        <source>External integration required · See compatibility guide</source>
+        <translation>需要外部集成 · 查看兼容性指引</translation>
+    </message>
+    <message>
+        <source>Plugin / manual setup · See the organization installation guide</source>
+        <translation>插件／手动接入 · 查看组织仓库安装指引</translation>
+    </message>
+    <message>
+        <source>%1 selected · %2 connected</source>
+        <translation>已选 %1 项 · 已连接 %2 项</translation>
+    </message>
+    <message>
+        <source>Search Agents…</source>
+        <translation>搜索 Agent…</translation>
+    </message>
+    <message>
+        <source>Set up selected Agents</source>
+        <translation>一键配置已选 Agent</translation>
+    </message>
+    <message>
+        <source>Configure supported hooks for all checked Agents, including those hidden by search. Other Agents show installation guides.</source>
+        <translation>为所有已勾选的 Agent 配置支持的 hook（包括被搜索隐藏的项），其余 Agent 提供安装指引。</translation>
+    </message>
+    <message>
+        <source>Set up hooks</source>
+        <translation>配置 hook</translation>
+    </message>
+    <message>
+        <source>Compatibility guide</source>
+        <translation>兼容性指引</translation>
+    </message>
+    <message>
+        <source>Installation guide</source>
+        <translation>安装指引</translation>
+    </message>
+    <message>
+        <source>%1 installation guide</source>
+        <translation>%1 安装指引</translation>
+    </message>
+    <message>
+        <source>Open organization repository</source>
+        <translation>打开组织仓库</translation>
+    </message>
+    <message>
+        <source>Could not open the browser.</source>
+        <translation>无法打开浏览器。</translation>
+    </message>
+    <message>
+        <source>Install Node.js 20+ and restart At-Pet, then try again.</source>
+        <translation>请安装 Node.js 20 或更高版本，重启 At-Pet 后重试。</translation>
+    </message>
+    <message>
+        <source>Backup: %1</source>
+        <translation>备份：%1</translation>
+    </message>
+    <message>
+        <source>%1 configured · %2 need a guide · %3 failed</source>
+        <translation>已配置 %1 项 · 需按指引安装 %2 项 · 失败 %3 项</translation>
+    </message>
+    <message>
+        <source>Agent setup</source>
+        <translation>Agent 接入配置</translation>
+    </message>
+    <message>
+        <source>Restart configured Agents and review their hooks. Connection status changes only after a real event. If the API port was changed, restart At-Pet too. Do not enable both direct hooks and a plugin for the same Agent.</source>
+        <translation>请重启已配置的 Agent 并审核 hook，收到真实事件后才会显示已连接。若修改过 API 端口，也需重启 At-Pet。同一 Agent 请选择 hook 或插件其中一种接入方式，避免重复事件。</translation>
+    </message>
+    <message>
+        <source>Open Installation guide on these Agent cards: %1</source>
+        <translation>请打开以下 Agent 卡片中的安装指引：%1</translation>
+    </message>
     <message>
         <source>%1 (Built-in)</source>
         <translation>%1（内置）</translation>
@@ -1396,6 +1504,186 @@ Local log: %1</source>
 %1</source>
         <translation>无法导出错误日志，原始日志已保留在：
 %1</translation>
+    </message>
+</context>
+<context>
+    <name>AgentSetup</name>
+    <message>
+        <source>Could not read %1.</source>
+        <translation>无法读取 %1。</translation>
+    </message>
+    <message>
+        <source>Could not back up %1.</source>
+        <translation>无法备份 %1。</translation>
+    </message>
+    <message>
+        <source>Could not create the configuration folder.</source>
+        <translation>无法创建配置目录。</translation>
+    </message>
+    <message>
+        <source>Could not save %1.</source>
+        <translation>无法保存 %1。</translation>
+    </message>
+    <message>
+        <source>Install the organization's Codex plugin:
+codex plugin marketplace add At-PetAdmin/codex-at-pet
+codex plugin add codex-at-pet@at-pet-local
+Restart Codex, then review and trust hooks in /hooks or Settings &gt; Hooks. Choose either the plugin or direct hooks to avoid duplicate events.</source>
+        <translation>安装组织中的 Codex 插件：
+codex plugin marketplace add At-PetAdmin/codex-at-pet
+codex plugin add codex-at-pet@at-pet-local
+重启 Codex 后，在 /hooks 或 Settings &gt; Hooks 中审核并信任钩子。插件和直接配置的 hook 请选择一种，避免重复事件。</translation>
+    </message>
+    <message>
+        <source>In the Harness Plugins page, install dsh-atpet. Or use:
+plugin_manager({ action: 'install_bundle', target: 'dsh-atpet' })
+For a web CLI profile: dsh plugin --profile web add dsh-atpet
+Disable the old atpet-hooks-codex sender after verifying the plugin.</source>
+        <translation>在 Harness 的插件页安装 dsh-atpet，或在 Agent 会话中使用：
+plugin_manager({ action: 'install_bundle', target: 'dsh-atpet' })
+web 命令行 profile 可使用：dsh plugin --profile web add dsh-atpet
+验证插件正常工作后，请停用旧的 atpet-hooks-codex 发送端。</translation>
+    </message>
+    <message>
+        <source>Clone At-PetAdmin/github-copilot_at-pet. From its root run:
+node scripts/install.mjs app --repo &lt;project&gt;
+For CLI hooks: node scripts/install.mjs cli --repo &lt;project&gt;
+Reload the Copilot App extension or restart Copilot CLI.</source>
+        <translation>克隆 At-PetAdmin/github-copilot_at-pet，在仓库根目录执行：
+node scripts/install.mjs app --repo &lt;项目路径&gt;
+CLI hooks 使用：node scripts/install.mjs cli --repo &lt;项目路径&gt;
+重新加载 Copilot App 扩展或重启 Copilot CLI。</translation>
+    </message>
+    <message>
+        <source>One-click setup installs at-pet.ts and client-auth.mjs into the global OpenCode plugins folder. Restart OpenCode V2 after setup. See the organization repository for manual installation.</source>
+        <translation>一键配置会将 at-pet.ts 和 client-auth.mjs 安装到 OpenCode 全局插件目录。配置后请重启 OpenCode V2。手动安装方式见组织仓库。</translation>
+    </message>
+    <message>
+        <source>Merge the Kimi Code config.toml hook example from the organization repository and point it to agent-bridge/bridge.mjs with the kimi-code profile. TOML is not changed automatically.</source>
+        <translation>参照组织仓库中 Kimi Code 的 config.toml hook 示例合并配置，指向 agent-bridge/bridge.mjs，并使用 kimi-code profile。程序不会自动修改 TOML。</translation>
+    </message>
+    <message>
+        <source>One-click setup merges At-Pet command hooks into the user configuration and backs up changed files. Node.js 20+ must be on the Agent's PATH. Restart the Agent and review its hooks. Plugin installation is an alternative; use only one sender.</source>
+        <translation>一键配置会把 At-Pet 命令 hook 合并到用户配置，并备份有改动的文件。Agent 的 PATH 中需有 Node.js 20 或更高版本。重启 Agent 后审核 hook。也可选择安装插件，请仅启用一种发送端。</translation>
+    </message>
+    <message>
+        <source>Follow this Agent's installation instructions in the organization repository. Its plugin or hook format requires manual setup. Restart the Agent after installation.</source>
+        <translation>请按组织仓库中该 Agent 的说明安装插件或手动配置 hook，安装后重启 Agent。</translation>
+    </message>
+    <message>
+        <source>No sender is bundled for this Agent. Follow the compatibility guide to connect an external integration to the local API.</source>
+        <translation>此 Agent 暂未附带发送端。请按兼容性指引通过外部集成接入本地 API。</translation>
+    </message>
+    <message>
+        <source>At-Pet 1.3.4+ requires local API authentication. Update the sender too; Node integrations need client-auth.mjs beside the entry script. Older organization plugins may need an authentication update. A configured hook is only shown as Connected after a real event arrives.</source>
+        <translation>At-Pet 1.3.4 及后续版本要求本地 API 认证，请同步更新发送端。Node 集成需将 client-auth.mjs 放在入口脚本旁。组织仓库中的旧插件可能需要补充认证支持。配置完成后，收到真实事件才会显示已连接。</translation>
+    </message>
+    <message>
+        <source>This Agent requires manual setup.</source>
+        <translation>此 Agent 需要手动安装。</translation>
+    </message>
+    <message>
+        <source>Bundled integration files are missing.</source>
+        <translation>缺少内置集成文件。</translation>
+    </message>
+    <message>
+        <source>Invalid JSON; the existing configuration was left unchanged.</source>
+        <translation>JSON 无效，已保留原配置。</translation>
+    </message>
+    <message>
+        <source>Invalid hooks format; the existing configuration was left unchanged.</source>
+        <translation>hook 格式无效，已保留原配置。</translation>
+    </message>
+    <message>
+        <source>The integration path contains unsupported shell characters.</source>
+        <translation>集成目录路径包含不支持的 shell 字符。</translation>
+    </message>
+</context>
+<context>
+    <name>UpdatesWidget</name>
+    <message>
+        <source>Could not open the browser.</source>
+        <translation>无法打开浏览器。</translation>
+    </message>
+    <message>
+        <source>Current version: %1</source>
+        <translation>当前版本：%1</translation>
+    </message>
+    <message>
+        <source>Get official stable and beta builds from At-PetAdmin/At-Pet. Downloads open in your browser; close At-Pet before extracting a new portable package. Keep your existing settings and pets.</source>
+        <translation>从 At-PetAdmin/At-Pet 获取正式版和测试版。点击下载后通过浏览器获取便携包，退出 At-Pet 再解压替换程序，原有设置与桌宠会保留。</translation>
+    </message>
+    <message>
+        <source>Stable releases</source>
+        <translation>正式版</translation>
+    </message>
+    <message>
+        <source>Beta / prereleases</source>
+        <translation>测试版／预发布</translation>
+    </message>
+    <message>
+        <source>Release channel</source>
+        <translation>版本通道</translation>
+    </message>
+    <message>
+        <source>Download architecture</source>
+        <translation>下载架构</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation>检查更新</translation>
+    </message>
+    <message>
+        <source>Release notes on GitHub</source>
+        <translation>查看发布说明</translation>
+    </message>
+    <message>
+        <source>Download this version</source>
+        <translation>下载此版本</translation>
+    </message>
+    <message>
+        <source>Release notes appear here after checking.</source>
+        <translation>检查更新后在这里显示发布说明。</translation>
+    </message>
+    <message>
+        <source>Could not check updates. Check your connection or GitHub rate limit, then retry. You can still open the releases page.</source>
+        <translation>检查更新失败，请检查网络或 GitHub 请求额度后重试。仍可打开发布页面手动下载。</translation>
+    </message>
+    <message>
+        <source>Invalid release response. Please retry later.</source>
+        <translation>发布信息格式无效，请稍后重试。</translation>
+    </message>
+    <message>
+        <source>Too many releases. Open GitHub to view all versions.</source>
+        <translation>发布记录过多，请打开 GitHub 查看全部版本。</translation>
+    </message>
+    <message>
+        <source>Checking GitHub releases…</source>
+        <translation>正在查询 GitHub 发布信息…</translation>
+    </message>
+    <message>
+        <source>Choose a channel, then check for updates.</source>
+        <translation>选择正式版或测试版，然后检查更新。</translation>
+    </message>
+    <message>
+        <source>No published release in this channel.</source>
+        <translation>此通道暂无已发布版本。</translation>
+    </message>
+    <message>
+        <source>%1 is available.</source>
+        <translation>可获取 %1。</translation>
+    </message>
+    <message>
+        <source>You are using %1.</source>
+        <translation>当前正在使用 %1。</translation>
+    </message>
+    <message>
+        <source>Latest in this channel: %1. This is older than your current version.</source>
+        <translation>此通道最新版本为 %1，早于当前使用的版本。</translation>
+    </message>
+    <message>
+        <source>The package for this architecture is not available yet.</source>
+        <translation>此架构的安装包尚未上传。</translation>
     </message>
 </context>
 </TS>

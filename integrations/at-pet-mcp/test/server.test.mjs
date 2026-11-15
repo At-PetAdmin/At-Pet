@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import test from "node:test";
+process.env.AT_PET_API_TOKEN = "test-mcp-credential";
 
 const serverPath = fileURLToPath(new URL("../server.mjs", import.meta.url));
 
@@ -70,7 +71,10 @@ test("exposes MCP tools and forwards a limited event to At-Pet", async () => {
     });
     assert.equal(report.isError, undefined);
     assert.match(report.content[0].text, /accepted tool_start/);
-    assert.deepEqual(receivedEvents, [
+    assert.ok(receivedEvents[0].eventId);
+    assert.ok(Number.isFinite(Date.parse(receivedEvents[0].occurredAt)));
+    const { eventId, occurredAt, ...reported } = receivedEvents[0];
+    assert.deepEqual([reported], [
       {
         sessionId: "test-session",
         agentApp: "opencode",

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "apicredentials.h"
+
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
@@ -15,6 +17,7 @@ public:
     explicit HttpApi(std::function<QJsonObject()> stateProvider, QObject *parent = nullptr);
     bool start(quint16 port = 8765);
     quint16 port() const;
+    void setClients(const QList<ApiClient> &clients) { clients_ = clients; }
     void publishState();
     void setPermissionForwardingEnabled(bool enabled) { permissionForwardingEnabled_ = enabled; }
     void resolvePermission(const QString &requestId, bool allowOnce);
@@ -38,7 +41,7 @@ private:
     bool requestIsTrusted(QTcpSocket *socket, const QByteArray &method,
                           const QHash<QByteArray, QByteArray> &headers, bool ambiguousHeaders);
     void routeRequest(QTcpSocket *socket, const QByteArray &method, const QByteArray &path,
-                      const QByteArray &body);
+                      const QByteArray &body, const ApiClient &client);
     void sendJson(QTcpSocket *socket, int status, const QJsonObject &json);
     void broadcastState();
 
@@ -47,14 +50,17 @@ private:
         QString decision = QStringLiteral("pending");
         bool isClaudeHttpHook = false;
         QPointer<QTcpSocket> hookSocket;
+        QString clientId;
     };
     struct QuestionRequest {
         QJsonObject details;
         QString status = QStringLiteral("pending");
         QString answer;
+        QString clientId;
     };
 
     QTcpServer server_;
+    QList<ApiClient> clients_;
     bool permissionForwardingEnabled_ = true;
     std::function<QJsonObject()> stateProvider_;
     QList<QTcpSocket *> eventClients_;

@@ -4,7 +4,9 @@
 #include "httpapi.h"
 #include "petid.h"
 #include "petcatalog.h"
-#include "petsettings.h"
+#include "agenteventscheduler.h"
+#include "apicredentials.h"
+#include "agenteventguard.h"
 #include "permissiondialog.h"
 #include "questiondialog.h"
 #include "petwindow.h"
@@ -90,8 +92,8 @@ QString eventToken(const QString &name) {
     return token;
 }
 
-QString sessionKey(const QString &agentKey, const QString &sessionId) {
-    return agentKey + QChar(0x1f) + sessionId;
+QString sessionKey(const QString &agentKey, const QString &sessionId, const QString &clientId = {}) {
+    return clientId + QChar(0x1f) + agentKey + QChar(0x1f) + sessionId;
 }
 
 bool isPotentiallyDangerous(const QJsonObject &request) {
@@ -196,8 +198,6 @@ public:
         quotePack_ = QuotePack::load(QuotePack::defaultPath());
         subagentPetsEnabled_ = QSettings().value("agents/showSubagentPets", false).toBool();
         freeMovementEnabled_ = QSettings().value("pet/freeMovement", true).toBool();
-        // Migrates the legacy pet/lookAtCopilot key on first run, then the member owns it.
-        lookAtMouseEnabled_ = petsettings::loadLookAtMouse();
         gravityEnabled_ = QSettings().value("pet/gravity", false).toBool();
         gravityScale_ = qBound(0.1, QSettings().value("pet/gravityScale", 1.0).toDouble(), 3.0);
         completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
@@ -258,14 +258,23 @@ public:
         const quint16 savedPort = quint16(QSettings().value("api/port", 8765).toUInt());
         const quint16 port = portOk && requestedPort > 0 && requestedPort <= 65535
             ? quint16(requestedPort) : (savedPort >= 1024 ? savedPort : 8765);
-        if (!api_->start(port))
+        QList<ApiClient> apiClients;
+        QString credentialError;
+        if (!apicredentials::loadOrCreate(&apiClients, &credentialError)) {
+            qWarning("At-Pet local API disabled: %s", qPrintable(credentialError));
+        } else {
+            api_->setClients(apiClients);
+        }
+        if (!apiClients.isEmpty() && !api_->start(port))
             qWarning("At-Pet local API could not bind to port %u", unsigned(port));
 
         createTrayIcon();
         startSelectedPet();
-        lookTimer_.setInterval(120);
-        connect(&lookTimer_, &QTimer::timeout, this, &PetController::updateLookTarget);
-        lookTimer_.start();
+        eventPresentationTimer_.setInterval(200);
+        connect(&eventPresentationTimer_, &QTimer::timeout, this, [this] {
+            if (!sessions_.isEmpty()) applySessionAnimation();
+        });
+        eventPresentationTimer_.start();
         fullscreenTimer_.setInterval(900);
         connect(&fullscreenTimer_, &QTimer::timeout, this, &PetController::updateFullscreenState);
         fullscreenTimer_.start();
@@ -285,6 +294,7 @@ public:
 
 private:
     struct SessionState {
+        QString clientId;
         QString sessionId;
         QString agentApp;
         QString agentKey;
@@ -295,6 +305,7 @@ private:
         QString source;
         QDateTime updatedAt;
         quint64 sequence = 0;
+        int activeToolCount = 0;
         bool isSubagent = false;
         bool terminal = false;
     };
@@ -324,9 +335,9 @@ private:
     }
 
     PetWindow *createPet(const QString &directory, const QPoint &position) {
+        eventScheduler_.forget("main");
         auto *pet = new PetWindow(directory);
         pets_.append(pet);
-        pet->setLookAtMouse(lookAtMouseEnabled_);
         pet->setFreeMovementEnabled(freeMovementEnabled_);
         pet->setGravityScale(gravityScale_);
         pet->setGravityEnabled(gravityEnabled_);
@@ -365,7 +376,6 @@ private:
         connect(pet, &PetWindow::deleteRequested, this, &PetController::deletePet);
         // Pet context menu entry: go through the controller instead of writing QSettings here,
         // so the persisted value, every other pet window and the settings dialog all follow.
-        connect(pet, &PetWindow::lookAtMouseToggled, this, &PetController::setLookAtMouseEnabled);
         connect(pet, &PetWindow::doNotDisturbToggled, this, [this](bool enabled) {
             if (syncingDoNotDisturb_) return;
             setManualDoNotDisturb(enabled);
@@ -416,8 +426,6 @@ private:
             connect(settingsDialog_, &SettingsDialog::languageChanged, this, [this](const QString &language) {
                 setLanguage(language);
             });
-            connect(settingsDialog_, &SettingsDialog::lookAtMouseToggled, this,
-                    &PetController::setLookAtMouseEnabled);
             connect(settingsDialog_, &SettingsDialog::autoDoNotDisturbToggled, this, [this](bool enabled) {
                 autoDoNotDisturbEnabled_ = enabled;
                 QSettings().setValue(QStringLiteral("pet/autoDoNotDisturb"), enabled);
@@ -465,7 +473,6 @@ private:
         if (!settingsDialog_)
             return;
         settingsDialog_->setGravityEnabled(gravityEnabled_);
-        settingsDialog_->setLookAtMouseEnabled(lookAtMouseEnabled_);
         settingsDialog_->setLanguage(language_);
         settingsDialog_->setAgentConnections(agentConnectivity_.snapshot());
     }
@@ -499,16 +506,6 @@ private:
             pet->setFreeMovementEnabled(enabled);
     }
 
-    void setLookAtMouseEnabled(bool enabled) {
-        if (lookAtMouseEnabled_ == enabled)
-            return;
-        lookAtMouseEnabled_ = enabled;
-        petsettings::storeLookAtMouse(enabled);
-        for (PetWindow *pet : visiblePets())
-            pet->setLookAtMouse(enabled);
-        // Keep an already-open settings dialog in step with the pet context menu.
-        updateSettingsCheckboxes();
-    }
 
     void setGravityEnabled(bool enabled) {
         if (gravityEnabled_ == enabled)
@@ -550,8 +547,13 @@ private:
                     pet = createPet(petDirectory, position);
                     subagentPetWindows_.insert(it.key(), pet);
                 }
-                pet->setAnimation(it->animation);
-                if (!it->message.isEmpty() && !connectionAnnouncementPending() && !urgentNotification())
+                const bool present = eventScheduler_.present("sub/" + it.key(),
+                    it.key(), it->animation, it->message);
+                if (present && !pet->basketballEnabled()) {
+                    pet->setAnimation(it->animation);
+                    showScheduledResult(pet, it.value());
+                }
+                if (present && !it->message.isEmpty() && !connectionAnnouncementPending() && !urgentNotification())
                     pet->setSpeech(it->message);
                 ++index;
             }
@@ -568,6 +570,7 @@ private:
                 pet->close();
                 pet->deleteLater();
             }
+            eventScheduler_.forget("sub/" + it.key());
             it = subagentPetWindows_.erase(it);
         }
         publishState();
@@ -807,7 +810,8 @@ private:
     void onQuestionRequest(const QString &requestId, const QJsonObject &request) {
         trackRequest(requestId, request, "question");
         agentConnectivity_.recordContact(request.value("agentApp").toString(),
-                                         request.value("sessionId").toString());
+                                         request.value("sessionId").toString(), QDateTime::currentDateTimeUtc(),
+                                         request.value("clientId").toString());
         questionQueue_.enqueue(qMakePair(requestId, request));
         showNextQuestionDialog();
     }
@@ -888,14 +892,20 @@ private:
         publishState();
     }
 
-    void onAgentEvent(const QJsonObject &event) {
-        agentConnectivity_.recordEvent(event);
+    void onAgentEvent(QJsonObject event) {
+        updateAgentEvent(event, false);
+    }
+
+    void updateAgentEvent(QJsonObject event, bool permissionControl) {
         const QString sessionId = event.value("sessionId").toString().trimmed();
         if (sessionId.isEmpty())
             return;
         const QString agentApp = normalizeAgentApp(event.value("agentApp").toString());
         const QString agentKey = agentAppKey(agentApp);
-        const QString key = sessionKey(agentKey, sessionId);
+        const QString clientId = event.value("clientId").toString();
+        const QString key = sessionKey(agentKey, sessionId, clientId);
+        if (!(permissionControl ? eventGuard_.permissionEvent(key, &event) : eventGuard_.accept(key, &event))) return;
+        agentConnectivity_.recordEvent(event);
         const QString eventName = eventToken(event.value("event").toString());
         bool successfulCompletion = false;
         if (agentKey != "external" &&
@@ -952,6 +962,8 @@ private:
             return;
 
         SessionState state;
+        state.clientId = clientId;
+        state.activeToolCount = event.value("activeToolCount").toInt();
         const auto previous = sessions_.constFind(key);
         successfulCompletion = successfulCompletion &&
             (previous == sessions_.cend() || !previous->terminal);
@@ -972,6 +984,7 @@ private:
         state.source = event.value("source").toString().left(40);
         state.updatedAt = QDateTime::currentDateTimeUtc();
         state.sequence = ++sessionSequence_;
+        if (event.value("toolFailure").toBool()) terminal = false;
         state.terminal = terminal;
         const bool newResult = terminal && (previous == sessions_.cend() || !previous->terminal || previous->animation != animation);
         sessions_.insert(key, state);
@@ -982,25 +995,6 @@ private:
         }
         if (terminal && animation == "error") errorNotificationUntil_ = state.updatedAt.addSecs(6);
         applySessionAnimation();
-        // Termination speaks a pack line over the agent message that applySessionAnimation()
-        // just showed. An empty category keeps the original message-only behaviour.
-        QuotePack::Category terminalCategory = QuotePack::Category::Done;
-        bool terminalQuote = false;
-        if (!terminalQuote && terminal && animation == QLatin1String("error")) {
-            terminalCategory = QuotePack::Category::Error;
-            terminalQuote = true;
-        } else if (!terminalQuote && terminal && animation == QLatin1String("cancelled")) {
-            terminalCategory = QuotePack::Category::Cancel;
-            terminalQuote = true;
-        }
-        if (terminalQuote && pendingRequests_.isEmpty() && (animation == "error" || !urgentNotification())) {
-            for (PetWindow *pet : visiblePets()) {
-                const QString quote = pet->randomQuote(terminalCategory, language_, quotePack_);
-                if (!quote.isEmpty() || !state.message.isEmpty())
-                    pet->setSpeech(quote.isEmpty() ? state.message : quote);
-            }
-            publishState();
-        }
         if (successfulCompletion) {
             ++pendingCompletions_;
             if (!completionTimer_.isActive()) completionTimer_.start();
@@ -1020,7 +1014,7 @@ private:
         trackRequest(requestId, request, "permission");
         QJsonObject event = request;
         event.insert("event", "permission_requested");
-        onAgentEvent(event);
+        updateAgentEvent(event, true);
         permissionQueue_.enqueue(qMakePair(requestId, request));
         showNextPermissionDialog();
     }
@@ -1069,7 +1063,7 @@ private:
             publishState();
             QJsonObject event = request;
             event.insert("event", allowOnce ? "permission_approved" : "permission_denied");
-            onAgentEvent(event);
+            updateAgentEvent(event, true);
             permissionDialog_ = nullptr;
             currentPermissionRequestId_.clear();
             QTimer::singleShot(0, this, &PetController::showNextPermissionDialog);
@@ -1079,28 +1073,37 @@ private:
         dialog->activateWindow();
     }
 
+    void showScheduledResult(PetWindow *pet, const SessionState &state) {
+        if (!state.terminal || (state.animation != "error" && state.animation != "cancelled")) return;
+        if (!pendingRequests_.isEmpty() || (state.animation != "error" && urgentNotification())) return;
+        const auto category = state.animation == "error" ? QuotePack::Category::Error : QuotePack::Category::Cancel;
+        const QString quote = pet->randomQuote(category, language_, quotePack_);
+        if (!quote.isEmpty() || !state.message.isEmpty()) pet->setSpeech(quote.isEmpty() ? state.message : quote);
+    }
+
     void applySessionAnimation() {
-        auto latest = sessions_.cend();
+        QVector<AgentEventScheduler::Candidate> candidates;
+        bool hasMain = false;
+        for (const auto &state : sessions_)
+            if (!state.isSubagent && boundPetId(state.agentKey).isEmpty()) hasMain = true;
         for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
-            if (it->isSubagent || !boundPetId(it->agentKey).isEmpty())
-                continue;
-            if (latest == sessions_.cend() || it->updatedAt > latest->updatedAt ||
-                (it->updatedAt == latest->updatedAt && it->sequence > latest->sequence))
-                latest = it;
+            if (!boundPetId(it->agentKey).isEmpty() ||
+                (hasMain && it->isSubagent && AgentEventScheduler::priority(it->animation) == 0)) continue;
+            candidates.append({it.key(), it->animation, it->message});
         }
-        if (latest == sessions_.cend()) {
-            for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
-                if (!boundPetId(it->agentKey).isEmpty()) continue;
-                if (latest == sessions_.cend() || it->updatedAt > latest->updatedAt ||
-                    (it->updatedAt == latest->updatedAt && it->sequence > latest->sequence))
-                    latest = it;
-            }
-        }
+        const QString selected = eventScheduler_.select("main", candidates);
+        const auto latest = sessions_.constFind(selected);
+        const bool present = latest == sessions_.cend()
+            ? eventScheduler_.present("main", "idle", "idle", {})
+            : eventScheduler_.present("main", selected, latest->animation, latest->message);
         for (PetWindow *pet : visiblePets()) {
             if (boundPetWindows_.values().contains(pet) || subagentPetWindows_.values().contains(pet)) continue;
-            pet->setAnimation(latest == sessions_.cend() ? QStringLiteral("idle") : latest->animation);
+            if (present && !pet->basketballEnabled()) {
+                pet->setAnimation(latest == sessions_.cend() ? QStringLiteral("idle") : latest->animation);
+                if (latest != sessions_.cend()) showScheduledResult(pet, latest.value());
+            }
         }
-        if (latest != sessions_.cend() && !latest->message.isEmpty() && !connectionAnnouncementPending() && !urgentNotification()) {
+        if (present && latest != sessions_.cend() && !latest->message.isEmpty() && !connectionAnnouncementPending() && !urgentNotification()) {
             for (PetWindow *pet : visiblePets()) {
                 if (boundPetWindows_.values().contains(pet) || subagentPetWindows_.values().contains(pet)) continue;
                 if (pet->speech() != latest->message) pet->setSpeech(latest->message);
@@ -1121,10 +1124,14 @@ private:
     void updateBoundPets() {
         QSet<QString> active;
         QHash<QString, SessionState> latest;
-        for (const auto &state : sessions_) {
-            if (state.isSubagent || boundPetId(state.agentKey).isEmpty()) continue;
-            if (!latest.contains(state.agentKey) || latest.value(state.agentKey).sequence < state.sequence)
-                latest.insert(state.agentKey, state);
+        QHash<QString, QVector<AgentEventScheduler::Candidate>> groups;
+        for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
+            if (it->isSubagent || boundPetId(it->agentKey).isEmpty()) continue;
+            groups[it->agentKey].append({it.key(), it->animation, it->message});
+        }
+        for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
+            const auto selected = eventScheduler_.select("bound/" + it.key(), it.value());
+            latest.insert(it.key(), sessions_.value(selected));
         }
         for (auto it = latest.cbegin(); it != latest.cend(); ++it) {
             active.insert(it.key());
@@ -1137,14 +1144,21 @@ private:
                 pet = createPet(petcatalog::directory(id),
                                 defaultPosition() - QPoint(180 * active.size(), 0));
                 boundPetWindows_.insert(it.key(), pet);
+                eventScheduler_.forget("bound/" + it.key());
             }
-            pet->setAnimation(it->animation);
-            if (!it->message.isEmpty() && !urgentNotification() && !connectionAnnouncementPending() && pet->speech() != it->message)
+            const bool present = eventScheduler_.present("bound/" + it.key(),
+                sessionKey(it->agentKey, it->sessionId, it->clientId), it->animation, it->message);
+            if (present && !pet->basketballEnabled()) {
+                pet->setAnimation(it->animation);
+                showScheduledResult(pet, it.value());
+            }
+            if (present && !it->message.isEmpty() && !urgentNotification() && !connectionAnnouncementPending() && pet->speech() != it->message)
                 pet->setSpeech(it->message);
         }
         for (auto it = boundPetWindows_.begin(); it != boundPetWindows_.end();) {
             if (active.contains(it.key())) { ++it; continue; }
             if (it.value()) { pets_.removeAll(it.value()); it.value()->close(); it.value()->deleteLater(); }
+            eventScheduler_.forget("bound/" + it.key());
             it = boundPetWindows_.erase(it);
         }
         publishState();
@@ -1159,6 +1173,7 @@ private:
         QJsonArray sessions;
         for (auto it = sessions_.cbegin(); it != sessions_.cend(); ++it) {
             QJsonObject session{{"sessionId", it->sessionId}, {"agentApp", it->agentApp},
+                                {"clientId", it->clientId}, {"activeToolCount", it->activeToolCount},
                                 {"animation", it->animation}, {"message", it->message}, {"model", it->model},
                                 {"isSubagent", it->isSubagent},
                                 {"updatedAt", it->updatedAt.toString(Qt::ISODate)}};
@@ -1196,13 +1211,6 @@ private:
         if (api_) api_->publishState();
     }
 
-    void updateLookTarget() {
-        const QPoint cursor = QCursor::pos();
-        for (PetWindow *pet : visiblePets()) {
-            if (!pet->isVisible() || !pet->lookAtMouse()) continue;
-            pet->setLookTarget(cursor);
-        }
-    }
 
     void pruneStaleSessions() {
         agentConnectivity_.expire();
@@ -1382,7 +1390,6 @@ private:
     bool translatorInstalled_ = false;
     bool subagentPetsEnabled_ = false;
     bool freeMovementEnabled_ = true;
-    bool lookAtMouseEnabled_ = false;
     bool gravityEnabled_ = false;
     qreal gravityScale_ = 1.0;
     bool completionSoundEnabled_ = true;
@@ -1404,7 +1411,9 @@ private:
     QQueue<QPair<QString, QJsonObject>> questionQueue_;
     QPointer<QuestionDialog> questionDialog_;
     QString currentQuestionRequestId_;
-    QTimer lookTimer_;
+    AgentEventScheduler eventScheduler_;
+    AgentEventGuard eventGuard_;
+    QTimer eventPresentationTimer_;
     QTimer fullscreenTimer_;
     QTimer housekeepingTimer_;
     QTimer idleQuoteTimer_;

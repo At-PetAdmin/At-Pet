@@ -70,7 +70,6 @@ signals:
     void companionSettingsChanged();
     void petSwitched(const QString &petId);
     void languageChanged(const QString &language);
-    void lookAtMouseToggled(bool enabled);
     void autoDoNotDisturbToggled(bool enabled);
     void gravityToggled(bool enabled);
     void gravityScaleChanged(qreal scale);
@@ -88,7 +87,6 @@ public slots:
     // Adopt the authoritative state owned by the window that created this dialog. These never
     // emit the matching signal, so pushing state cannot loop back.
     void setGravityEnabled(bool enabled);
-    void setLookAtMouseEnabled(bool enabled);
     void setLanguage(const QString &language);
     void setAgentConnections(const QJsonObject &connections);
 
@@ -120,6 +118,10 @@ private:
     void refreshPetQuotePackStatus();
     void updateAgentDescriptions();
     void updateAgentConnectionLabels();
+    void configureAgents(const QStringList &keys);
+    void showAgentGuide(const QString &key);
+    void filterAgents();
+    void updateAgentSetupUi();
     void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
 
@@ -164,6 +166,13 @@ private:
     QJsonObject agentConnections_;
     QCheckBox *subagentPetCheck_ = nullptr;
     QPushButton *btnSaveAgents_ = nullptr;
+    QLineEdit *agentSearch_ = nullptr;
+    QLabel *agentSummary_ = nullptr;
+    QLabel *agentSetupResult_ = nullptr;
+    QPushButton *btnConfigureAgents_ = nullptr;
+    QHash<QString, QWidget *> agentCards_;
+    QHash<QString, QPushButton *> agentSetupButtons_;
+    QHash<QString, QPushButton *> agentGuideButtons_;
 
     // General Settings tab
     QGroupBox *preferencesGroupBox_ = nullptr;
@@ -172,7 +181,6 @@ private:
     QLabel *apiPortLabel_ = nullptr;
     QComboBox *languageCombo_ = nullptr;
     QComboBox *themeCombo_ = nullptr;
-    QCheckBox *lookAtMouseCheck_ = nullptr;
     QCheckBox *autoDndCheck_ = nullptr;
     QCheckBox *gravityCheck_ = nullptr;
     QLabel *gravityScaleLabel_ = nullptr;

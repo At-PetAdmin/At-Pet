@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { authenticatedFetch } from "./client-auth.mjs";
 
 const DEFAULT_API_URL = "http://127.0.0.1:8765";
 const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
@@ -105,24 +107,32 @@ server.registerTool(
         .min(1)
         .max(160)
         .optional()
-        .describe("Optional tool name for tool_start or tool_end. Do not include tool arguments or results.")
+        .describe("Optional tool name for tool_start or tool_end. Do not include tool arguments or results."),
+      runId: z.string().min(1).max(256).optional(),
+      sequence: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+      eventId: z.string().min(1).max(256).optional(),
+      toolCallId: z.string().min(1).max(256).optional()
     }
   },
-  async ({ event, sessionId, agentApp, toolName }) => {
+  async ({ event, sessionId, agentApp, toolName, runId, sequence, eventId, toolCallId }) => {
+    if (sequence !== undefined && !runId) return toolError("sequence requires a stable runId.");
     const source = agentApp || defaultAgentApp;
-    const payload = { sessionId, agentApp: source, event };
+    const payload = { sessionId, agentApp: source, event, eventId: eventId || randomUUID(), occurredAt: new Date().toISOString() };
+    if (runId) payload.runId = runId;
+    if (sequence !== undefined) payload.sequence = sequence;
+    if (toolCallId) payload.toolCallId = toolCallId;
     if (toolName) {
       payload.toolName = toolName;
       if (event === "tool_start") payload.message = toolName;
     }
 
     try {
-      const response = await fetch(`${apiOrigin}/event`, {
+      const response = await authenticatedFetch(apiOrigin, "/event", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(3000)
-      });
+      }, source);
       if (!response.ok) {
         return toolError(`At-Pet event endpoint returned HTTP ${response.status}.`);
       }

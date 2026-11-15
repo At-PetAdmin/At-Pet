@@ -1,4 +1,5 @@
 #include "agentconnectivity.h"
+#include "agenteventguard.h"
 #include "agentmonitor.h"
 #include "settingsdialog.h"
 #include "testsettings.h"
@@ -31,6 +32,41 @@ class AgentConnectivityTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void nativeClaudePromptIdsPreventCrossTurnReplay() {
+        const auto strategy = agentMonitorStrategy(AgentMonitorType::ClaudeCodeHttpHooks);
+        QVERIFY(strategy);
+        AgentEventGuard guard;
+        const auto normalize = [&](const QString &hook, const QString &prompt) {
+            QJsonObject event;
+            QString error;
+            if (!strategy->normalizeEvent({{"session_id", "s"}, {"prompt_id", prompt},
+                {"hook_event_name", hook}, {"tool_use_id", "call-a"}}, &event, &error)) return QJsonObject{};
+            return event;
+        };
+        auto first = normalize("UserPromptSubmit", "prompt-a");
+        QVERIFY(guard.accept("client/s", &first));
+        auto done = normalize("Stop", "prompt-a");
+        QVERIFY(guard.accept("client/s", &done));
+        auto repeatedStart = normalize("UserPromptSubmit", "prompt-a");
+        QVERIFY(!guard.accept("client/s", &repeatedStart));
+        auto second = normalize("UserPromptSubmit", "prompt-b");
+        QVERIFY(guard.accept("client/s", &second));
+        auto lateDone = normalize("Stop", "prompt-a");
+        QVERIFY(!guard.accept("client/s", &lateDone));
+        auto tool = normalize("PreToolUse", "prompt-b");
+        QCOMPARE(tool.value("toolCallId").toString(), QString("call-a"));
+        QVERIFY(guard.accept("client/s", &tool));
+    }
+    void sameSessionIdFromDifferentClientsIsIndependent() {
+        AgentConnectivity connectivity;
+        connectivity.recordEvent({{"agentApp", "claude-code"}, {"clientId", "a"}, {"sessionId", "same"}, {"event", "started"}});
+        connectivity.recordEvent({{"agentApp", "claude-code"}, {"clientId", "b"}, {"sessionId", "same"}, {"event", "started"}});
+        QCOMPARE(connectivity.snapshot().value("claudecode").toObject().value("sessionCount").toInt(), 2);
+        connectivity.recordEvent({{"agentApp", "claude-code"}, {"clientId", "a"}, {"sessionId", "same"}, {"event", "session_end"}});
+        const auto state = connectivity.snapshot().value("claudecode").toObject();
+        QVERIFY(state.value("connected").toBool());
+        QCOMPARE(state.value("sessionCount").toInt(), 1);
+    }
     void initTestCase() {
         isolateTestSettings();
         QCoreApplication::setOrganizationName(QStringLiteral("AtPetTests"));

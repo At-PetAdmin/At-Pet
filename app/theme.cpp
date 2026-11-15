@@ -45,6 +45,7 @@ QString expandTokens(QString text, const Palette &p) {
         {QLatin1String("@dangerBg@"), alpha(p.dangerText, p.dark ? 28 : 16)},
         {QLatin1String("@scrollHandle@"), hex(p.scrollHandle)},
         {QLatin1String("@scrollHandleHover@"), hex(p.scrollHandleHover)},
+        {QLatin1String("@checkIcon@"), p.dark ? QStringLiteral(":/integrations/check-dark.xpm") : QStringLiteral(":/integrations/check-light.xpm")},
     };
     for (const auto &token : tokens)
         text.replace(token.first, token.second);
@@ -214,9 +215,11 @@ QComboBox QAbstractItemView { background: @surface@; border: 1px solid @border@;
 QCheckBox { color: @text@; spacing: 10px; }
 QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1px solid @borderStrong@; background: @surfaceAlt@; }
 QCheckBox::indicator:hover { border-color: @accent@; }
-QCheckBox::indicator:checked { background: @accent@; border-color: @accent@; }
+QCheckBox::indicator:checked { background: @accent@; border-color: @accent@; image: url(@checkIcon@); }
 QCheckBox::indicator:disabled { border-color: @border@; background: transparent; }
 QLabel { color: @textSecondary@; }
+QFrame[agentCard="true"] { background: @surfaceAlt@; border: 1px solid @border@; border-radius: 8px; }
+QLineEdit, QPlainTextEdit, QTextBrowser { background: @surfaceAlt@; border: 1px solid @border@; border-radius: 6px; padding: 8px; color: @text@; selection-background-color: @selectionBg@; selection-color: @selectionText@; }
 QScrollArea { border: none; background: transparent; }
 QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
 QScrollBar::handle:vertical { background: @scrollHandle@; border-radius: 4px; min-height: 28px; }

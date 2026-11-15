@@ -19,7 +19,8 @@
 - Agent Monitoring 设置会显示每个来源的接入策略，并可过滤用于控制动画的事件。At-Pet 不会扫描 Agent 进程或读取与机器相关的日志路径；原生集成需在对应 Agent 应用中安装。
 - 设置中的 Agent 事件接入会动态显示各来源的连通状态和最近事件时间。首次收到某个 Agent 的事件或断开后重新接入时，桌宠会通过气泡播报“xxx连接成功”；连续事件不会重复播报。任务完成或 `idle` 不会断开连接；同一 Agent 的所有会话结束后显示“已断开”，30 分钟没有事件则显示“近期无事件”。连通状态根据事件判断，与动画过滤开关独立。
 - 可选的任务完成提示音（在常规设置中取消勾选“Agent 任务完成时播放声音”即可静音）。权限弹窗会通过启发式规则对潜在危险操作进行视觉高亮；此警告不会改变“仅本次允许/拒绝”选项。Agent 也可以通过本地 HTTP API 向用户提问。
-- Windows 专属选项：让桌宠的眼睛跟随鼠标指针（右键菜单中的“看向鼠标指针”，或常规设置中的“眼睛跟随鼠标指针（Windows）”）。这只会改变桌宠的视线，不会检测或同步 Copilot 会话状态。
+- 统一 Agent 事件调度：并发会话轮流展示，合并高频工具事件，权限与错误优先显示，减少动画和消息抖动。
+- 投篮小游戏：右键开启“投篮小游戏”，拖着桌宠向篮筐甩出，从上向下穿过篮圈即可得分；再次取消菜单选项即可退出。详见[玩法与调度说明](docs/agent-scheduling-and-basketball.md)。
 - 挂件模式：把桌宠拖到其他窗口（VS Code、Copilot 应用、资源管理器等带边框窗口）的标题栏上，它会走到窗口边缘并“坐”在那里。被挂载的桌宠会随宿主窗口移动或缩放一起移动，可以自行或通过右键菜单“沿窗口边框下滑”顺着边框往下滑，被拖走时则会离开窗口。
 - 免打扰：当前台运行全屏游戏或编辑器，且开启常规设置中的“全屏应用时自动免打扰（缩小并贴到屏幕边缘）”时，所有桌宠都会缩小成贴在屏幕边缘的小气泡。从托盘图标再次召唤（或取消勾选“免打扰”）后，它会回到原来的位置；托盘菜单也可手动切换该模式。
 - 戳一戳（单击）会显示随机语录，内容读取自 `pet.json` 的 `quotes`/`pokeQuotes`；未配置时显示内置问候语。
@@ -28,6 +29,9 @@
 - 托盘菜单支持显示/隐藏宠物、导入宠物、召唤宠物库中的全部宠物，以及在简体中文和英语之间切换。默认跟随系统语言，并记住您的选择。
 
 内置桌宠库包含 Octocat、ChatGPT、Claude、DeepSeek 和 Gemini，无需手动导入，可在设置和桌宠右键菜单中预览，通过设置、托盘和桌宠右键菜单切换，也支持全员上班和 Agent 专属桌宠绑定。新增四只桌宠各有 33 条中英文语录，覆盖戳一戳、任务完成、出错、取消和待机。独立语录和全局语录可覆盖内置语录；内置资源不能直接删除或编辑。
+
+新增的 [Agent 接入与获取更新](docs/agent-setup-and-updates.md)：在设置中搜索 Agent、批量配置已选来源的 hook，
+或打开组织插件安装指引；“获取更新”可分别检查正式版与测试版并下载 Windows AMD64 / ARM64 便携包。
 
 ## QQ 交流群
 
@@ -165,7 +169,7 @@ pwsh -File scripts/new-signing-cert.ps1
 
 ## 本地 API
 
-服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。该 API 不进行身份验证，仅用于同一台机器上的可信程序；请勿将其暴露或转发到网络。
+服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。除 `/health` 外，所有端点均需要 Bearer 凭证；Agent 凭证绑定对应 Agent，权限／问答请求仅可由所属客户端读取和取消；全局状态、SSE 和桌宠控制需要独立管理员凭证。更新时请同步升级桥接客户端，参见[认证、接入迁移与事件顺序说明](docs/local-api-security.md)。请勿将端口暴露或转发到网络。
 
 请求必须携带回环 `Host`（`127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`），且不得携带 `Origin` 请求头；因此网页、DNS rebinding 主机名以及 `<iframe sandbox>` 的 null origin 都会被 `403` 拒绝。`POST` 请求若带有 `Content-Type`，则必须是 `application/json`。响应不包含 `Access-Control-Allow-Origin`，浏览器源无法读取。
 
@@ -210,7 +214,7 @@ Agent `event` 值映射如下：`thinking`/`model_thinking` → thinking，`tool
 }
 ```
 
-**OpenCode V2：** 将 [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) 复制到项目的 `.opencode/plugins/` 文件夹，或全局目录 `%USERPROFILE%\.config\opencode\plugins\`，然后重启 OpenCode。仅当 At-Pet 使用非默认本地端口时才需设置 `AT_PET_URL`。插件会上报会话/工具事件，并将 `ask` 权限决定交给 At-Pet；若 At-Pet 不可用，则保留 OpenCode 原有的 `ask` 决定。插件卸载时，如果仍有权限弹窗，插件会取消待处理请求并关闭弹窗，不会更改 OpenCode 原有的 `ask` 决定。
+**OpenCode V2：** 将 [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) 和同目录的 `client-auth.mjs` 一起 复制到项目的 `.opencode/plugins/` 文件夹，或全局目录 `%USERPROFILE%\.config\opencode\plugins\`，然后重启 OpenCode。仅当 At-Pet 使用非默认本地端口时才需设置 `AT_PET_URL`。插件会上报会话/工具事件，并将 `ask` 权限决定交给 At-Pet；若 At-Pet 不可用，则保留 OpenCode 原有的 `ask` 决定。插件卸载时，如果仍有权限弹窗，插件会取消待处理请求并关闭弹窗，不会更改 OpenCode 原有的 `ask` 决定。
 
 **可选 MCP Server：** 兼容 MCP 的客户端可按 [`integrations/at-pet-mcp/README_CN.md`](integrations/at-pet-mcp/README_CN.md) 配置本地 stdio 桥接。工具仅在被明确调用时上报事件；与 hooks 和插件不同，MCP 不会自动监听生命周期。
 

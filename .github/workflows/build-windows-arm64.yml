@@ -23,6 +23,7 @@ jobs:
       artifact-metadata: write
     env:
       SIGNING_ENABLED: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+      SCCACHE_GHA_ENABLED: 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -70,6 +71,11 @@ jobs:
         with:
           arch: amd64_arm64
 
+      - name: Cache C++ compilation
+        uses: Mozilla-Actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.16.0
+
       - name: Configure and build
         shell: pwsh
         run: |
@@ -79,6 +85,7 @@ jobs:
           Write-Host "Using Qt host tools from $env:QT_HOST_ROOT"
           cmake -S . -B build-arm64 -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
             -DCMAKE_TOOLCHAIN_FILE="$env:QT_TARGET_ROOT/lib/cmake/Qt6/qt.toolchain.cmake" `
             -DCMAKE_PREFIX_PATH="$env:QT_TARGET_ROOT;$env:QT_HOST_ROOT" `
             -DQT_HOST_PATH="$env:QT_HOST_ROOT" `
@@ -226,7 +233,11 @@ jobs:
             if (-not $env:GITHUB_REF.StartsWith('refs/tags/v')) {
               throw "The requested release $tag does not exist; refusing to create it from a manual run."
             }
-            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "At-Pet $tag" --generate-notes
+            $releaseFlags = @()
+            if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+              $releaseFlags = @('--prerelease', '--draft', '--latest=false')
+            }
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "At-Pet $tag" --generate-notes @releaseFlags
             if ($LASTEXITCODE -ne 0) {
               gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
               if ($LASTEXITCODE -ne 0) { throw "Could not create or find release $tag." }

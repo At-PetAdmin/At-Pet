@@ -1,5 +1,9 @@
 # At-Pet
 
+Settings now offers searchable Agent cards, one-click hook setup for selected Agents,
+organization plugin installation guides, and separate stable/beta update downloads for Windows AMD64 and ARM64.
+See the [setup and update guide](docs/agent-setup-and-updates.md).
+
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white&style=flat-square)](https://isocpp.org/)
 [![Qt 6.4+](https://img.shields.io/badge/Qt-6.4%2B-41CD52?logo=qt&logoColor=white&style=flat-square)](https://www.qt.io/)
 [![Platform: Windows 10/11](https://img.shields.io/badge/Platform-Windows_10%2F11-0078D6?logo=windows&logoColor=white&style=flat-square)](https://www.microsoft.com/windows)
@@ -21,7 +25,8 @@ A C++17 desktop companion for Windows 10/11 on amd64 (x86-64) and ARM64, built o
 - Agent Monitoring settings show each source's integration strategy and can filter animation events. At-Pet does not scan agent processes or read machine-specific log paths. Native integrations must be installed in the agent application.
 - Agent settings show live connectivity and the last event time for each source. On first contact or reconnection, pets announce “xxx connected successfully” in a speech bubble without repeating it for every event. Task completion and `idle` keep the connection active; ending all sessions marks it disconnected, while 30 minutes without events marks it as having no recent events. Connectivity is inferred from incoming events, independently of animation filters.
 - Optional completion chime (muted via **Play a sound when an Agent task completes** in General Settings). Permission prompts visually highlight potentially dangerous actions as a heuristic; the warning does not change the Allow once / Deny choices. Agents can also ask the user a question through the local HTTP API.
-- Windows-only option to make the pet's eyes follow the mouse pointer (**Look at the mouse cursor** in the right-click menu, or **Eyes follow the mouse cursor (Windows)** in General Settings). This only changes the pet's gaze; it does not detect or synchronize Copilot session status.
+- Unified Agent event scheduling rotates concurrent sessions, coalesces frequent tool events, and prioritizes permissions and errors to keep animations and messages stable.
+- Basketball game: enable **Basketball game** in the pet's right-click menu, then drag and throw your pet through the hoop. Downward crossings score; uncheck the menu option to exit and restore normal movement.
 - Perch (widget) mode: drop a pet on the title bar of another window — VS Code, the Copilot app, Explorer, and similar framed windows — and it walks onto the edge and sits there. A perched pet rides along when you move or resize the host window, can slide down the frame on its own or via **Slide down the window frame**, and hops off when you drag it away.
 - Do not disturb: when a full-screen game or editor is in the foreground and **Do not disturb automatically in full-screen apps (shrink to the screen edge)** is enabled, every pet shrinks into a small bubble that hugs the screen edge. Summon it again from the tray icon (or untick **Do not disturb**), and it returns to where it was. The tray menu also offers the mode manually.
 - Poking a pet (single click) shows a random line, read from `quotes`/`pokeQuotes` in `pet.json`; without them the built-in greeting is used.
@@ -161,7 +166,7 @@ Example `pet.json` in the reference project's format:
 
  ## Local API
 
-The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. The API is unauthenticated and intended only for trusted programs on the same machine; do not expose or forward this port to a network.
+The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. All endpoints except `/health` require a bearer credential. Agent credentials are scoped to their Agent and their own permission/question requests; global state, SSE and pet control require the separate administrator credential. See [authentication, integration upgrades and event ordering](docs/local-api-security.md). Do not expose or forward this port to a network.
 
 Requests must carry a loopback `Host` (`127.0.0.1:<port>`, `localhost:<port>`, or `[::1]:<port>`) and must not carry an `Origin` header, so browser pages, DNS-rebinding host names, and null origins from a sandboxed iframe are rejected with `403`. A `POST` body must use `Content-Type: application/json` when that header is present. Responses never include `Access-Control-Allow-Origin`, so no browser origin can read them.
 
@@ -206,7 +211,7 @@ Permission prompts offer only **Allow once** or **Deny**; closing the dialog als
 }
 ```
 
-**OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
+**OpenCode V2:** copy [`integrations/opencode-v2/at-pet.ts`](integrations/opencode-v2/at-pet.ts) together with its adjacent `client-auth.mjs` into the project's `.opencode/plugins/` folder or `%USERPROFILE%\.config\opencode\plugins\` for a global install, then restart OpenCode. Set `AT_PET_URL` only if At-Pet uses a non-default local port. The plugin forwards session/tool events and sends `ask` permission decisions to At-Pet; unavailable At-Pet requests leave OpenCode's existing `ask` decision unchanged. If the plugin is unloaded while a prompt is open, it cancels the pending At-Pet request and closes the prompt without changing OpenCode's `ask` decision.
 
 **Optional MCP server:** MCP-compatible clients can use the local stdio bridge described in [`integrations/at-pet-mcp/README.md`](integrations/at-pet-mcp/README.md). Its tools report events only when explicitly called; unlike hooks and plugins, MCP does not automatically observe lifecycle events.
 

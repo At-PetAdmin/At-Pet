@@ -16,6 +16,43 @@ private slots:
         QCoreApplication::setApplicationName("CompanionTests");
     }
     void init() { QSettings().clear(); }
+    void concurrentEventsUseStablePresentation() {
+        PetController controller;
+        const auto send = [&](const QString &id, const QString &event, const QString &text) {
+            controller.onAgentEvent({{"sessionId", id}, {"event", event},
+                {"agentApp", "claude-code"}, {"message", text}});
+        };
+        send("first", "tool_start", "first tool");
+        auto pet = controller.visiblePets().first();
+        const QString firstSpeech = pet->speech();
+        for (int i = 0; i < 100; ++i) {
+            send("second", "tool_start", "second tool");
+            send("first", "tool_end", "first updated");
+        }
+        QCOMPARE(pet->speech(), firstSpeech);
+        QCOMPARE(controller.sessions_.size(), 2);
+        send("second", "permission_requested", "approval");
+        QCOMPARE(pet->animation(), QString("permission"));
+        controller.clearPets();
+    }
+    void lateEventsCannotReconnectOrRecreateEndedSessions() {
+        PetController controller;
+        const auto send = [&](const QString &name, const QString &client) {
+            controller.onAgentEvent({{"sessionId", "same"}, {"event", name},
+                {"agentApp", "claude-code"}, {"clientId", client}});
+        };
+        send("started", "a");
+        send("started", "b");
+        QCOMPARE(controller.sessions_.size(), 2);
+        send("session_end", "a");
+        send("tool_start", "a");
+        QCOMPARE(controller.sessions_.size(), 1);
+        send("session_end", "b");
+        send("tool_start", "b");
+        QVERIFY(controller.sessions_.isEmpty());
+        QVERIFY(!controller.agentConnectivity_.snapshot().value("claudecode").toObject().value("connected").toBool());
+        controller.clearPets();
+    }
     void controllerFlow() {
         PetController controller;
         const auto send = [&](const QString &id, const QString &event) {
@@ -33,6 +70,7 @@ private slots:
         QTest::qWait(1400);
         QCOMPARE(controller.pendingCompletions_, 0);
         QVERIFY(controller.visiblePets().first()->speech().contains("56"));
+        controller.sessions_.clear();
         const auto key = agentAppKey(normalizeAgentApp("claude-code"));
         QSettings().setValue("agents/pet/" + key, "default");
         send("bound", "thinking");

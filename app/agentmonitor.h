@@ -5,6 +5,15 @@
 #include <QJsonObject>
 #include <QString>
 
+inline void copyAgentEventMetadata(const QJsonObject &source, QJsonObject *event) {
+    for (const auto &key : {"eventId", "runId", "sequence", "occurredAt", "toolCallId", "turnStart"})
+        if (source.contains(key)) event->insert(key, source.value(key));
+    if (!event->contains("toolCallId") && source.contains("tool_use_id"))
+        event->insert("toolCallId", source.value("tool_use_id"));
+    if (!event->contains("runId") && source.contains("prompt_id"))
+        event->insert("runId", source.value("prompt_id"));
+}
+
 class AgentMonitorStrategy {
 public:
     virtual ~AgentMonitorStrategy() = default;

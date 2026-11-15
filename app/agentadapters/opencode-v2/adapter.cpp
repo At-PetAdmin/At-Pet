@@ -46,6 +46,8 @@ public:
         *event = {{"sessionId", sessionId.left(256)},
                   {"agentApp", "opencode"},
                   {"event", normalizedName}};
+        copyAgentEventMetadata(source, event);
+        if (sourceEvent == "session.created") event->insert("turnStart", true);
         QString parentSessionId = source.value("parentID").toString().trimmed();
         if (parentSessionId.isEmpty())
             parentSessionId = source.value("parentSessionID").toString().trimmed();

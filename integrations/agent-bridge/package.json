@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Profile-driven bridge that turns agent hook payloads into At-Pet events.",
   "scripts": {
-	"test": "node --test test/bridge.test.mjs"
+	"test": "node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

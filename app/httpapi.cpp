@@ -8,12 +8,12 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QUuid>
+#include <QTimer>
 
 namespace {
 
-// The API is unauthenticated by design, so the only thing separating a web page from this
-// process is what the request itself proves about its origin. Browsers cannot forge either
-// of these headers:
+// These browser checks supplement bearer authentication. They are not client identities.
+// Browsers cannot forge either of these headers:
 //   * Host is the URL the page was loaded from. During a DNS-rebinding attack that is the
 //     attacker's domain, never a loopback name.
 //   * Origin is attached to every cross-origin (and form) POST, including the "simple"
@@ -106,7 +106,21 @@ void HttpApi::resolveQuestion(const QString &requestId, bool answered, const QSt
 void HttpApi::acceptConnections() {
     while (server_.hasPendingConnections()) {
         QTcpSocket *socket = server_.nextPendingConnection();
+        socket->setReadBufferSize(1024 * 1024 + 1);
+        if (requestBuffers_.size() + eventClients_.size() + permissionHookRequests_.size() >= 64) {
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            sendJson(socket, 429, {{"error", "too many connections"}});
+            continue;
+        }
         requestBuffers_.insert(socket, {});
+        // Partial headers/bodies must not occupy a connection indefinitely. Native
+        // permission hooks leave requestBuffers_ once dispatched and have their own TTL.
+        QTimer::singleShot(10000, socket, [this, socket] {
+            if (requestBuffers_.contains(socket)) {
+                requestBuffers_.remove(socket);
+                socket->abort();
+            }
+        });
         connect(socket, &QTcpSocket::readyRead, this, [this, socket] { readRequest(socket); });
         connect(socket, &QTcpSocket::disconnected, this, [this, socket] {
             eventClients_.removeAll(socket);
@@ -170,7 +184,8 @@ void HttpApi::readRequest(QTcpSocket *socket) {
         }
         // A smuggled second copy must not be able to decide the checks below.
         if (headers.contains(name) &&
-            (name == "host" || name == "origin" || name == "content-type"))
+            (name == "host" || name == "origin" || name == "content-type" ||
+             name == "authorization" || name == "content-length"))
             ambiguousHeaders = true;
         headers.insert(name, value);
     }
@@ -184,14 +199,33 @@ void HttpApi::readRequest(QTcpSocket *socket) {
     requestBuffers_.remove(socket);
     if (!requestIsTrusted(socket, method, headers, ambiguousHeaders))
         return;
-    routeRequest(socket, method, path, body);
+    if (method == "GET" && path == "/health") {
+        sendJson(socket, 200, {{"ok", true}, {"authenticationRequired", true}});
+        return;
+    }
+    const QByteArray authorization = headers.value("authorization");
+    const QByteArray token = authorization.startsWith("Bearer ") ? authorization.mid(7) : QByteArray();
+    const ApiClient *authenticated = nullptr;
+    // Compare every byte without an early exit, including for a mismatching token.
+    for (const auto &client : clients_) {
+        unsigned difference = unsigned(token.size() ^ client.token.size());
+        for (int i = 0; i < client.token.size(); ++i)
+            difference |= unsigned(static_cast<unsigned char>(client.token[i]) ^
+                (i < token.size() ? static_cast<unsigned char>(token[i]) : 0));
+        if (!token.isEmpty() && difference == 0) authenticated = &client;
+    }
+    if (!authenticated) {
+        sendJson(socket, 401, {{"error", "valid bearer credentials required"}});
+        return;
+    }
+    routeRequest(socket, method, path, body, *authenticated);
 }
 
 bool HttpApi::requestIsTrusted(QTcpSocket *socket, const QByteArray &method,
                                const QHash<QByteArray, QByteArray> &headers,
                                bool ambiguousHeaders) {
     if (ambiguousHeaders) {
-        sendJson(socket, 403, {{"error", "duplicate Host, Origin, or Content-Type header"}});
+        sendJson(socket, 403, {{"error", "ambiguous security headers"}});
         return false;
     }
     // Browsers attach this to every cross-site (and form) POST, so rejecting any Origin
@@ -215,9 +249,10 @@ bool HttpApi::requestIsTrusted(QTcpSocket *socket, const QByteArray &method,
 }
 
 void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const QByteArray &path,
-                           const QByteArray &body) {
-    if (method == "GET" && path == "/health") {
-        sendJson(socket, 200, {{"ok", true}});
+                           const QByteArray &body, const ApiClient &client) {
+    if (!client.administrator && (path == "/state" || path == "/events" ||
+        path == "/animation" || path == "/say" || path == "/summon")) {
+        sendJson(socket, 403, {{"error", "administrator credential required"}});
         return;
     }
     if (method == "GET" && path == "/state") {
@@ -228,7 +263,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
     if (method == "GET" && path.startsWith(questionPrefix)) {
         const QString requestId = QString::fromUtf8(path.mid(questionPrefix.size()));
         auto it = questionRequests_.find(requestId);
-        if (it == questionRequests_.end()) {
+        if (it == questionRequests_.end() || (!client.administrator && it->clientId != client.id)) {
             sendJson(socket, 404, {{"error", "question request not found"}});
             return;
         }
@@ -245,7 +280,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
     if (method == "DELETE" && path.startsWith(questionPrefix)) {
         const QString requestId = QString::fromUtf8(path.mid(questionPrefix.size()));
         auto it = questionRequests_.find(requestId);
-        if (it == questionRequests_.end()) {
+        if (it == questionRequests_.end() || (!client.administrator && it->clientId != client.id)) {
             sendJson(socket, 404, {{"error", "question request not found"}});
             return;
         }
@@ -260,7 +295,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
     if (method == "GET" && path.startsWith(permissionPrefix)) {
         const QString requestId = QString::fromUtf8(path.mid(permissionPrefix.size()));
         auto it = permissionRequests_.find(requestId);
-        if (it == permissionRequests_.end()) {
+        if (it == permissionRequests_.end() || (!client.administrator && it->clientId != client.id)) {
             sendJson(socket, 404, {{"error", "permission request not found"}});
             return;
         }
@@ -273,7 +308,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
     if (method == "DELETE" && path.startsWith(permissionPrefix)) {
         const QString requestId = QString::fromUtf8(path.mid(permissionPrefix.size()));
         auto it = permissionRequests_.find(requestId);
-        if (it == permissionRequests_.end()) {
+        if (it == permissionRequests_.end() || (!client.administrator && it->clientId != client.id)) {
             sendJson(socket, 404, {{"error", "permission request not found"}});
             return;
         }
@@ -289,6 +324,10 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         return;
     }
     if (method == "GET" && path == "/events") {
+        if (eventClients_.size() >= 8) {
+            sendJson(socket, 429, {{"error", "too many event streams"}});
+            return;
+        }
         // No Access-Control-Allow-Origin: a cross-origin page (including a sandboxed
         // iframe with a null origin) must not be able to read this stream.
         socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n");
@@ -316,7 +355,40 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         sendJson(socket, 400, {{"error", "expected a JSON object"}});
         return;
     }
-    const QJsonObject object = document.object();
+    QJsonObject object = document.object();
+    const auto authorizeAgent = [&](const QString &app) {
+        if (client.administrator || agentAppKey(app) == client.agentKey) return true;
+        sendJson(socket, 403, {{"error", "credential does not own this agent"}});
+        return false;
+    };
+    object.insert("clientId", client.id); // Never accept an identity supplied by the caller.
+    const auto expireRequest = [this](const QString &requestId) {
+        QTimer::singleShot(600000, this, [this, requestId] {
+            auto permission = permissionRequests_.find(requestId);
+            if (permission != permissionRequests_.end()) {
+                const auto hook = permission->hookSocket;
+                const bool pending = permission->decision == "pending";
+                permissionRequests_.erase(permission);
+                if (hook) { permissionHookRequests_.remove(hook.data()); sendJson(hook.data(), 408, {{"error", "request expired"}}); }
+                if (pending) emit permissionRequestCancelled(requestId);
+            }
+            auto question = questionRequests_.find(requestId);
+            if (question != questionRequests_.end()) {
+                const bool pending = question->status == "pending";
+                questionRequests_.erase(question);
+                if (pending) emit questionRequestCancelled(requestId);
+            }
+        });
+    };
+    if (path == "/permission" || path == "/question" || path.startsWith("/agent-event/")) {
+        int owned = 0;
+        for (const auto &request : permissionRequests_) owned += request.clientId == client.id;
+        for (const auto &request : questionRequests_) owned += request.clientId == client.id;
+        if (owned >= 16 || permissionRequests_.size() + questionRequests_.size() >= 128) {
+            sendJson(socket, 429, {{"error", "too many pending requests"}});
+            return;
+        }
+    }
     const QByteArray nativeAgentPrefix = "/agent-event/";
     if (path.startsWith(nativeAgentPrefix)) {
         const QString agentKey = QString::fromUtf8(path.mid(nativeAgentPrefix.size()));
@@ -325,6 +397,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
             sendJson(socket, 404, {{"error", "unknown agent adapter"}});
             return;
         }
+        if (!authorizeAgent(agent->key)) return;
         const AgentMonitorStrategy *strategy = agentMonitorStrategy(agent->monitorType);
         if (!strategy || !strategy->acceptsNativeEvents()) {
             sendJson(socket, 404, {{"error", "agent has no native event adapter"}});
@@ -345,11 +418,14 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
             }
             const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
             request.insert("requestId", requestId);
+            request.insert("clientId", client.id);
             PermissionRequest pending;
             pending.details = request;
             pending.isClaudeHttpHook = strategy->usesNativeHookResponse();
             pending.hookSocket = socket;
+            pending.clientId = client.id;
             permissionRequests_.insert(requestId, pending);
+            expireRequest(requestId);
             if (pending.isClaudeHttpHook)
                 permissionHookRequests_.insert(socket, requestId);
             emit permissionRequestReceived(requestId, request);
@@ -362,8 +438,10 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
             sendJson(socket, 400, {{"error", error}});
             return;
         }
-        if (!normalizedEvent.isEmpty())
+        if (!normalizedEvent.isEmpty()) {
+            normalizedEvent.insert("clientId", client.id);
             emit eventReceived(normalizedEvent);
+        }
         if (strategy->usesNativeHookResponse())
             sendJson(socket, 200, {});
         else
@@ -372,6 +450,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
     }
     if (path == "/question") {
         const QString agentApp = object.value("agentApp").toString().trimmed();
+        if (!authorizeAgent(agentApp)) return;
         const QString question = object.value("question").toString().trimmed();
         if (agentApp.isEmpty() || question.isEmpty()) {
             sendJson(socket, 400, {{"error", "agentApp and question are required"}});
@@ -379,7 +458,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         }
         const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         QJsonObject request{{"requestId", requestId}, {"agentApp", agentApp.left(64)},
-                            {"question", question.left(2000)}};
+                            {"question", question.left(2000)}, {"clientId", client.id}};
         request.insert("sessionId", object.value("sessionId").toString().trimmed().left(256));
         request.insert("header", object.value("header").toString().left(160));
         QJsonArray choices;
@@ -391,7 +470,8 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         }
         if (!choices.isEmpty())
             request.insert("choices", choices);
-        questionRequests_.insert(requestId, {request});
+        questionRequests_.insert(requestId, {request, QStringLiteral("pending"), {}, client.id});
+        expireRequest(requestId);
         emit questionRequestReceived(requestId, request);
         sendJson(socket, 202, {{"accepted", true}, {"requestId", requestId}, {"status", "pending"}});
         return;
@@ -403,6 +483,7 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         }
         const QString sessionId = object.value("sessionId").toString().trimmed();
         const QString agentApp = object.value("agentApp").toString().trimmed();
+        if (!authorizeAgent(agentApp)) return;
         QString tool = object.value("toolName").toString().trimmed();
         if (tool.isEmpty())
             tool = object.value("tool").toString().trimmed();
@@ -420,12 +501,19 @@ void HttpApi::routeRequest(QTcpSocket *socket, const QByteArray &method, const Q
         request.insert("toolName", tool.left(160));
         request.insert("title", object.value("title").toString().left(160));
         request.insert("description", object.value("description").toString().left(2000));
-        permissionRequests_.insert(requestId, {request, QStringLiteral("pending")});
+        PermissionRequest pending;
+        pending.details = request;
+        pending.clientId = client.id;
+        permissionRequests_.insert(requestId, pending);
+        expireRequest(requestId);
         emit permissionRequestReceived(requestId, request);
         sendJson(socket, 202, {{"accepted", true}, {"requestId", requestId}, {"status", "pending"}});
         return;
     }
     if (path == "/event") {
+        if (!client.administrator && object.value("agentApp").toString().isEmpty())
+            object.insert("agentApp", client.agentKey);
+        if (!authorizeAgent(object.value("agentApp").toString())) return;
         if (object.value("sessionId").toString().isEmpty() || object.value("event").toString().isEmpty()) {
             sendJson(socket, 400, {{"error", "sessionId and event are required"}});
             return;
@@ -473,10 +561,13 @@ void HttpApi::sendJson(QTcpSocket *socket, int status, const QJsonObject &json) 
     QByteArray reason = "OK";
     if (status == 202) reason = "Accepted";
     if (status == 400) reason = "Bad Request";
+    if (status == 401) reason = "Unauthorized";
     if (status == 403) reason = "Forbidden";
     if (status == 404) reason = "Not Found";
     if (status == 405) reason = "Method Not Allowed";
     if (status == 409) reason = "Conflict";
+    if (status == 408) reason = "Request Timeout";
+    if (status == 429) reason = "Too Many Requests";
     if (status == 413) reason = "Payload Too Large";
     if (status == 415) reason = "Unsupported Media Type";
     // Deliberately no Access-Control-Allow-Origin. Emitting one (even "null") lets an
@@ -493,8 +584,10 @@ void HttpApi::publishState() { broadcastState(); }
 void HttpApi::broadcastState() {
     const QByteArray payload = QJsonDocument(stateProvider_()).toJson(QJsonDocument::Compact);
     const QByteArray message = "data: " + payload + "\n\n";
-    for (QTcpSocket *client : eventClients_) {
+    const auto clients = eventClients_; // abort() can synchronously remove an SSE socket.
+    for (QTcpSocket *client : clients) {
         if (client->state() == QAbstractSocket::ConnectedState) {
+            if (client->bytesToWrite() > 1024 * 1024) { client->abort(); continue; }
             client->write(message);
             client->flush();
         }
