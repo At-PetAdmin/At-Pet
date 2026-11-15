@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: security-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_type == 'branch') }}
 
 jobs:
   local-security:
@@ -32,6 +32,7 @@ jobs:
         with:
           version: '6.8.3'
           arch: win64_msvc2022_64
+          dir: ${{ runner.temp }}/Qt
           cache: true
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: github/codeql-action/init@v4
@@ -43,14 +44,15 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          cmake -S . -B build-security -G Ninja -DCMAKE_BUILD_TYPE=Release -DAT_PET_BUILD_TESTS=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -DCMAKE_CXX_COMPILER=cl
+          # Compiler caches must stay disabled here so CodeQL sees every translation unit.
+          cmake -S . -B build-security -G Ninja -DCMAKE_BUILD_TYPE=Release -DAT_PET_BUILD_TESTS=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" -DCMAKE_CXX_COMPILER=cl -DCMAKE_CXX_COMPILER_LAUNCHER=
           if ($LASTEXITCODE -ne 0) { throw 'Security build configuration failed.' }
           cmake --build build-security --target at-pet http-api-guard event-guard --parallel 4
           if ($LASTEXITCODE -ne 0) { throw 'Security build failed.' }
       - name: Test authentication, request ownership and event ordering
         shell: pwsh
         run: |
-          ctest --test-dir build-security --output-on-failure -R '^(http-api-guard|event-guard)$'
+          ctest --test-dir build-security --output-on-failure --parallel 2 -R '^(http-api-guard|event-guard)$'
           if ($LASTEXITCODE -ne 0) { throw 'Local security regression failed.' }
       - name: Test authenticated Agent bridges
         shell: pwsh

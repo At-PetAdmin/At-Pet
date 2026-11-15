@@ -10,6 +10,18 @@ CodeQL 覆盖可静态识别的漏洞，ClamAV 覆盖已知恶意代码签名；
 
 报告保留 14 天。完整 Git 历史检查可能发现旧提交中的凭据；应先撤销或轮换，再处理历史，不能只删除最新文件。要把这些检查设为 PR 必须通过的条件，需要在 GitHub 分支保护或规则集中选中上述三个检查。
 
+## 检查速度
+
+- API 实现编译为共用对象库，应用与 HTTP 回归测试共享；Qt UI 测试依赖也只编译一次，避免八个测试目标重复编译同一份界面实现。
+- Windows 打包使用固定版本的 sccache 与 GitHub Actions 缓存；CodeQL 构建显式禁用编译缓存，保持所有生产源文件都在分析跟踪中重新编译。
+- amd64 的全部回归测试并行度为 4；安全回归并行度为 2。各测试使用独立设置和临时目录。
+- 相同分支的新推送或 PR 更新会取消过时的同分支任务；标签发布构建保持运行。
+- CodeQL 继续使用完整 `security-extended` 查询；Gitleaks 继续扫描完整历史，ClamAV 继续扫描完整受跟踪快照及归档文件。
+
+优化前基线（提交 `ca34b29`）：[amd64 构建](https://github.com/At-PetAdmin/At-Pet/actions/runs/43677101844)约 4 分 36 秒，其中编译 2 分 40 秒、回归 15 秒；[安全检查](https://github.com/At-PetAdmin/At-Pet/actions/runs/43677101853)约 5 分 30 秒。耗时会随缓存命中与 runner 负载变化，首次填充缓存不代表后续构建速度。
+
+缓存配置参照 [sccache Action](https://github.com/Mozilla-Actions/sccache-action)，固定 Action 提交和 sccache 版本。缓存仅用于编译对象，不缓存签名结果或跳过回归、安全检查。
+
 本地密钥预检（先安装 Gitleaks 8.30.1）：
 
 ```sh

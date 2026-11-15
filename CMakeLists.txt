@@ -21,22 +21,25 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Network LinguistTools)
 add_library(at-pet-pets OBJECT assets/default/pet.qrc)
 target_link_libraries(at-pet-pets PRIVATE Qt6::Core)
 
+# Build the API once, including under CodeQL tracing, and reuse it in app/tests.
+add_library(at-pet-api OBJECT
+    app/httpapi.cpp app/httpapi.h
+    app/apicredentials.cpp app/apicredentials.h
+    app/agentmonitor.cpp app/agentmonitor.h
+    app/agentadapters/claude-code/adapter.cpp app/agentadapters/claude-code/adapter.h
+    app/agentadapters/opencode-v2/adapter.cpp app/agentadapters/opencode-v2/adapter.h
+)
+target_link_libraries(at-pet-api PUBLIC Qt6::Network)
+if(WIN32)
+    target_link_libraries(at-pet-api PUBLIC advapi32)
+endif()
+
 qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/main.cpp
     app/crashreporter.cpp
     app/crashreporter.h
     app/petwindow.cpp
     app/petwindow.h
-    app/httpapi.cpp
-    app/httpapi.h
-    app/apicredentials.cpp
-    app/apicredentials.h
-    app/agentmonitor.cpp
-    app/agentmonitor.h
-    app/agentadapters/claude-code/adapter.cpp
-    app/agentadapters/claude-code/adapter.h
-    app/agentadapters/opencode-v2/adapter.cpp
-    app/agentadapters/opencode-v2/adapter.h
     app/permissiondialog.cpp
     app/permissiondialog.h
     app/questiondialog.cpp
@@ -55,7 +58,7 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     assets/branding/branding.qrc
 )
 
-target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network at-pet-pets)
+target_link_libraries(at-pet PRIVATE Qt6::Widgets Qt6::Network at-pet-pets at-pet-api)
 target_include_directories(at-pet PRIVATE tests)
 if(WIN32)
     target_link_libraries(at-pet PRIVATE advapi32)
@@ -109,11 +112,18 @@ if(AT_PET_BUILD_TESTS)
         assets/branding/branding.qrc
     )
 
+    # The UI implementation is identical across suites. Sharing these objects
+    # avoids compiling SettingsDialog/PetWindow and their Qt headers eight times.
+    add_library(at-pet-test-ui OBJECT ${AT_PET_TEST_SOURCES})
+    target_include_directories(at-pet-test-ui PRIVATE app)
+    target_compile_definitions(at-pet-test-ui PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
+    target_link_libraries(at-pet-test-ui PUBLIC Qt6::Widgets)
+
     function(at_pet_add_test name source)
-        qt_add_executable(${name} tests/${source} ${AT_PET_TEST_SOURCES})
+        qt_add_executable(${name} tests/${source})
         target_include_directories(${name} PRIVATE app)
         target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test at-pet-pets)
+        target_link_libraries(${name} PRIVATE Qt6::Widgets Qt6::Test at-pet-pets at-pet-test-ui)
         # Keep tests console programs so QTest's PASS/FAIL output stays visible.
         set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
         if(WIN32)
@@ -153,26 +163,11 @@ if(AT_PET_BUILD_TESTS)
     # The local HTTP API owns its own trust boundary (Host/Origin checks, no CORS headers,
     # petId validation). Those network sources stay out of AT_PET_TEST_SOURCES so the UI
     # suites above do not compile them.
-    set(AT_PET_HTTP_TEST_SOURCES
-        app/httpapi.cpp
-        app/httpapi.h
-        app/apicredentials.cpp
-        app/apicredentials.h
-        app/agentmonitor.cpp
-        app/agentmonitor.h
-        app/agentadapters/claude-code/adapter.cpp
-        app/agentadapters/claude-code/adapter.h
-        app/agentadapters/opencode-v2/adapter.cpp
-        app/agentadapters/opencode-v2/adapter.h
-        app/agentregistry.h
-        app/petid.h
-    )
-
     function(at_pet_add_http_test name source)
-        qt_add_executable(${name} tests/${source} ${AT_PET_HTTP_TEST_SOURCES})
+        qt_add_executable(${name} tests/${source})
         target_include_directories(${name} PRIVATE app)
         target_compile_definitions(${name} PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-        target_link_libraries(${name} PRIVATE Qt6::Network Qt6::Test)
+        target_link_libraries(${name} PRIVATE Qt6::Network Qt6::Test at-pet-api)
         if(WIN32)
             target_link_libraries(${name} PRIVATE advapi32)
         endif()
@@ -186,7 +181,7 @@ if(AT_PET_BUILD_TESTS)
     qt_add_executable(companion-flow ${AT_PET_COMPANION_SOURCES} tests/companion_cases.h)
     target_include_directories(companion-flow PRIVATE app tests)
     target_compile_definitions(companion-flow PRIVATE AT_PET_COMPANION_TEST AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test at-pet-pets)
+    target_link_libraries(companion-flow PRIVATE Qt6::Widgets Qt6::Network Qt6::Test at-pet-pets at-pet-api)
     if(WIN32)
         target_link_libraries(companion-flow PRIVATE advapi32)
     endif()
