@@ -53,6 +53,9 @@ qt_add_executable(at-pet WIN32 MACOSX_BUNDLE
     app/quotepack.h
     app/settingsdialog.cpp
     app/settingsdialog.h
+    app/agentsetup.cpp app/agentsetup.h
+    app/updateswidget.cpp app/updateswidget.h
+    integrations/setup.qrc
     app/theme.cpp
     app/theme.h
     assets/branding/branding.qrc
@@ -102,6 +105,9 @@ if(AT_PET_BUILD_TESTS)
     set(AT_PET_TEST_SOURCES
         app/settingsdialog.cpp
         app/settingsdialog.h
+        app/agentsetup.cpp app/agentsetup.h
+        app/updateswidget.cpp app/updateswidget.h
+        integrations/setup.qrc
         app/petwindow.cpp
         app/petwindow.h
         app/quotepack.cpp
@@ -117,7 +123,7 @@ if(AT_PET_BUILD_TESTS)
     add_library(at-pet-test-ui OBJECT ${AT_PET_TEST_SOURCES})
     target_include_directories(at-pet-test-ui PRIVATE app)
     target_compile_definitions(at-pet-test-ui PRIVATE AT_PET_VERSION="${AT_PET_VERSION_STRING}")
-    target_link_libraries(at-pet-test-ui PUBLIC Qt6::Widgets)
+    target_link_libraries(at-pet-test-ui PUBLIC Qt6::Widgets Qt6::Network)
 
     function(at_pet_add_test name source)
         qt_add_executable(${name} tests/${source})
@@ -153,6 +159,7 @@ if(AT_PET_BUILD_TESTS)
     at_pet_add_test(walk-mirror tst_walkmirror.cpp)
     at_pet_add_test(builtin-pets tst_builtinpets.cpp)
     at_pet_add_test(agent-connectivity tst_agentconnectivity.cpp)
+    at_pet_add_test(agent-setup tst_agentsetup.cpp)
     target_sources(agent-connectivity PRIVATE
         app/agentconnectivity.cpp app/agentconnectivity.h
         app/agentmonitor.cpp app/agentmonitor.h

@@ -1,0 +1,14 @@
+<RCC><qresource prefix="/integrations">
+  <file>check-dark.xpm</file>
+  <file>check-light.xpm</file>
+  <file>agent-bridge/bridge.mjs</file>
+  <file>agent-bridge/client-auth.mjs</file>
+  <file>agent-bridge/profiles/_claude-hook-family.json</file>
+  <file>agent-bridge/profiles/claude-code.json</file>
+  <file>agent-bridge/profiles/command-code.json</file>
+  <file>agent-bridge/profiles/openai-codex.json</file>
+  <file>agent-bridge/profiles/workbuddy.json</file>
+  <file>agent-bridge/profiles/qwen-code.json</file>
+  <file>agent-plugins/opencode/at-pet.ts</file>
+  <file>agent-plugins/opencode/client-auth.mjs</file>
+</qresource></RCC>

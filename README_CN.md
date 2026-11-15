@@ -30,6 +30,9 @@
 
 内置桌宠库包含 Octocat、ChatGPT、Claude、DeepSeek 和 Gemini，无需手动导入，可在设置和桌宠右键菜单中预览，通过设置、托盘和桌宠右键菜单切换，也支持全员上班和 Agent 专属桌宠绑定。新增四只桌宠各有 33 条中英文语录，覆盖戳一戳、任务完成、出错、取消和待机。独立语录和全局语录可覆盖内置语录；内置资源不能直接删除或编辑。
 
+新增的 [Agent 接入与获取更新](docs/agent-setup-and-updates.md)：在设置中搜索 Agent、批量配置已选来源的 hook，
+或打开组织插件安装指引；“获取更新”可分别检查正式版与测试版并下载 Windows AMD64 / ARM64 便携包。
+
 ## QQ 交流群
 
 欢迎加入 [At-Pet QQ 交流群](https://qm.qq.com/q/MnHKbgZ9ke)。

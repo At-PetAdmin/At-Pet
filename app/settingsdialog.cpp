@@ -4,6 +4,8 @@
 #include "petwindow.h"
 #include "quotepack.h"
 #include "theme.h"
+#include "agentsetup.h"
+#include "updateswidget.h"
 
 #include <QApplication>
 #include <QBoxLayout>
@@ -11,6 +13,7 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDir>
+#include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
@@ -41,6 +44,7 @@
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStandardPaths>
+#include <QTextBrowser>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QScrollBar>
@@ -68,33 +72,9 @@ const QStringList builtinAnimations = {
     QStringLiteral("tool"), QStringLiteral("interact"), QStringLiteral("permission")
 };
 
-QString monitorTypeDisplayName(AgentMonitorType type) {
-    switch (type) {
-    case AgentMonitorType::ExternalHttpApi:
-        return QCoreApplication::translate("SettingsDialog", "External sender required (no built-in monitor)");
-    case AgentMonitorType::ClaudeCodeHttpHooks:
-        return QCoreApplication::translate("SettingsDialog", "Claude Code HTTP hooks");
-    case AgentMonitorType::OpenCodeV2Plugin:
-        return QCoreApplication::translate("SettingsDialog", "OpenCode V2 plugin");
-    }
-    return QCoreApplication::translate("SettingsDialog", "External sender required (no built-in monitor)");
-}
-
 QString translatedAgentDescription(const AgentDefinition &agent) {
     const QByteArray source = agent.description.toUtf8();
     return QCoreApplication::translate("AgentRegistry", source.constData());
-}
-
-QString integrationDisplayName(AgentIntegration integration) {
-    switch (integration) {
-    case AgentIntegration::BuiltInAdapter:
-        return QCoreApplication::translate("AgentRegistry", "Integration: built-in adapter, works as soon as the agent runs");
-    case AgentIntegration::ProfileShipped:
-        return QCoreApplication::translate("AgentRegistry", "Integration: bridge profile included; configure the agent to send events");
-    case AgentIntegration::ExternalRequired:
-        return QCoreApplication::translate("AgentRegistry", "Integration: no sender bundled; stays silent until one is configured");
-    }
-    return QCoreApplication::translate("AgentRegistry", "Integration: no sender bundled; stays silent until one is configured");
 }
 
 QString translatedAnimationName(const QString &name) {
@@ -347,11 +327,13 @@ void PetPreviewWidget::paintEvent(QPaintEvent *) {
 // ---------------- SettingsDialog ----------------
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
+    setWindowFlag(Qt::WindowMinimizeButtonHint, true);
     setWindowTitle(tr("At-Pet Settings & Library"));
-    resize(780, 600);
+    resize(900, 720);
     setupUi();
     applyStyle();
     loadSettings();
+    updateAgentSetupUi();
     refreshPetsList();
     refreshQuotePackStatus();
 }
@@ -500,39 +482,62 @@ void SettingsDialog::setupUi() {
     agentsLayout->setContentsMargins(20, 20, 20, 20);
     agentsLayout->setSpacing(12);
 
-    agentHeaderLabel_ = new QLabel(tr("Only Claude Code and OpenCode have built-in adapters. Other sources need an external integration to send events to At-Pet."), agentsTab);
+    agentHeaderLabel_ = new QLabel(tr("Select the Agents whose events you want to show. Set up their hooks in one click, or follow the organization plugin guide. Connection status updates when real events arrive."), agentsTab);
     agentHeaderLabel_->setWordWrap(true);
     agentsLayout->addWidget(agentHeaderLabel_);
+
+    auto *agentToolbar = new QHBoxLayout;
+    agentSearch_ = new QLineEdit(agentsTab);
+    agentSearch_->setObjectName("agentSearch");
+    connect(agentSearch_, &QLineEdit::textChanged, this, &SettingsDialog::filterAgents);
+    agentToolbar->addWidget(agentSearch_, 1);
+    agentSummary_ = new QLabel(agentsTab);
+    agentToolbar->addWidget(agentSummary_);
+    btnConfigureAgents_ = new QPushButton(agentsTab);
+    btnConfigureAgents_->setObjectName("configureSelectedAgents");
+    connect(btnConfigureAgents_, &QPushButton::clicked, this, [this] {
+        QStringList keys;
+        for (const auto &agent : agentDefinitions())
+            if (agentCheckboxes_.value(agent.key)->isChecked()) keys << agent.key;
+        configureAgents(keys);
+    });
+    agentToolbar->addWidget(btnConfigureAgents_);
+    agentsLayout->addLayout(agentToolbar);
 
     auto *agentScrollArea = new QScrollArea(agentsTab);
     agentScrollArea->setWidgetResizable(true);
     agentScrollArea->setFrameShape(QFrame::NoFrame);
+    agentScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     agentScrollArea->viewport()->setAutoFillBackground(false);
-    agentGroupBox_ = new QGroupBox(tr("Agent Event Source Filters"), agentScrollArea);
+    agentGroupBox_ = new QGroupBox(tr("Agent connections"), agentScrollArea);
     agentGroupBox_->setAutoFillBackground(false);
     auto *groupLayout = new QVBoxLayout(agentGroupBox_);
     groupLayout->setSpacing(12);
 
     for (const AgentDefinition &agent : agentDefinitions()) {
-        auto *itemWidget = new QWidget(agentGroupBox_);
-        auto *itemLayout = new QHBoxLayout(itemWidget);
-        itemLayout->setContentsMargins(0, 0, 0, 0);
+        auto *itemWidget = new QFrame(agentGroupBox_);
+        itemWidget->setProperty("agentCard", true);
+        agentCards_.insert(agent.key, itemWidget);
+        auto *itemLayout = new QVBoxLayout(itemWidget);
+        itemLayout->setContentsMargins(14, 12, 14, 12);
+        itemLayout->setSpacing(8);
 
         auto *chk = new QCheckBox(agent.displayName, itemWidget);
         chk->setChecked(true);
+        chk->setObjectName("agentEnabled_" + agent.key);
         agentCheckboxes_.insert(agent.key, chk);
+        connect(chk, &QCheckBox::toggled, this, &SettingsDialog::updateAgentSetupUi);
 
         auto *connectionLabel = new QLabel(itemWidget);
         connectionLabel->setObjectName(QStringLiteral("agentConnection_") + agent.key);
         connectionLabel->setTextFormat(Qt::PlainText);
-        auto *nameLayout = new QVBoxLayout;
-        nameLayout->setSpacing(4);
+        auto *nameLayout = new QHBoxLayout;
         nameLayout->addWidget(chk);
+        nameLayout->addStretch();
         nameLayout->addWidget(connectionLabel);
         auto *binding = new QComboBox(itemWidget);
         binding->setObjectName(QStringLiteral("agentPet_") + agent.key);
         agentPetCombos_.insert(agent.key, binding);
-        nameLayout->addWidget(binding);
         agentConnectionLabels_.insert(agent.key, connectionLabel);
 
         auto *descLabel = new QLabel(itemWidget);
@@ -540,8 +545,22 @@ void SettingsDialog::setupUi() {
         agentDescriptionLabels_.insert(agent.key, descLabel);
 
         itemLayout->addLayout(nameLayout);
-        itemLayout->addSpacing(16);
-        itemLayout->addWidget(descLabel, 1);
+        itemLayout->addWidget(descLabel);
+        auto *actions = new QHBoxLayout;
+        actions->addWidget(binding, 1);
+        auto *guide = new QPushButton(itemWidget);
+        guide->setObjectName("agentGuide_" + agent.key);
+        agentGuideButtons_.insert(agent.key, guide);
+        connect(guide, &QPushButton::clicked, this, [this, key = agent.key] { showAgentGuide(key); });
+        actions->addWidget(guide);
+        if (agentsetup::canConfigure(agent.key)) {
+            auto *setup = new QPushButton(itemWidget);
+            setup->setObjectName("agentSetup_" + agent.key);
+            agentSetupButtons_.insert(agent.key, setup);
+            connect(setup, &QPushButton::clicked, this, [this, key = agent.key] { configureAgents({key}); });
+            actions->addWidget(setup);
+        }
+        itemLayout->addLayout(actions);
         groupLayout->addWidget(itemWidget);
     }
     updateAgentDescriptions();
@@ -549,6 +568,14 @@ void SettingsDialog::setupUi() {
     groupLayout->addStretch(1);
     agentScrollArea->setWidget(agentGroupBox_);
     agentsLayout->addWidget(agentScrollArea, 1);
+    agentSetupResult_ = new QLabel(agentsTab);
+    agentSetupResult_->setObjectName("agentSetupResult");
+    agentSetupResult_->setWordWrap(true);
+    agentSetupResult_->setTextFormat(Qt::PlainText);
+    agentSetupResult_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    agentSetupResult_->hide();
+    agentsLayout->addWidget(agentSetupResult_);
+    updateAgentSetupUi();
 
     subagentPetCheck_ = new QCheckBox(tr("Show a separate pet for each subagent session reported by incoming events"), agentsTab);
     agentsLayout->addWidget(subagentPetCheck_);
@@ -664,6 +691,7 @@ void SettingsDialog::setupUi() {
     tasksTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
     tasksLayout->addWidget(tasksTable_);
     tabWidget_->addTab(tasksTab, tr("Tasks"));
+    tabWidget_->addTab(new UpdatesWidget(tabWidget_), tr("Get updates"));
     // Bottom close button
     auto *bottomLayout = new QHBoxLayout;
     bottomLayout->addStretch(1);
@@ -1325,6 +1353,7 @@ void SettingsDialog::onEditPetJson() {
 void SettingsDialog::setAgentConnections(const QJsonObject &connections) {
     agentConnections_ = connections;
     updateAgentConnectionLabels();
+    updateAgentSetupUi();
 }
 
 void SettingsDialog::updateAgentConnectionLabels() {
@@ -1358,12 +1387,104 @@ void SettingsDialog::updateAgentDescriptions() {
     for (const AgentDefinition &agent : agentDefinitions()) {
         QLabel *label = agentDescriptionLabels_.value(agent.key, nullptr);
         if (label) {
-            label->setText(QStringLiteral("%1\n%2\n%3")
-                .arg(translatedAgentDescription(agent),
-                     tr("Monitoring strategy: %1").arg(monitorTypeDisplayName(agent.monitorType)),
-                     integrationDisplayName(agent.integration)));
+            label->setText(agentsetup::canConfigure(agent.key)
+                ? tr("One-click setup available · Backups preserve existing configuration")
+                : agent.integration == AgentIntegration::ExternalRequired
+                    ? tr("External integration required · See compatibility guide")
+                    : tr("Plugin / manual setup · See the organization installation guide"));
+            label->setToolTip(translatedAgentDescription(agent));
         }
     }
+}
+
+void SettingsDialog::updateAgentSetupUi() {
+    int selected = 0, connected = 0;
+    for (auto it = agentCheckboxes_.cbegin(); it != agentCheckboxes_.cend(); ++it) {
+        if (it.value()->isChecked()) ++selected;
+        if (agentConnections_.value(it.key()).toObject().value("connected").toBool()) ++connected;
+    }
+    agentSummary_->setText(tr("%1 selected · %2 connected").arg(selected).arg(connected));
+    agentSearch_->setPlaceholderText(tr("Search Agents…"));
+    btnConfigureAgents_->setText(tr("Set up selected Agents"));
+    btnConfigureAgents_->setEnabled(selected > 0);
+    btnConfigureAgents_->setToolTip(tr("Configure supported hooks for all checked Agents, including those hidden by search. Other Agents show installation guides."));
+    for (auto *button : agentSetupButtons_) button->setText(tr("Set up hooks"));
+    for (auto it = agentGuideButtons_.cbegin(); it != agentGuideButtons_.cend(); ++it) {
+        const auto *agent = agentDefinitionFor(it.key());
+        it.value()->setText(agent && agent->integration == AgentIntegration::ExternalRequired
+            ? tr("Compatibility guide") : tr("Installation guide"));
+    }
+}
+
+void SettingsDialog::filterAgents() {
+    const QString query = agentSearch_->text().trimmed();
+    for (const auto &agent : agentDefinitions()) {
+        const QString haystack = agent.displayName + ' ' + agent.key + ' ' + agent.aliases.join(' ');
+        agentCards_.value(agent.key)->setVisible(haystack.contains(query, Qt::CaseInsensitive));
+    }
+}
+
+void SettingsDialog::showAgentGuide(const QString &key) {
+    const auto *agent = agentDefinitionFor(key);
+    if (!agent) return;
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("%1 installation guide").arg(agent->displayName));
+    dialog.resize(660, 440);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *text = new QTextBrowser(&dialog);
+    text->setPlainText(agentsetup::guideText(key));
+    layout->addWidget(text);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    auto *open = buttons->addButton(tr("Open organization repository"), QDialogButtonBox::ActionRole);
+    connect(open, &QPushButton::clicked, &dialog, [&dialog, key] {
+        if (!QDesktopServices::openUrl(agentsetup::guideUrl(key)))
+            QMessageBox::warning(&dialog, tr("Installation guide"), tr("Could not open the browser."));
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.exec();
+}
+
+void SettingsDialog::configureAgents(const QStringList &keys) {
+    if (keys.isEmpty()) return;
+    QStringList details, manual;
+    int configured = 0, failed = 0;
+    const QString runtime = QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)).filePath("integrations");
+    bool portOk = false;
+    const uint overridePort = qEnvironmentVariable("AT_PET_PORT").toUInt(&portOk);
+    const quint16 port = portOk && overridePort > 0 && overridePort <= 65535
+        ? quint16(overridePort) : quint16(QSettings().value("api/port", 8765).toUInt());
+    const bool hasNode = !QStandardPaths::findExecutable("node").isEmpty();
+    for (const QString &key : keys) {
+        const auto *agent = agentDefinitionFor(key);
+        if (!agent) continue;
+        if (!agentsetup::canConfigure(key)) {
+            manual << agent->displayName;
+            details << agent->displayName + "\n" + agentsetup::guideUrl(key).toString();
+            continue;
+        }
+        if (!hasNode && key != "opencode") {
+            ++failed;
+            details << agent->displayName + ": " + tr("Install Node.js 20+ and restart At-Pet, then try again.");
+            continue;
+        }
+        const auto result = agentsetup::configure(key, QDir::homePath(), runtime, port);
+        if (!result.ok) {
+            ++failed; details << agent->displayName + ": " + result.error; continue;
+        }
+        ++configured;
+        details << agent->displayName + "\n" + result.path;
+        if (!result.backup.isEmpty()) details << tr("Backup: %1").arg(result.backup);
+    }
+    const QString summary = tr("%1 configured · %2 need a guide · %3 failed").arg(configured).arg(manual.size()).arg(failed);
+    agentSetupResult_->setText(summary);
+    agentSetupResult_->show();
+    QMessageBox box(failed ? QMessageBox::Warning : QMessageBox::Information, tr("Agent setup"), summary, QMessageBox::Ok, this);
+    QString message = tr("Restart configured Agents and review their hooks. Connection status changes only after a real event. If the API port was changed, restart At-Pet too. Do not enable both direct hooks and a plugin for the same Agent.");
+    if (!manual.isEmpty()) message += "\n\n" + tr("Open Installation guide on these Agent cards: %1").arg(manual.join(", "));
+    box.setInformativeText(message);
+    box.setDetailedText(details.join("\n\n"));
+    box.exec();
 }
 
 void SettingsDialog::retranslateUi() {
@@ -1401,8 +1522,10 @@ void SettingsDialog::retranslateUi() {
     for (int i = 0; i < animCombo_->count(); ++i)
         animCombo_->setItemText(i, translatedAnimationName(animCombo_->itemData(i).toString()));
 
-    agentHeaderLabel_->setText(tr("Only Claude Code and OpenCode have built-in adapters. Other sources need an external integration to send events to At-Pet."));
-    agentGroupBox_->setTitle(tr("Agent Event Source Filters"));
+    agentHeaderLabel_->setText(tr("Select the Agents whose events you want to show. Set up their hooks in one click, or follow the organization plugin guide. Connection status updates when real events arrive."));
+    agentGroupBox_->setTitle(tr("Agent connections"));
+    tabWidget_->setTabText(4, tr("Get updates"));
+    updateAgentSetupUi();
     updateAgentConnectionLabels();
     subagentPetCheck_->setText(tr("Show a separate pet for each subagent session reported by incoming events"));
     btnSaveAgents_->setText(tr("Save Event Filters"));

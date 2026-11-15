@@ -118,6 +118,10 @@ private:
     void refreshPetQuotePackStatus();
     void updateAgentDescriptions();
     void updateAgentConnectionLabels();
+    void configureAgents(const QStringList &keys);
+    void showAgentGuide(const QString &key);
+    void filterAgents();
+    void updateAgentSetupUi();
     void updatePetInfoAnimationFps();
     QString currentSelectedPetId() const;
 
@@ -162,6 +166,13 @@ private:
     QJsonObject agentConnections_;
     QCheckBox *subagentPetCheck_ = nullptr;
     QPushButton *btnSaveAgents_ = nullptr;
+    QLineEdit *agentSearch_ = nullptr;
+    QLabel *agentSummary_ = nullptr;
+    QLabel *agentSetupResult_ = nullptr;
+    QPushButton *btnConfigureAgents_ = nullptr;
+    QHash<QString, QWidget *> agentCards_;
+    QHash<QString, QPushButton *> agentSetupButtons_;
+    QHash<QString, QPushButton *> agentGuideButtons_;
 
     // General Settings tab
     QGroupBox *preferencesGroupBox_ = nullptr;
