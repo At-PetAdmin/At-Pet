@@ -124,6 +124,16 @@ Please submit contribution text in the language of the guide you are following: 
 
 Maintainers may squash or rebase commits when merging. Draft pull requests are welcome for early feedback.
 
+## AI-assisted contributions and merge policy
+
+AI-assisted development is permitted only when the contributor takes responsibility for the resulting changes. Disclose substantial AI/Agent involvement in the pull request, identify the tools used, and describe the manual review and verification performed. AI-generated explanations or unverified test claims are not evidence of successful testing.
+
+Due to previous quality and release-review incidents, maintainers currently **do not accept pull requests automatically generated or submitted through untrusted Android-based wrapper Agent tools**. When the source is reliably established as falling within this restricted category, maintainers may close the pull request without a full code review. If the source cannot be verified, do not assume it from the device used, writing style, or commit metadata alone; request clarification or apply the ordinary review process. This restriction concerns the tool and submission workflow, not contributors who happen to develop on Android.
+
+All other AI-assisted pull requests remain subject to normal quality, security, compatibility, and testing requirements. Contributors must be able to explain their changes, review the complete diff, and verify relevant behavior before submission.
+
+**No contributor or collaborator may bypass the established review process or directly merge their own unreviewed changes into protected project branches.** Changes affecting core functionality, security boundaries, integrations, or release/review eligibility require explicit approval from an authorized, trusted maintainer before merging. Automated Agent review is advisory and never constitutes merge approval. Maintainers may reject or close noncompliant contributions and may adjust repository permissions following unauthorized merges. Repository branch protection and rulesets should enforce these requirements where available.
+
 ## Reporting bugs
 
 Please include:
