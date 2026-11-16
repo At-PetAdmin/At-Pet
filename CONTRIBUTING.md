@@ -134,6 +134,17 @@ All other AI-assisted pull requests remain subject to normal quality, security, 
 
 **No contributor or collaborator may bypass the established review process or directly merge their own unreviewed changes into protected project branches.** Changes affecting core functionality, security boundaries, integrations, or release/review eligibility require explicit approval from an authorized, trusted maintainer before merging. Automated Agent review is advisory and never constitutes merge approval. Maintainers may reject or close noncompliant contributions and may adjust repository permissions following unauthorized merges. Repository branch protection and rulesets should enforce these requirements where available.
 
+### Required PR development-environment disclosure
+
+Every pull request **must** state the development system used, even when no AI was involved. If AI or an Agent assisted with the change, also identify the model and Agent application. Include the following in the PR description:
+
+- **System (required for all PRs):** operating system and version, device/platform (for example Windows desktop, Linux server, or Android phone), and development environment.
+- **AI model (required when AI was used):** provider, model name, and version/variant if known; list each model materially involved.
+- **Agent/tool (required when AI was used):** application or Agent name and version if known, including whether it is a wrapper or third-party client.
+- **Verification:** what was personally reviewed and tested, with results. State explicitly when a check was not performed.
+
+For contributions without AI assistance, write `AI model: None` and `Agent/tool: None`. Do not fabricate model identifiers or versions; use `Unknown` and explain why if a tool does not disclose them. Missing required information may result in a request for clarification or closure without merge.
+
 ## Reporting bugs
 
 Please include:
