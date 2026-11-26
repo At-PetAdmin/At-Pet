@@ -70,6 +70,13 @@ HttpApi::HttpApi(std::function<QJsonObject()> stateProvider, bool authentication
     connect(&server_, &QTcpServer::newConnection, this, &HttpApi::acceptConnections);
 }
 
+HttpApi::~HttpApi() {
+    // The server destroys its sockets after the request containers are destroyed.
+    // Disconnect their handlers before a socket can emit disconnected during teardown.
+    for (auto *socket : server_.findChildren<QTcpSocket *>())
+        socket->disconnect(this);
+}
+
 bool HttpApi::start(quint16 port) {
     return server_.listen(QHostAddress::LocalHost, port);
 }

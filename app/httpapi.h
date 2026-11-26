@@ -16,6 +16,7 @@ class HttpApi final : public QObject {
 public:
     explicit HttpApi(std::function<QJsonObject()> stateProvider, bool authenticationRequired,
                      QObject *parent = nullptr);
+    ~HttpApi() override;
     bool start(quint16 port = 8765);
     quint16 port() const;
     bool authenticationRequired() const { return authenticationRequired_; }

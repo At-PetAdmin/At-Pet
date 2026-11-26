@@ -31,9 +31,8 @@ namespace {
 
 constexpr int kConnectTimeoutMs = 3000;
 
-// Reads until the server closes the connection or nothing arrives for settleMs. The SSE
-// endpoint keeps the socket open, so it passes a short settle window of its own.
-QByteArray exchange(quint16 port, const QByteArray &request, int settleMs = 2000) {
+// Reads until the server closes the connection or the response times out.
+QByteArray exchange(quint16 port, const QByteArray &request) {
     QTcpSocket socket;
     socket.connectToHost(QHostAddress::LocalHost, port);
     if (!socket.waitForConnected(kConnectTimeoutMs))
@@ -48,7 +47,7 @@ QByteArray exchange(quint16 port, const QByteArray &request, int settleMs = 2000
     QByteArray response;
     QElapsedTimer timer;
     timer.start();
-    while (timer.elapsed() < settleMs) {
+    while (timer.elapsed() < 2000) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
         response += socket.readAll();
         if (socket.state() == QAbstractSocket::UnconnectedState)
@@ -132,8 +131,8 @@ private slots:
     void hidesQuestionAnswersFromBrowsers();
 
 private:
-    QByteArray send(const QByteArray &request, int settleMs = 2000) {
-        return exchange(port_, request, settleMs);
+    QByteArray send(const QByteArray &request) {
+        return exchange(port_, request);
     }
 
     HttpApi *api_ = nullptr;
@@ -387,11 +386,20 @@ void HttpApiGuardTest::neverAdvertisesCors() {
     QCOMPARE(statusOf(options), 204);
     QVERIFY(!hasCorsHeader(options));
 
-    const QByteArray stream = send(getRequest("/events", hostFor(port_)), 500);
+    QTcpSocket eventStream;
+    eventStream.connectToHost(QHostAddress::LocalHost, port_);
+    QVERIFY(eventStream.waitForConnected(kConnectTimeoutMs));
+    eventStream.write(getRequest("/events", hostFor(port_)));
+    QTRY_VERIFY(eventStream.peek(1024).endsWith("\n\n"));
+    const QByteArray stream = eventStream.readAll();
     QCOMPARE(statusOf(stream), 200);
     QVERIFY(stream.contains("text/event-stream"));
     QVERIFY(stream.contains("data:"));
     QVERIFY(!hasCorsHeader(stream));
+
+    delete api_;
+    api_ = nullptr;
+    QTRY_COMPARE(eventStream.state(), QAbstractSocket::UnconnectedState);
 }
 
 void HttpApiGuardTest::rejectsSummonPathTraversal() {
