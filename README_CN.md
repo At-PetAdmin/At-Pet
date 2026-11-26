@@ -169,7 +169,9 @@ pwsh -File scripts/new-signing-cert.ps1
 
 ## 本地 API
 
-服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。除 `/health` 外，所有端点均需要 Bearer 凭证；Agent 凭证绑定对应 Agent，权限／问答请求仅可由所属客户端读取和取消；全局状态、SSE 和桌宠控制需要独立管理员凭证。更新时请同步升级桥接客户端，参见[认证、接入迁移与事件顺序说明](docs/local-api-security.md)。请勿将端口暴露或转发到网络。
+服务默认只绑定到 `127.0.0.1:8765`。可通过 `AT_PET_PORT` 选择其他端口。默认除 `/health` 外，所有端点均需要 Bearer 凭证。Agent 凭证绑定对应 Agent 和所属权限、问答请求。全局状态、SSE 和桌宠控制需要管理员凭证。
+
+若要让 Hook、桥接插件和其他本机程序免密接入，可在 **常规设置 → 安全选项** 取消勾选 **密钥鉴权**，应用后重启 At-Pet。详见[认证、接入迁移与事件顺序说明](docs/local-api-security.md)。请勿将端口暴露或转发到网络。
 
 请求必须携带回环 `Host`（`127.0.0.1:<端口>`、`localhost:<端口>` 或 `[::1]:<端口>`），且不得携带 `Origin` 请求头；因此网页、DNS rebinding 主机名以及 `<iframe sandbox>` 的 null origin 都会被 `403` 拒绝。`POST` 请求若带有 `Content-Type`，则必须是 `application/json`。响应不包含 `Access-Control-Allow-Origin`，浏览器源无法读取。
 

@@ -116,6 +116,7 @@ private slots:
     void init();
     void cleanup();
     void requiresAuthentication();
+    void allowsLocalRequestsWithoutCredentialsWhenDisabled();
     void bindsAgentIdentityAndRequestOwnership();
     void boundsPendingRequests();
     void persistsCredentialsAndRejectsCorruption();
@@ -142,7 +143,7 @@ private:
 void HttpApiGuardTest::init() {
     api_ = new HttpApi([] {
         return QJsonObject{{"app", "At-Pet"}, {"pets", QJsonArray{}}};
-    });
+    }, true);
     api_->setClients({{"admin", {}, "test-admin", true},
                       {"a", "claudecode", "test-a", false},
                       {"b", "claudecode", "test-b", false},
@@ -169,6 +170,44 @@ void HttpApiGuardTest::requiresAuthentication() {
     QCOMPARE(statusOf(send(asClient(getRequest("/state", host), "test-a"))), 403);
     QCOMPARE(statusOf(send(asClient(getRequest("/events", host), "test-a"))), 403);
     QCOMPARE(statusOf(send(asClient(postRequest("/say", host, R"({"text":"fake"})"), "test-a"))), 403);
+}
+
+void HttpApiGuardTest::allowsLocalRequestsWithoutCredentialsWhenDisabled() {
+    HttpApi api([] { return QJsonObject{{"app", "At-Pet"}}; }, false);
+    QVERIFY(api.start(0));
+    const auto host = hostFor(api.port());
+    const auto send = [&](const QByteArray &request) {
+        return exchange(api.port(), asClient(request, {}));
+    };
+
+    const auto health = send(getRequest("/health", host));
+    QCOMPARE(statusOf(health), 200);
+    QCOMPARE(QJsonDocument::fromJson(bodyOf(health)).object().value("authenticationRequired"), QJsonValue(false));
+    QCOMPARE(statusOf(send(getRequest("/state", host))), 200);
+
+    QSignalSpy events(&api, &HttpApi::eventReceived);
+    const auto event = postRequest("/event", host,
+        R"({"sessionId":"bridge","agentApp":"opencode","event":"thinking","clientId":"claimed"})");
+    QCOMPARE(statusOf(send(event)), 202);
+    QCOMPARE(statusOf(exchange(api.port(), asClient(event, "outdated-token"))), 202);
+    QCOMPARE(statusOf(send(postRequest("/agent-event/claudecode", host,
+        R"({"session_id":"native-hook","hook_event_name":"SessionStart"})"))), 200);
+    QCOMPARE(events.size(), 3);
+    QCOMPARE(events.first().first().toJsonObject().value("clientId").toString(), QString("local"));
+
+    const auto permission = send(postRequest("/permission", host,
+        R"({"sessionId":"bridge","agentApp":"opencode","toolName":"Read"})"));
+    QCOMPARE(statusOf(permission), 202);
+    const auto id = QJsonDocument::fromJson(bodyOf(permission)).object().value("requestId").toString();
+    QVERIFY(!id.isEmpty());
+    api.resolvePermission(id, true);
+    QVERIFY(send(getRequest("/permission/" + id.toUtf8(), host)).contains("allowed_once"));
+
+    const auto blocked = send(getRequest("/state", host, "Origin: http://example.test\r\n"));
+    QCOMPARE(statusOf(blocked), 403);
+    QVERIFY(!hasCorsHeader(blocked));
+    QCOMPARE(statusOf(send(getRequest("/state", "example.test"))), 403);
+    QCOMPARE(statusOf(send(postRequest("/say", host, R"({"text":"blocked"})", "text/plain"))), 415);
 }
 
 void HttpApiGuardTest::bindsAgentIdentityAndRequestOwnership() {

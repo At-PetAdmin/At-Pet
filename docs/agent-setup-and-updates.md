@@ -45,8 +45,8 @@ JSON 注释不受支持，需先整理为合法 JSON。OpenCode 文件变更同�
   CLI 使用 `node scripts/install.mjs cli --repo <项目路径>`。
 - 其他已提供插件的来源见 [Agent 插件集合](https://github.com/At-PetAdmin/At-Pet_Agent-plugin)。
 
-At-Pet 1.3.4+ 的本地 API 需要认证。部分组织插件说明仍基于旧版无认证 API，
-安装前需确认发送端已更新；Node 入口应带上 `client-auth.mjs`。
+本地 API 默认启用密钥鉴权。可在「常规设置 → 安全选项」关闭密钥鉴权，应用并重启后即可免密接入。
+内置 Node 集成需将 `client-auth.mjs` 放在入口脚本旁。已安装的旧版发送端如果仍要求读取密钥，请更新发送端。
 详见 [本地 API 认证与迁移](local-api-security.md)。
 
 ## 获取更新

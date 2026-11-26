@@ -202,7 +202,8 @@ public:
         gravityScale_ = qBound(0.1, QSettings().value("pet/gravityScale", 1.0).toDouble(), 3.0);
         completionSoundEnabled_ = QSettings().value("feedback/completionSound", true).toBool();
         autoDoNotDisturbEnabled_ = QSettings().value("pet/autoDoNotDisturb", true).toBool();
-        api_ = new HttpApi([this] { return stateJson(); }, this);
+        api_ = new HttpApi([this] { return stateJson(); },
+                           QSettings().value("api/authenticationRequired", true).toBool(), this);
         api_->setPermissionForwardingEnabled(QSettings().value("agents/allowPermissionForwarding", true).toBool());
         completionTimer_.setSingleShot(true);
         completionTimer_.setInterval(1200);
@@ -256,17 +257,20 @@ public:
         bool portOk = false;
         const uint requestedPort = portText.toUInt(&portOk);
         const quint16 savedPort = quint16(QSettings().value("api/port", 8765).toUInt());
-        const quint16 port = portOk && requestedPort > 0 && requestedPort <= 65535
+        localApiPort_ = portOk && requestedPort > 0 && requestedPort <= 65535
             ? quint16(requestedPort) : (savedPort >= 1024 ? savedPort : 8765);
-        QList<ApiClient> apiClients;
-        QString credentialError;
-        if (!apicredentials::loadOrCreate(&apiClients, &credentialError)) {
-            qWarning("At-Pet local API disabled: %s", qPrintable(credentialError));
-        } else {
-            api_->setClients(apiClients);
+        bool apiReady = true;
+        if (api_->authenticationRequired()) {
+            QList<ApiClient> apiClients;
+            QString credentialError;
+            apiReady = apicredentials::loadOrCreate(&apiClients, &credentialError);
+            if (apiReady)
+                api_->setClients(apiClients);
+            else
+                qWarning("At-Pet local API disabled: %s", qPrintable(credentialError));
         }
-        if (!apiClients.isEmpty() && !api_->start(port))
-            qWarning("At-Pet local API could not bind to port %u", unsigned(port));
+        if (apiReady && !api_->start(localApiPort_))
+            qWarning("At-Pet local API could not bind to port %u", unsigned(localApiPort_));
 
         createTrayIcon();
         startSelectedPet();
@@ -437,10 +441,11 @@ private:
                 completionSoundEnabled_ = enabled;
                 QSettings().setValue("feedback/completionSound", enabled);
             });
-            connect(settingsDialog_, &SettingsDialog::apiPortChanged, this, [this](quint16 port) {
-                if (api_->port() == port) return;
+            connect(settingsDialog_, &SettingsDialog::localApiSettingsChanged, this,
+                    [this](quint16 port, bool authenticationRequired) {
+                if (localApiPort_ == port && api_->authenticationRequired() == authenticationRequired) return;
                 QMessageBox::information(settingsDialog_, tr("Restart Required"),
-                    tr("The API port change will take effect after restarting At-Pet."));
+                    tr("Local API settings will take effect after restarting At-Pet."));
             });
             connect(settingsDialog_, &SettingsDialog::agentFilterChanged, this, [this] {
                 QSettings().sync();
@@ -1379,6 +1384,7 @@ private:
     QTimer completionTimer_;
     int pendingCompletions_ = 0;
     QDateTime errorNotificationUntil_;
+    quint16 localApiPort_ = 8765;
     HttpApi *api_ = nullptr;
     AgentConnectivity agentConnectivity_;
     QQueue<QString> connectionAnnouncements_;

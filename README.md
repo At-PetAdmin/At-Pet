@@ -166,7 +166,9 @@ Example `pet.json` in the reference project's format:
 
  ## Local API
 
-The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. All endpoints except `/health` require a bearer credential. Agent credentials are scoped to their Agent and their own permission/question requests; global state, SSE and pet control require the separate administrator credential. See [authentication, integration upgrades and event ordering](docs/local-api-security.md). Do not expose or forward this port to a network.
+The service binds only to `127.0.0.1:8765` by default. Set `AT_PET_PORT` to choose another port. By default, all endpoints except `/health` require a bearer credential. Agent credentials are scoped to the Agent and its own permission and question requests. Global state, SSE and pet control require the administrator credential.
+
+To allow hooks, bridges and other local programs to use the API without a key, clear **Require a key for the local API** under **General Settings → Security Options**, apply the change and restart At-Pet. See [authentication, integration upgrades and event ordering](docs/local-api-security.md). Do not expose or forward this port to a network.
 
 Requests must carry a loopback `Host` (`127.0.0.1:<port>`, `localhost:<port>`, or `[::1]:<port>`) and must not carry an `Origin` header, so browser pages, DNS-rebinding host names, and null origins from a sandboxed iframe are rejected with `403`. A `POST` body must use `Content-Type: application/json` when that header is present. Responses never include `Access-Control-Allow-Origin`, so no browser origin can read them.
 

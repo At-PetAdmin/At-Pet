@@ -2,6 +2,7 @@
 #include <QTest>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QListWidget>
 #include "testsettings.h"
@@ -137,6 +138,47 @@ private slots:
         dialog.showTasks();
         QTest::qWait(50);
         QVERIFY(table->isVisible());
+    }
+    void localApiAuthenticationSettingAppliesOnRestart() {
+        const QString captureDir = qEnvironmentVariable("AT_PET_UI_CAPTURE_DIR");
+        if (!captureDir.isEmpty()) QSettings().setValue("ui/language", "zh_CN");
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost, 0));
+        const quint16 port = probe.serverPort();
+        probe.close();
+        QSettings().setValue("api/port", port);
+
+        QTimer closeMessages;
+        connect(&closeMessages, &QTimer::timeout, this, [] {
+            if (auto *message = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+                message->accept();
+        });
+        closeMessages.start(10);
+        for (bool required : {true, false}) {
+            PetController controller;
+            QCOMPARE(controller.api_->authenticationRequired(), required);
+            QVERIFY(controller.api_->port() != 0);
+            controller.showSettingsDialog();
+            auto *dialog = controller.settingsDialog_.data();
+            auto *check = dialog->findChild<QCheckBox *>("apiAuthenticationCheck");
+            QVERIFY(check);
+            QCOMPARE(check->isChecked(), required);
+            if (required && !captureDir.isEmpty()) {
+                dialog->findChild<QTabWidget *>()->setCurrentIndex(2);
+                QTest::qWait(100);
+                QVERIFY(dialog->grab().save(QDir(captureDir).filePath("security-options.png")));
+            }
+            check->setChecked(!required);
+            QVERIFY(QMetaObject::invokeMethod(dialog, "onSaveGeneralSettings"));
+            QCOMPARE(QSettings().value("api/authenticationRequired").toBool(), !required);
+            QCOMPARE(controller.api_->authenticationRequired(), required);
+            delete dialog;
+            controller.clearPets();
+        }
+        PetController restarted;
+        QVERIFY(restarted.api_->authenticationRequired());
+        QVERIFY(restarted.api_->port() != 0);
+        restarted.clearPets();
     }
 };
 QTEST_MAIN(CompanionTest)
