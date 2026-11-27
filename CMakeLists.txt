@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
-project(AtPet VERSION 1.3.5 LANGUAGES CXX)
+project(AtPet VERSION 1.4.0 LANGUAGES CXX)
 # Human-readable version string compiled into the binary (CMake's project VERSION
 # must stay numeric; pre-release suffixes live here). The Windows resource keeps
 # using PROJECT_VERSION_* for FILEVERSION/PRODUCTVERSION.
-set(AT_PET_VERSION_STRING "1.3.5-beta1" CACHE STRING "Human-readable At-Pet version string")
+set(AT_PET_VERSION_STRING "1.4.0-beta1" CACHE STRING "Human-readable At-Pet version string")
 set(AT_PET_FILE_FLAGS "0x0L")
 if(AT_PET_VERSION_STRING MATCHES "-")
     set(AT_PET_FILE_FLAGS "VS_FF_PRERELEASE")
