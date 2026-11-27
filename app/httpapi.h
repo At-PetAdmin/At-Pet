@@ -14,9 +14,12 @@ class HttpApi final : public QObject {
     Q_OBJECT
 
 public:
-    explicit HttpApi(std::function<QJsonObject()> stateProvider, QObject *parent = nullptr);
+    explicit HttpApi(std::function<QJsonObject()> stateProvider, bool authenticationRequired,
+                     QObject *parent = nullptr);
+    ~HttpApi() override;
     bool start(quint16 port = 8765);
     quint16 port() const;
+    bool authenticationRequired() const { return authenticationRequired_; }
     void setClients(const QList<ApiClient> &clients) { clients_ = clients; }
     void publishState();
     void setPermissionForwardingEnabled(bool enabled) { permissionForwardingEnabled_ = enabled; }
@@ -61,6 +64,7 @@ private:
 
     QTcpServer server_;
     QList<ApiClient> clients_;
+    const bool authenticationRequired_;
     bool permissionForwardingEnabled_ = true;
     std::function<QJsonObject()> stateProvider_;
     QList<QTcpSocket *> eventClients_;

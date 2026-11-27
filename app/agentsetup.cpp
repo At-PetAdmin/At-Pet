@@ -99,7 +99,7 @@ QString agentsetup::guideText(const QString &key) {
     else if (agentDefinitionFor(key) && agentDefinitionFor(key)->integration != AgentIntegration::ExternalRequired)
         text = tr("Follow this Agent's installation instructions in the organization repository. Its plugin or hook format requires manual setup. Restart the Agent after installation.");
     else text = tr("No sender is bundled for this Agent. Follow the compatibility guide to connect an external integration to the local API.");
-    return text + "\n\n" + tr("At-Pet 1.3.4+ requires local API authentication. Update the sender too; Node integrations need client-auth.mjs beside the entry script. Older organization plugins may need an authentication update. A configured hook is only shown as Connected after a real event arrives.");
+    return text + "\n\n" + tr("The local API requires a key by default. You can change this under General Settings > Security Options. Keep client-auth.mjs beside the Node integration entry script. A configured hook is shown as Connected after a real event arrives.");
 }
 
 agentsetup::Result agentsetup::configure(const QString &key, const QString &home, const QString &runtimeRoot, quint16 port) {

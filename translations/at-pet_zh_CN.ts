@@ -163,8 +163,8 @@
     </message>
     <message>
         <location filename="../app/main.cpp" line="362"/>
-        <source>The API port change will take effect after restarting At-Pet.</source>
-        <translation>本地 API 端口将在重启 At-Pet 后生效。</translation>
+        <source>Local API settings will take effect after restarting At-Pet.</source>
+        <translation>本地 API 设置将在重启 At-Pet 后生效。</translation>
     </message>
     <message>
         <location filename="../app/main.cpp" line="495"/>
@@ -973,6 +973,18 @@ Drag to throw · Right-click to exit</source>
         <translation>本地 API 端口：</translation>
     </message>
     <message>
+        <source>Security Options</source>
+        <translation>安全选项</translation>
+    </message>
+    <message>
+        <source>Require a key for the local API</source>
+        <translation>密钥鉴权</translation>
+    </message>
+    <message>
+        <source>When disabled, any local process can use the API without a key. Changes take effect after restarting At-Pet.</source>
+        <translation>关闭后，任何本机进程都可以免密使用本地 API。更改将在重启 At-Pet 后生效。</translation>
+    </message>
+    <message>
         <location filename="../app/settingsdialog.cpp" line="574"/>
         <location filename="../app/settingsdialog.cpp" line="1135"/>
         <source>Apply General Settings</source>
@@ -1575,8 +1587,8 @@ CLI hooks 使用：node scripts/install.mjs cli --repo &lt;项目路径&gt;
         <translation>此 Agent 暂未附带发送端。请按兼容性指引通过外部集成接入本地 API。</translation>
     </message>
     <message>
-        <source>At-Pet 1.3.4+ requires local API authentication. Update the sender too; Node integrations need client-auth.mjs beside the entry script. Older organization plugins may need an authentication update. A configured hook is only shown as Connected after a real event arrives.</source>
-        <translation>At-Pet 1.3.4 及后续版本要求本地 API 认证，请同步更新发送端。Node 集成需将 client-auth.mjs 放在入口脚本旁。组织仓库中的旧插件可能需要补充认证支持。配置完成后，收到真实事件才会显示已连接。</translation>
+        <source>The local API requires a key by default. You can change this under General Settings &gt; Security Options. Keep client-auth.mjs beside the Node integration entry script. A configured hook is shown as Connected after a real event arrives.</source>
+        <translation>本地 API 默认启用密钥鉴权，可在「常规设置 → 安全选项」中切换。Node 集成需将 client-auth.mjs 放在入口脚本旁。配置完成后，收到真实事件才会显示已连接。</translation>
     </message>
     <message>
         <source>This Agent requires manual setup.</source>

@@ -18,10 +18,11 @@ test('client credentials are scoped, reloaded after rotation, and fail closed', 
     clients: [{ id: 'admin', administrator: true, token: 'administrator-fixture' },
       { id: 'openaicodex', agentKey: 'openaicodex', token }] }));
   const received = [];
+  let health = { ok: true, authenticationRequired: true };
   const api = createServer((req, res) => {
-    received.push(req.headers.authorization);
+    received.push({ path: req.url, authorization: req.headers.authorization });
     if (req.url === '/redirect') res.writeHead(302, { location: '/target' });
-    res.end('{}');
+    res.end(JSON.stringify(req.url === '/health' ? health : {}));
   });
   api.listen(0, '127.0.0.1');
   await once(api, 'listening');
@@ -34,12 +35,27 @@ test('client credentials are scoped, reloaded after rotation, and fail closed', 
     await authenticatedFetch(base, '/event', {}, 'openai-codex');
     store('rotated-client-fixture');
     await authenticatedFetch(base, '/event', {}, 'openai-codex');
-    assert.deepEqual(received, ['Bearer first-client-fixture', 'Bearer rotated-client-fixture']);
+    assert.deepEqual(received, [
+      { path: '/event', authorization: 'Bearer first-client-fixture' },
+      { path: '/event', authorization: 'Bearer rotated-client-fixture' },
+    ]);
     assert.throws(() => authenticatedFetch('http://example.com', '/event', {}, 'openai-codex'), /loopback/);
     await assert.rejects(authenticatedFetch(base, '/redirect', {}, 'openai-codex'));
     assert.equal(received.length, 3); // Redirect target was never contacted.
     writeFileSync(process.env.AT_PET_CREDENTIALS, 'invalid');
     assert.throws(() => tokenFor('openai-codex'));
+    await assert.rejects(authenticatedFetch(base, '/event', {}, 'openai-codex'), /credential unavailable/);
+    health = { ok: true };
+    await assert.rejects(authenticatedFetch(base, '/event', {}, 'openai-codex'), /credential unavailable/);
+    health = { ok: true, authenticationRequired: false };
+    rmSync(process.env.AT_PET_CREDENTIALS);
+    await authenticatedFetch(base, '/event', { method: 'POST', headers: { Authorization: 'Bearer unused' } }, 'openai-codex');
+    assert.deepEqual(received.slice(3), [
+      { path: '/health', authorization: undefined },
+      { path: '/health', authorization: undefined },
+      { path: '/health', authorization: undefined },
+      { path: '/event', authorization: undefined },
+    ]);
   } finally {
     api.close();
     // directory is the absolute path returned by mkdtempSync under tmpdir().

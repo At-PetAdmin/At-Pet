@@ -29,6 +29,23 @@ export function authenticatedFetch(baseUrl, path, init, agentApp) {
     throw new Error('At-Pet credentials may only be sent to a loopback HTTP origin');
   }
   const headers = new Headers(init?.headers);
-  headers.set('Authorization', `Bearer ${tokenFor(agentApp)}`);
-  return fetch(url.origin + path, { ...init, headers, redirect: 'error' });
+  const request = { ...init, headers, redirect: 'error' };
+  let token;
+  try {
+    token = tokenFor(agentApp);
+  } catch {
+    headers.delete('Authorization');
+    return fetchWithoutCredential(url.origin, path, request);
+  }
+  headers.set('Authorization', `Bearer ${token}`);
+  return fetch(url.origin + path, request);
+}
+
+async function fetchWithoutCredential(origin, path, request) {
+  const health = await fetch(origin + '/health', { signal: request.signal, redirect: 'error' });
+  const status = health.ok ? await health.json() : null;
+  if (status?.ok !== true || status.authenticationRequired !== false) {
+    throw new Error('At-Pet client credential unavailable');
+  }
+  return fetch(origin + path, request);
 }

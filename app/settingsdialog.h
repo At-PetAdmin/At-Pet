@@ -74,7 +74,7 @@ signals:
     void gravityToggled(bool enabled);
     void gravityScaleChanged(qreal scale);
     void completionSoundToggled(bool enabled);
-    void apiPortChanged(quint16 port);
+    void localApiSettingsChanged(quint16 port, bool authenticationRequired);
     void agentFilterChanged();
     void subagentPetSettingChanged(bool enabled);
     void animationFpsChanged(const QString &petId, const QString &animation, int fps);
@@ -187,6 +187,8 @@ private:
     QDoubleSpinBox *gravityScaleSpin_ = nullptr;
     QCheckBox *completionSoundCheck_ = nullptr;
     QSpinBox *apiPortSpin_ = nullptr;
+    QGroupBox *securityOptionsGroupBox_ = nullptr;
+    QCheckBox *apiAuthenticationCheck_ = nullptr;
     QGroupBox *quotePackGroupBox_ = nullptr;
     QLabel *quotePackDescriptionLabel_ = nullptr;
     QLabel *quotePackStatusLabel_ = nullptr;

@@ -65,9 +65,16 @@ bool isJsonContentType(const QByteArray &rawValue) {
 
 } // namespace
 
-HttpApi::HttpApi(std::function<QJsonObject()> stateProvider, QObject *parent)
-    : QObject(parent), stateProvider_(std::move(stateProvider)) {
+HttpApi::HttpApi(std::function<QJsonObject()> stateProvider, bool authenticationRequired, QObject *parent)
+    : QObject(parent), authenticationRequired_(authenticationRequired), stateProvider_(std::move(stateProvider)) {
     connect(&server_, &QTcpServer::newConnection, this, &HttpApi::acceptConnections);
+}
+
+HttpApi::~HttpApi() {
+    // The server destroys its sockets after the request containers are destroyed.
+    // Disconnect their handlers before a socket can emit disconnected during teardown.
+    for (auto *socket : server_.findChildren<QTcpSocket *>())
+        socket->disconnect(this);
 }
 
 bool HttpApi::start(quint16 port) {
@@ -200,7 +207,13 @@ void HttpApi::readRequest(QTcpSocket *socket) {
     if (!requestIsTrusted(socket, method, headers, ambiguousHeaders))
         return;
     if (method == "GET" && path == "/health") {
-        sendJson(socket, 200, {{"ok", true}, {"authenticationRequired", true}});
+        sendJson(socket, 200, {{"ok", true}, {"authenticationRequired", authenticationRequired_}});
+        return;
+    }
+    if (!authenticationRequired_) {
+        // All callers share the same local identity when credentials are disabled.
+        static const ApiClient localClient{QStringLiteral("local"), {}, {}, true};
+        routeRequest(socket, method, path, body, localClient);
         return;
     }
     const QByteArray authorization = headers.value("authorization");

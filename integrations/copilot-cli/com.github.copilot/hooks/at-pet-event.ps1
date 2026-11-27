@@ -49,13 +49,27 @@ try {
         if ([string]::IsNullOrWhiteSpace($credentialFile)) {
             $credentialFile = Join-Path $env:LOCALAPPDATA 'Ni-ShuWu/At-Pet/api-security/clients.json'
         }
-        $credentialStore = Get-Content -LiteralPath $credentialFile -Raw | ConvertFrom-Json
-        if ($credentialStore.version -ne 1) { exit 0 }
-        $apiToken = [string]($credentialStore.clients | Where-Object {
-            $_.id -eq 'githubcopilot' -and $_.agentKey -eq 'githubcopilot' -and -not $_.administrator
-        } | Select-Object -First 1).token
+        try {
+            $credentialStore = Get-Content -LiteralPath $credentialFile -Raw | ConvertFrom-Json
+            if ($credentialStore.version -eq 1) {
+                $apiToken = [string]($credentialStore.clients | Where-Object {
+                    $_.id -eq 'githubcopilot' -and $_.agentKey -eq 'githubcopilot' -and -not $_.administrator
+                } | Select-Object -First 1).token
+            }
+        }
+        catch {
+            $apiToken = $null
+        }
     }
-    if ([string]::IsNullOrWhiteSpace($apiToken)) { exit 0 }
+    $headers = @{}
+    if ([string]::IsNullOrWhiteSpace($apiToken)) {
+        $healthUrl = $endpoint.GetLeftPart([UriPartial]::Authority) + '/health'
+        $health = Invoke-RestMethod -Uri $healthUrl -MaximumRedirection 0 -TimeoutSec 2
+        if ($health.ok -ne $true -or $health.authenticationRequired -isnot [bool] -or $health.authenticationRequired) { exit 0 }
+    }
+    else {
+        $headers.Authorization = "Bearer $apiToken"
+    }
     $eventBody = [ordered]@{
         sessionId       = $sessionId
         agentApp        = 'github-copilot'
@@ -70,7 +84,7 @@ try {
     if ($hook.toolCallId) { $eventBody.toolCallId = [string]$hook.toolCallId }
     $body = $eventBody | ConvertTo-Json -Compress
 
-    Invoke-RestMethod -Uri $endpoint -Method Post -Headers @{ Authorization = "Bearer $apiToken" } -MaximumRedirection 0 -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec 2 -ErrorAction Stop | Out-Null
+    Invoke-RestMethod -Uri $endpoint -Method Post -Headers $headers -MaximumRedirection 0 -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec 2 -ErrorAction Stop | Out-Null
 }
 catch {
 }

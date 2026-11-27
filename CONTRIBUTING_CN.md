@@ -93,7 +93,7 @@ cmake --build build
 - 与周围代码风格保持一致：四空格缩进、左大括号不换行、沿用现有命名方式。
 - 所有面向用户的字符串都要用 `tr()` 包裹，并补充对应翻译。
 - 保持平台无关代码的可移植性。Windows 专属代码使用 `Q_OS_WIN` 保护，并尽量与共享路径隔离。
-- 本地 API 只能绑定回环地址。该 API 有意不进行身份验证，切勿绑定到公网接口或转发该端口。
+- 本地 API 只能绑定回环地址，默认启用密钥鉴权。切勿绑定到公网接口或转发该端口。
 - 不要提交构建产物、IDE 元数据或生成文件，参见 `.gitignore`。
 - 在缺陷修复 PR 中，优先选择小而清晰的改动，避免大范围重构。
 
@@ -157,7 +157,7 @@ cmake --build build
 
 ## 安全
 
-请不要为安全漏洞创建公开 issue。请使用 [GitHub 私有安全公告](https://github.com/Ni-ShuWu/At-Pet/security/advisories/new) 或私下联系维护者。请注意，本地 API 有意不进行身份验证；关于将其暴露到不可信网络的报告仍然欢迎。
+请私下联系维护者或通过 [GitHub 私有安全公告](https://github.com/Ni-ShuWu/At-Pet/security/advisories/new) 报告安全漏洞。
 
 ## 许可证
 

@@ -2,16 +2,19 @@
 
 ## Credentials and upgrade
 
-All endpoints except `GET /health` require `Authorization: Bearer <token>`.
-Loopback Host checks, browser Origin rejection and the absence of CORS headers
-remain in effect. There is no unauthenticated compatibility mode.
+By default, all endpoints except `GET /health` require `Authorization: Bearer <token>`.
+Clear **Require a key for the local API** under **General Settings → Security Options**,
+apply the change and restart At-Pet to allow any local process to use the API without a
+key. `GET /health` reports the current mode in `authenticationRequired`. Loopback Host
+checks, browser Origin rejection and the absence of CORS headers apply in both modes.
 
-At-Pet creates a 256-bit random token for each registered Agent, an `external`
-client, and a separate `admin` client on first startup. The credential store is
+With authentication enabled, At-Pet creates a 256-bit random token for each registered
+Agent, an `external` client, and a separate `admin` client on first startup. The credential store is
 `%LOCALAPPDATA%\Ni-ShuWu\At-Pet\api-security\clients.json` on Windows. The
 directory has a protected DACL granting access to the current user and SYSTEM.
 On other platforms the directory is owner-only. A corrupt/unreadable store
-disables the API instead of silently replacing credentials or disabling auth.
+disables the API when authentication is enabled. At-Pet uses the existing store again
+after you re-enable authentication and restart.
 
 These tokens distinguish integrations and prevent unauthenticated callers or
 other Windows users from using the API. They do not isolate mutually hostile
@@ -24,10 +27,11 @@ entry point.** Upgrade installed integration copies along with the application.
 The helpers refuse non-loopback URLs and redirects, and never auto-select the
 administrator credential. Explicit overrides are `AT_PET_CREDENTIALS` (a store
 path), `AT_PET_API_TOKEN_<AGENTKEY>` (uppercase registry key, no punctuation),
-or `AT_PET_API_TOKEN` (one process's explicit token). Missing credentials make
-hook bridges fall back to the Agent's own behavior, with no automatic approval.
+or `AT_PET_API_TOKEN` (one process's explicit token). When the sender cannot load a
+credential, it sends without one only if `/health` reports `authenticationRequired: false`.
+Hooks fall back to the Agent's own behavior when the API rejects a request.
 
-Claude's native HTTP hooks need an environment variable in the process starting
+With authentication enabled, Claude's native HTTP hooks need an environment variable in the process starting
 Claude Code. After starting the updated At-Pet, run this in the shell that will
 launch Claude Code; the token is not printed:
 
@@ -59,12 +63,12 @@ stopped regenerates all tokens at the next startup and revokes all old clients.
 | Create `/permission`, `/question` | Same Agent binding |
 | Poll/delete `/permission/<id>`, `/question/<id>` | Creating client, or admin; others receive 404 |
 | `/state`, `/events`, `/animation`, `/say`, `/summon` | Admin only |
-| `/health` | Public, minimal response with `authenticationRequired: true` |
+| `/health` | Public, reports whether authentication is required |
 
-The server stamps `clientId`; callers cannot spoof it in JSON. Non-admin
-credentials cannot read another client's tasks through the global state or SSE
-endpoints. Permission decisions still require the local dialog; bearer tokens
-do not provide a remote approval endpoint.
+The server stamps `clientId`. With authentication enabled, non-admin credentials
+cannot read another client's tasks through the global state or SSE endpoints.
+With authentication disabled, local callers share one identity and can access all
+API endpoints. Permission decisions require the local dialog in both modes.
 
 Limits: 64 connections, 8 SSE clients, 1 MiB request data, 10 seconds to finish
 an HTTP request, 16 outstanding permission/question records per client and 128

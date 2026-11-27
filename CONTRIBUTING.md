@@ -93,7 +93,7 @@ Run the checks that apply to your change:
 - Match the surrounding style: four-space indentation, braces on the same line, and the existing naming conventions.
 - Wrap every user-visible string in `tr()` and add the corresponding translation.
 - Keep platform-independent code portable. Guard Windows-specific code with `Q_OS_WIN` and keep it out of shared paths where possible.
-- Keep the local API bound to loopback only. The API is intentionally unauthenticated, so never bind it to a public interface or forward the port.
+- Keep the local API bound to loopback only, with key authentication enabled by default. Never bind it to a public interface or forward the port.
 - Do not commit build output, IDE metadata, or generated files. See `.gitignore`.
 - Prefer small, readable changes over broad refactors in a bug-fix PR.
 
@@ -157,7 +157,7 @@ Please include:
 
 ## Security
 
-Do not open a public issue for a security vulnerability. Use [GitHub private security advisories](https://github.com/Ni-ShuWu/At-Pet/security/advisories/new) or contact the maintainers privately. Note that the local API is unauthenticated by design; reports about exposing it to an untrusted network are still welcome.
+Report security vulnerabilities privately to the maintainers or via [GitHub private security advisories](https://github.com/Ni-ShuWu/At-Pet/security/advisories/new).
 
 ## License
 

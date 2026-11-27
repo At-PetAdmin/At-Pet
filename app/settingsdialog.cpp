@@ -647,6 +647,14 @@ void SettingsDialog::setupUi() {
 
     generalLayout->addWidget(uiGroup);
 
+    securityOptionsGroupBox_ = new QGroupBox(tr("Security Options"), generalTab);
+    auto *securityOptionsLayout = new QVBoxLayout(securityOptionsGroupBox_);
+    apiAuthenticationCheck_ = new QCheckBox(tr("Require a key for the local API"), securityOptionsGroupBox_);
+    apiAuthenticationCheck_->setObjectName(QStringLiteral("apiAuthenticationCheck"));
+    apiAuthenticationCheck_->setToolTip(tr("When disabled, any local process can use the API without a key. Changes take effect after restarting At-Pet."));
+    securityOptionsLayout->addWidget(apiAuthenticationCheck_);
+    generalLayout->addWidget(securityOptionsGroupBox_);
+
     quotePackGroupBox_ = new QGroupBox(tr("Quote Pack"), generalTab);
     auto *quotePackLayout = new QVBoxLayout(quotePackGroupBox_);
     quotePackLayout->setSpacing(8);
@@ -764,6 +772,7 @@ void SettingsDialog::loadSettings() {
     if (!portText.isEmpty()) defaultPort = quint16(portText.toUInt());
     const QSignalBlocker portBlocker(apiPortSpin_);
     apiPortSpin_->setValue(settings.value("api/port", defaultPort).toUInt());
+    apiAuthenticationCheck_->setChecked(settings.value("api/authenticationRequired", true).toBool());
 
     refreshQuotePackStatus();
 }
@@ -895,6 +904,7 @@ void SettingsDialog::onSaveGeneralSettings() {
     const qreal gravityScale = gravityScaleSpin_->value();
     const bool completionSound = completionSoundCheck_->isChecked();
     const quint16 apiPort = quint16(apiPortSpin_->value());
+    const bool authenticationRequired = apiAuthenticationCheck_->isChecked();
     settings.setValue("ui/theme", themeCombo_->currentData().toString());
     // ui/language, pet/gravity, pet/gravityScale and feedback/completionSound
     // are persisted by the controller (the single source of truth) when it handles the signals
@@ -902,13 +912,14 @@ void SettingsDialog::onSaveGeneralSettings() {
     // constructed.
     settings.setValue("pet/autoDoNotDisturb", autoDoNotDisturb);
     settings.setValue("api/port", apiPort);
+    settings.setValue("api/authenticationRequired", authenticationRequired);
 
     emit languageChanged(newLang);
     emit autoDoNotDisturbToggled(autoDoNotDisturb);
     emit gravityToggled(gravity);
     emit gravityScaleChanged(gravityScale);
     emit completionSoundToggled(completionSound);
-    emit apiPortChanged(apiPort);
+    emit localApiSettingsChanged(apiPort, authenticationRequired);
 
     applyStyle();
 
@@ -1545,6 +1556,9 @@ void SettingsDialog::retranslateUi() {
     gravityScaleLabel_->setText(tr("Gravity strength:"));
     gravityScaleSpin_->setToolTip(tr("1.00 is the default. Higher values make pets fall faster."));
     apiPortLabel_->setText(tr("Local API Port:"));
+    securityOptionsGroupBox_->setTitle(tr("Security Options"));
+    apiAuthenticationCheck_->setText(tr("Require a key for the local API"));
+    apiAuthenticationCheck_->setToolTip(tr("When disabled, any local process can use the API without a key. Changes take effect after restarting At-Pet."));
     quotePackGroupBox_->setTitle(tr("Quote Pack"));
     quotePackDescriptionLabel_->setText(tr("Global quotes are used when a pet has no quotes for a category. Lines are picked by the interface language."));
     btnImportQuotePack_->setText(tr("Import quotes.json…"));
